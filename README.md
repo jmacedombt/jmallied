@@ -3,6 +3,8 @@
 Sistema de controle interno da Allied (Grupo J.Macedo), com login de acesso
 e controle de usuários. Construído em Next.js (App Router) + Supabase.
 
+Publicado com Vercel + Supabase (projeto "Controle Allied").
+
 ## Stack
 
 - Next.js 14 + TypeScript + Tailwind CSS
