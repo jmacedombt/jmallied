@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   ChevronDown,
+  Database,
   Home,
   LogOut,
   Menu,
@@ -42,6 +43,12 @@ type GrupoMenu = {
 // "Usuários" — as demais funcionalidades entram aqui conforme forem
 // solicitadas.
 const GRUPOS_MENU: GrupoMenu[] = [
+  {
+    id: "bases",
+    label: "Bases",
+    icone: Database,
+    itens: [{ href: "/bases/pecas", label: "Base Peças", icone: Database }],
+  },
   {
     id: "sistema",
     label: "Sistema",
