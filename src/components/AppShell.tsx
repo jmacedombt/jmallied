@@ -8,10 +8,12 @@ import {
   Bell,
   ChevronDown,
   Database,
+  FileText,
   Home,
   LogOut,
   Menu,
   Settings,
+  SlidersHorizontal,
   Users,
   X,
 } from "lucide-react";
@@ -47,7 +49,16 @@ const GRUPOS_MENU: GrupoMenu[] = [
     id: "bases",
     label: "Bases",
     icone: Database,
-    itens: [{ href: "/bases/pecas", label: "Base Peças", icone: Database }],
+    itens: [
+      { href: "/bases/pecas", label: "Base Peças", icone: Database },
+      { href: "/bases/orcamentos", label: "Orçamentos", icone: FileText },
+    ],
+  },
+  {
+    id: "configuracoes",
+    label: "Configurações",
+    icone: SlidersHorizontal,
+    itens: [{ href: "/configuracoes/mao-de-obra", label: "Mão de obra", icone: SlidersHorizontal }],
   },
   {
     id: "sistema",
