@@ -165,7 +165,7 @@ export default function UserForm() {
 }
 
 const inputClass =
-  "w-full rounded-lg bg-allied-panel border border-allied-border px-4 py-2.5 text-sm text-allied-silver placeholder:text-allied-silver/40 outline-none focus:border-allied-accent2 focus:ring-1 focus:ring-allied-accent2 transition";
+  "w-full rounded-lg border px-4 py-2.5 text-sm outline-none focus:border-allied-accent2 focus:ring-1 focus:ring-allied-accent2 transition bg-[var(--surface)] border-[var(--line)] text-[var(--ink)] placeholder:text-[var(--muted)]";
 
 function Campo({
   label,
@@ -180,11 +180,19 @@ function Campo({
 }) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={htmlFor} className="text-xs font-medium uppercase tracking-wide text-allied-silver/70">
+      <label
+        htmlFor={htmlFor}
+        className="text-xs font-medium uppercase tracking-wide"
+        style={{ color: "var(--muted)" }}
+      >
         {label}
       </label>
       {children}
-      {hint && <p className="text-[11px] text-allied-silver/40">{hint}</p>}
+      {hint && (
+        <p className="text-[11px]" style={{ color: "var(--muted)" }}>
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

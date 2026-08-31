@@ -11,6 +11,29 @@ body {
   @apply bg-allied-bg text-allied-silver;
 }
 
+/*
+  Variáveis usadas pela área logada (AppShell: barra lateral, topo e
+  conteúdo). A tela de login não usa essas variáveis, então o alternar
+  claro/escuro do painel não afeta o login.
+*/
+:root {
+  --canvas: #0a1830;
+  --surface: #0f2242;
+  --surface2: #132a52;
+  --ink: #e7edf7;
+  --muted: #93a5c4;
+  --line: #1f3b66;
+}
+
+html.light {
+  --canvas: #f3f5fa;
+  --surface: #ffffff;
+  --surface2: #eef1f8;
+  --ink: #16233d;
+  --muted: #5c6b85;
+  --line: #dfe4ee;
+}
+
 input:-webkit-autofill {
   -webkit-box-shadow: 0 0 0px 1000px #0f2242 inset;
   -webkit-text-fill-color: #e7edf7;

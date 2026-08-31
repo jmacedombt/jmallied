@@ -1,21 +1,44 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import AppShell from "@/components/AppShell";
 import UserForm from "@/components/UserForm";
 
-export default function NovoUsuarioPage() {
+export default async function NovoUsuarioPage() {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let perfil: { nome: string; sobrenome: string; cargo: string; is_master: boolean } | null = null;
+  if (user) {
+    const { data } = await supabase
+      .from("usuarios")
+      .select("nome, sobrenome, cargo, is_master")
+      .eq("id", user.id)
+      .single();
+    perfil = data;
+  }
+
   return (
-    <main className="min-h-screen bg-allied-bg px-6 py-10">
-      <div className="max-w-lg mx-auto">
-        <Link href="/usuarios" className="text-xs text-allied-silver/60 hover:text-white">
-          ← Voltar para usuários
-        </Link>
-        <h1 className="text-2xl font-semibold text-white mt-3 mb-1">Novo usuário</h1>
-        <p className="text-sm text-allied-silver/60 mb-8">
-          O usuário (login) é sugerido automaticamente a partir do nome e
-          sobrenome. A senha inicial é sempre <strong>Allied001</strong> e a
-          troca é obrigatória no primeiro acesso.
-        </p>
-        <UserForm />
-      </div>
-    </main>
+    <AppShell titulo="Novo usuário" perfil={perfil}>
+      <Link
+        href="/usuarios"
+        className="inline-flex items-center gap-1.5 text-xs hover:opacity-80 mb-4"
+        style={{ color: "var(--muted)" }}
+      >
+        <ArrowLeft size={14} />
+        Voltar para usuários
+      </Link>
+      <h1 className="text-xl font-semibold mb-1" style={{ color: "var(--ink)" }}>
+        Novo usuário
+      </h1>
+      <p className="text-sm mb-8" style={{ color: "var(--muted)" }}>
+        O usuário (login) é sugerido automaticamente a partir do nome e
+        sobrenome. A senha inicial é sempre <strong>Allied001</strong> e a
+        troca é obrigatória no primeiro acesso.
+      </p>
+      <UserForm />
+    </AppShell>
   );
 }
