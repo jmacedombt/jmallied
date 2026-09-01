@@ -140,12 +140,12 @@ export default function AppShell({
             className="flex items-center flex-1 min-w-0"
             onClick={() => setSidebarAberta(false)}
           >
-            <div className="relative w-full max-w-[196px]" style={{ aspectRatio: "445 / 225" }}>
+            <div className="relative w-full max-w-[148px]" style={{ aspectRatio: "437 / 233" }}>
               <Image
                 src="/logo-parceria-menu.png"
                 alt="J.Macedo + Allied"
                 fill
-                sizes="196px"
+                sizes="148px"
                 className="object-contain"
                 priority
               />
