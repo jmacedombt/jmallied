@@ -45,3 +45,55 @@ input:-webkit-autofill {
   -webkit-text-fill-color: #e7edf7;
   caret-color: #e7edf7;
 }
+
+/*
+  Botão flutuante "voltar" (Operacional > etapa): sem fundo, só o ícone
+  da seta com um brilho e um anel fino que gira ao redor do contorno.
+*/
+@keyframes brilho-contorno-giro {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.botao-voltar-brilho {
+  position: relative;
+  background: transparent;
+}
+
+.botao-voltar-brilho::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  padding: 1.5px;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    var(--accent2) 12%,
+    var(--accent) 20%,
+    transparent 34%,
+    transparent 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: brilho-contorno-giro 2.6s linear infinite;
+  pointer-events: none;
+}
+
+.botao-voltar-brilho::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid var(--line);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .botao-voltar-brilho::before {
+    animation: none;
+  }
+}

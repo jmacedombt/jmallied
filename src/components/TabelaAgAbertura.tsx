@@ -131,46 +131,46 @@ export default function TabelaAgAbertura({
 
   return (
     <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
-      <table className="w-full text-sm">
-        <thead>
-          {/* Sticky aplicado em cada th (não só na tr/thead) por
-              compatibilidade — assim a barra de títulos continua visível
-              enquanto rola a lista de aparelhos. top-16 = altura do
-              cabeçalho fixo do app (h-16). */}
-          <tr className="text-left">
-            <th
-              className="sticky top-16 z-10 px-4 py-2.5 font-medium w-64"
-              style={{ background: "var(--surface2)", color: "var(--muted)" }}
-            >
-              OS Reparadora
-            </th>
-            <th
-              className="sticky top-16 z-10 px-4 py-2.5 font-medium"
-              style={{ background: "var(--surface2)", color: "var(--muted)" }}
-            >
-              OS Care Allied
-            </th>
-            <th
-              className="sticky top-16 z-10 px-4 py-2.5 font-medium"
-              style={{ background: "var(--surface2)", color: "var(--muted)" }}
-            >
-              Trade Allied
-            </th>
-            <th
-              className="sticky top-16 z-10 px-4 py-2.5 font-medium"
-              style={{ background: "var(--surface2)", color: "var(--muted)" }}
-            >
-              Imei Allied
-            </th>
-            <th
-              className="sticky top-16 z-10 px-4 py-2.5 font-medium"
-              style={{ background: "var(--surface2)", color: "var(--muted)" }}
-            >
-              Descrição Completa
-            </th>
-          </tr>
-        </thead>
-        <tbody>
+      {/* O scroll acontece AQUI dentro (não na página), então a barra de
+          títulos gruda em top:0 desse contêiner — sem depender da altura
+          do cabeçalho do app nem vazar pedaço de linha por trás. */}
+      <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 230px)" }}>
+        <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+          <thead>
+            <tr className="text-left">
+              <th
+                className="sticky top-0 z-10 px-4 py-2.5 font-medium w-64"
+                style={{ background: "var(--surface2)", color: "var(--muted)" }}
+              >
+                OS Reparadora
+              </th>
+              <th
+                className="sticky top-0 z-10 px-4 py-2.5 font-medium"
+                style={{ background: "var(--surface2)", color: "var(--muted)" }}
+              >
+                OS Care Allied
+              </th>
+              <th
+                className="sticky top-0 z-10 px-4 py-2.5 font-medium"
+                style={{ background: "var(--surface2)", color: "var(--muted)" }}
+              >
+                Trade Allied
+              </th>
+              <th
+                className="sticky top-0 z-10 px-4 py-2.5 font-medium"
+                style={{ background: "var(--surface2)", color: "var(--muted)" }}
+              >
+                Imei Allied
+              </th>
+              <th
+                className="sticky top-0 z-10 px-4 py-2.5 font-medium"
+                style={{ background: "var(--surface2)", color: "var(--muted)" }}
+              >
+                Descrição Completa
+              </th>
+            </tr>
+          </thead>
+          <tbody>
           {aparelhos.map((a) => {
             const aberto = expandido === a.id;
             const salvo = !!salvos[a.id];
@@ -332,7 +332,8 @@ export default function TabelaAgAbertura({
             );
           })}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 }

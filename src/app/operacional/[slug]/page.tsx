@@ -26,23 +26,22 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
   }
 
   // Botão flutuante de voltar: fica fixo do lado direito da área de
-  // trabalho, um pouco abaixo dos ícones de tema/cor do sistema no topo,
-  // com sombreado 3D. Usa as cores do sistema (accent) pra reagir junto
-  // com a roda de cores.
+  // trabalho, um pouco abaixo dos ícones de tema/cor do sistema no topo.
+  // Sem fundo — só a seta com brilho e um anel fino que gira ao redor
+  // do contorno (classe .botao-voltar-brilho em globals.css).
   const voltar = (
     <Link
       href="/operacional"
       title="Voltar para Operacional"
       aria-label="Voltar para Operacional"
-      className="fixed right-4 md:right-6 z-10 w-12 h-12 rounded-full flex items-center justify-center transition-transform hover:-translate-y-0.5 hover:scale-105 active:translate-y-0 active:scale-100"
-      style={{
-        top: "84px",
-        background: "linear-gradient(155deg, var(--accent2), var(--accent))",
-        boxShadow:
-          "0 1px 0 rgba(255,255,255,0.25) inset, 0 10px 22px rgba(0,0,0,0.35), 0 3px 8px rgba(0,0,0,0.25)",
-      }}
+      className="botao-voltar-brilho fixed right-4 md:right-6 z-10 w-12 h-12 rounded-full flex items-center justify-center transition-transform hover:scale-110 active:scale-100"
+      style={{ top: "84px" }}
     >
-      <ArrowLeft size={20} color="#fff" strokeWidth={2.5} />
+      <ArrowLeft
+        size={22}
+        strokeWidth={2.5}
+        style={{ color: "var(--accent2)", filter: "drop-shadow(0 0 5px var(--accent2))" }}
+      />
     </Link>
   );
 
