@@ -5,6 +5,7 @@ import {
   Database,
   FileText,
   LayoutGrid,
+  Printer,
   Search,
   SlidersHorizontal,
   Tags,
@@ -72,6 +73,14 @@ const CARDS_PAINEL = [
     icone: AlertTriangle,
     cor: "#f59e0b",
     corClara: "#fcd34d",
+  },
+  {
+    href: "/impressao/avulsa",
+    label: "Impressão Avulsa",
+    descricao: "Bipar um Trade Allied e reimprimir a etiqueta de qualquer aparelho, fora do fluxo de triagem.",
+    icone: Printer,
+    cor: "#0d9488",
+    corClara: "#2dd4bf",
   },
   {
     href: "/configuracoes/mao-de-obra",

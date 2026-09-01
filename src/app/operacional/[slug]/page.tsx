@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import { statusPorSlug } from "@/lib/orcamentos";
 import TabelaAgAbertura, { type AparelhoAgAbertura } from "@/components/TabelaAgAbertura";
+import PopupBipagemTriagem from "@/components/PopupBipagemTriagem";
 
 export default async function StatusOperacionalPage({ params }: { params: { slug: string } }) {
   const status = statusPorSlug(params.slug);
@@ -57,6 +58,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
 
     return (
       <AppShell titulo={status.label} perfil={perfil}>
+        {status.slug === "1-ag-triagem" && <PopupBipagemTriagem />}
         {voltar}
         <TabelaAgAbertura
           aparelhos={(aparelhos ?? []) as AparelhoAgAbertura[]}

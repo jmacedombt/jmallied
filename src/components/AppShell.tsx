@@ -16,6 +16,7 @@ import {
   LogOut,
   Menu,
   Percent,
+  Printer,
   Search,
   Settings,
   SlidersHorizontal,
@@ -73,6 +74,12 @@ const GRUPOS_MENU: GrupoMenu[] = [
       { href: "/bases/bid/consulta", label: "Consulta BID", icone: Search },
       { href: "/bases/bid/pendencias", label: "Pendências BID", icone: AlertTriangle },
     ],
+  },
+  {
+    id: "impressao",
+    label: "Impressão",
+    icone: Printer,
+    itens: [{ href: "/impressao/avulsa", label: "Impressão Avulsa", icone: Printer }],
   },
   {
     id: "configuracoes",
