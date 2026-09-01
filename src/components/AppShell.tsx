@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   Bell,
   CalendarCheck2,
   ChevronDown,
@@ -14,8 +15,11 @@ import {
   LayoutGrid,
   LogOut,
   Menu,
+  Percent,
   Settings,
   SlidersHorizontal,
+  Tags,
+  TrendingUp,
   Users,
   X,
 } from "lucide-react";
@@ -64,13 +68,19 @@ const GRUPOS_MENU: GrupoMenu[] = [
     itens: [
       { href: "/bases/pecas", label: "Base Peças", icone: Database },
       { href: "/bases/orcamentos", label: "Orçamentos", icone: FileText },
+      { href: "/bases/bid", label: "BID", icone: Tags },
+      { href: "/bases/bid/pendencias", label: "Pendências BID", icone: AlertTriangle },
     ],
   },
   {
     id: "configuracoes",
     label: "Configurações",
     icone: SlidersHorizontal,
-    itens: [{ href: "/configuracoes/mao-de-obra", label: "Mão de obra", icone: SlidersHorizontal }],
+    itens: [
+      { href: "/configuracoes/mao-de-obra", label: "Mão de obra", icone: SlidersHorizontal },
+      { href: "/configuracoes/bid-markup", label: "Faixas de Markup (BID)", icone: TrendingUp },
+      { href: "/configuracoes/impostos", label: "Imposto (ICMS)", icone: Percent },
+    ],
   },
   {
     id: "sistema",

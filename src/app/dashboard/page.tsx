@@ -1,10 +1,12 @@
 import Link from "next/link";
 import {
+  AlertTriangle,
   CalendarCheck2,
   Database,
   FileText,
   LayoutGrid,
   SlidersHorizontal,
+  Tags,
   Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -45,6 +47,22 @@ const CARDS_PAINEL = [
     icone: FileText,
     cor: "#d97706",
     corClara: "#fbbf24",
+  },
+  {
+    href: "/bases/bid",
+    label: "BID",
+    descricao: "Tabela de preços de peças enviada pra Allied, calculada a partir da Base Peças.",
+    icone: Tags,
+    cor: "#be185d",
+    corClara: "#f472b6",
+  },
+  {
+    href: "/bases/bid/pendencias",
+    label: "Pendências BID",
+    descricao: "Peças do BID sem Part Number encontrado na Base Peças ainda.",
+    icone: AlertTriangle,
+    cor: "#f59e0b",
+    corClara: "#fcd34d",
   },
   {
     href: "/configuracoes/mao-de-obra",
