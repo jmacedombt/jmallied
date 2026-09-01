@@ -137,7 +137,7 @@ export default function AppShell({
         <div className="flex items-center justify-between px-5 py-5">
           <Link
             href="/dashboard"
-            className="flex items-center flex-1 min-w-0"
+            className="flex items-center justify-center flex-1 min-w-0"
             onClick={() => setSidebarAberta(false)}
           >
             <div className="relative w-full max-w-[160px]" style={{ aspectRatio: "640 / 309" }}>

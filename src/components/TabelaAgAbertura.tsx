@@ -133,12 +133,41 @@ export default function TabelaAgAbertura({
     <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
-            <th className="px-4 py-2.5 font-medium w-64">OS Reparadora</th>
-            <th className="px-4 py-2.5 font-medium">OS Care Allied</th>
-            <th className="px-4 py-2.5 font-medium">Trade Allied</th>
-            <th className="px-4 py-2.5 font-medium">Imei Allied</th>
-            <th className="px-4 py-2.5 font-medium">Descrição Completa</th>
+          {/* Sticky aplicado em cada th (não só na tr/thead) por
+              compatibilidade — assim a barra de títulos continua visível
+              enquanto rola a lista de aparelhos. top-16 = altura do
+              cabeçalho fixo do app (h-16). */}
+          <tr className="text-left">
+            <th
+              className="sticky top-16 z-10 px-4 py-2.5 font-medium w-64"
+              style={{ background: "var(--surface2)", color: "var(--muted)" }}
+            >
+              OS Reparadora
+            </th>
+            <th
+              className="sticky top-16 z-10 px-4 py-2.5 font-medium"
+              style={{ background: "var(--surface2)", color: "var(--muted)" }}
+            >
+              OS Care Allied
+            </th>
+            <th
+              className="sticky top-16 z-10 px-4 py-2.5 font-medium"
+              style={{ background: "var(--surface2)", color: "var(--muted)" }}
+            >
+              Trade Allied
+            </th>
+            <th
+              className="sticky top-16 z-10 px-4 py-2.5 font-medium"
+              style={{ background: "var(--surface2)", color: "var(--muted)" }}
+            >
+              Imei Allied
+            </th>
+            <th
+              className="sticky top-16 z-10 px-4 py-2.5 font-medium"
+              style={{ background: "var(--surface2)", color: "var(--muted)" }}
+            >
+              Descrição Completa
+            </th>
           </tr>
         </thead>
         <tbody>
