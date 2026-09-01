@@ -70,6 +70,16 @@ const GRUPOS_MENU: GrupoMenu[] = [
   },
 ];
 
+// Item ativo do menu lateral: usa a cor do sistema (definida em "Cor do
+// sistema") pra fundo, texto e a barrinha lateral, então ao arrastar a
+// roda de cores o menu inteiro reage junto — não só os botões.
+const ESTILO_ATIVO: React.CSSProperties = {
+  background: "var(--accent-glow)",
+  color: "var(--accent2)",
+  fontWeight: 500,
+  boxShadow: "inset 3px 0 0 var(--accent)",
+};
+
 export default function AppShell({
   titulo,
   perfil,
@@ -125,13 +135,17 @@ export default function AppShell({
         style={{ background: "var(--surface)", borderColor: "var(--line)" }}
       >
         <div className="flex items-center justify-between px-5 py-5">
-          <Link href="/dashboard" className="flex items-center min-w-0" onClick={() => setSidebarAberta(false)}>
-            <div className="relative w-full shrink-0" style={{ aspectRatio: "445 / 225" }}>
+          <Link
+            href="/dashboard"
+            className="flex items-center flex-1 min-w-0"
+            onClick={() => setSidebarAberta(false)}
+          >
+            <div className="relative w-full max-w-[196px]" style={{ aspectRatio: "445 / 225" }}>
               <Image
                 src="/logo-parceria-menu.png"
                 alt="J.Macedo + Allied"
                 fill
-                sizes="216px"
+                sizes="196px"
                 className="object-contain"
                 priority
               />
@@ -153,11 +167,7 @@ export default function AppShell({
             href="/dashboard"
             onClick={() => setSidebarAberta(false)}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
-            style={
-              pathname === "/dashboard"
-                ? { background: "var(--surface2)", color: "var(--ink)", fontWeight: 500 }
-                : { color: "var(--muted)" }
-            }
+            style={pathname === "/dashboard" ? ESTILO_ATIVO : { color: "var(--muted)" }}
           >
             <Home size={17} />
             Início
@@ -167,11 +177,7 @@ export default function AppShell({
             href="/operacional"
             onClick={() => setSidebarAberta(false)}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
-            style={
-              pathname?.startsWith("/operacional")
-                ? { background: "var(--surface2)", color: "var(--ink)", fontWeight: 500 }
-                : { color: "var(--muted)" }
-            }
+            style={pathname?.startsWith("/operacional") ? ESTILO_ATIVO : { color: "var(--muted)" }}
           >
             <LayoutGrid size={17} />
             Operacional
@@ -208,11 +214,7 @@ export default function AppShell({
                           href={item.href}
                           onClick={() => setSidebarAberta(false)}
                           className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
-                          style={
-                            ativo
-                              ? { background: "var(--surface2)", color: "var(--ink)", fontWeight: 500 }
-                              : { color: "var(--muted)" }
-                          }
+                          style={ativo ? ESTILO_ATIVO : { color: "var(--muted)" }}
                         >
                           <IconeItem size={15} />
                           {item.label}
