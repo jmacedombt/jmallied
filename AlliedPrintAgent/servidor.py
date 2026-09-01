@@ -9,12 +9,18 @@ aparelho; o agente monta o ZPL e envia pra Zebra.
 """
 
 import json
+import os
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from config import PORTA
 from etiqueta import gerar_zpl
 from imprimir import imprimir, ErroImpressao
+
+# Salva sempre o ZPL da última etiqueta gerada, pra dar pra comparar
+# exatamente o que foi mandado pra impressora com o que saiu no papel —
+# útil pra depurar diferença entre o layout esperado e o impresso.
+CAMINHO_ULTIMA_ETIQUETA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ultima_etiqueta.zpl")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -58,8 +64,17 @@ class Handler(BaseHTTPRequestHandler):
             self._responder(400, {"erro": "os_reparadora é obrigatório."})
             return
 
+        zpl = gerar_zpl(os_reparadora, nf_remessa_allied, modelo_comercial)
+
         try:
-            zpl = gerar_zpl(os_reparadora, nf_remessa_allied, modelo_comercial)
+            with open(CAMINHO_ULTIMA_ETIQUETA, "w", encoding="utf-8") as f:
+                f.write(zpl)
+        except OSError:
+            pass  # log auxiliar — não impede a impressão se falhar ao salvar
+
+        self._log(f"ZPL gerado (salvo em {CAMINHO_ULTIMA_ETIQUETA}):\n{zpl}")
+
+        try:
             imprimir(zpl)
         except ErroImpressao as e:
             self._log(f"FALHA ao imprimir OS {os_reparadora}: {e}")
