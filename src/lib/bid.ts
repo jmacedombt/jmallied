@@ -62,3 +62,29 @@ export function calcularValorComMargem(custoSamsung: number, faixas: FaixaMarkup
   if (!faixa) return null;
   return arredondarParaCima(custoSamsung * faixa.multiplicador, 2);
 }
+
+/** Percentual de lucro de uma edição manual do Custo Peça (Allied):
+ * "lucro sobre o custo" = (valor editado − custo Base Peças) / custo
+ * Base Peças × 100. Retorna null sem custo de referência (peça
+ * pendente, ainda sem Part Number na Base Peças). */
+export function percentualLucro(valorEditado: number, custoBasePecas: number | null): number | null {
+  if (custoBasePecas == null || custoBasePecas === 0) return null;
+  return ((valorEditado - custoBasePecas) / custoBasePecas) * 100;
+}
+
+// ---- Consulta BID (busca com dados completos carregados na tela) ----
+
+export type SolucaoBidConsulta = { id: string; peca_solucao: string; principal: boolean };
+
+export type PecaBidConsulta = {
+  id: string;
+  modelo: string;
+  part_number: string;
+  custo_peca_samsung: number | null;
+  valor_com_margem: number | null;
+  custo_peca_allied: number | null;
+  mao_de_obra: number | null;
+  travado: boolean;
+  travado_em: string | null;
+  bid_solucoes: SolucaoBidConsulta[];
+};

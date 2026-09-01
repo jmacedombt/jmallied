@@ -10,6 +10,7 @@ type PecaExistente = {
   part_number: string;
   custo_peca_samsung: number | null;
   valor_com_margem: number | null;
+  travado: boolean;
 };
 
 function valoresDiferentes(a: number | null, b: number | null): boolean {
@@ -40,7 +41,7 @@ export async function POST() {
   }
 
   const [{ data: pecas }, { data: faixasBrutas }] = await Promise.all([
-    admin.from("bid_pecas").select("id, part_number, custo_peca_samsung, valor_com_margem") as unknown as Promise<{
+    admin.from("bid_pecas").select("id, part_number, custo_peca_samsung, valor_com_margem, travado") as unknown as Promise<{
       data: PecaExistente[] | null;
     }>,
     admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
@@ -70,6 +71,10 @@ export async function POST() {
   const historico: Record<string, unknown>[] = [];
 
   for (const peca of pecas) {
+    // peça travada na Consulta BID: preço definido manualmente, não
+    // mexe (nem gera entrada de histórico) até ser destravada
+    if (peca.travado) continue;
+
     const custoSamsung = custosPorPartNumber.get(peca.part_number) ?? null;
     const valorComMargem = custoSamsung != null ? calcularValorComMargem(custoSamsung, faixas) : null;
 
