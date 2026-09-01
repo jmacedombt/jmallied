@@ -27,7 +27,7 @@ export default function BotaoTema({ className = "" }: { className?: string }) {
       onClick={alternar}
       aria-label={claro ? "Ativar modo escuro" : "Ativar modo claro"}
       title={claro ? "Modo escuro" : "Modo claro"}
-      className={`w-9 h-9 flex items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] hover:text-[var(--ink)] hover:border-allied-accent2 transition ${className}`}
+      className={`w-9 h-9 flex items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] hover:text-[var(--ink)] hover:border-[var(--accent2)] transition ${className}`}
     >
       {claro ? <Moon size={16} /> : <Sun size={16} />}
     </button>

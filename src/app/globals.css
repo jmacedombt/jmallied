@@ -23,6 +23,12 @@ body {
   --ink: #e7edf7;
   --muted: #93a5c4;
   --line: #1f3b66;
+
+  /* cor do sistema (menu Cor do sistema) — muda em tempo real,
+     independente do claro/escuro. Padrão J.Macedo. */
+  --accent: #2f6fed;
+  --accent2: #5aa9ff;
+  --accent-glow: rgba(90, 169, 255, 0.25);
 }
 
 html.light {

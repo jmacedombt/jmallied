@@ -17,12 +17,12 @@ export default function Avatar({
   tamanho?: number;
   className?: string;
 }) {
-  const estilo = { width: tamanho, height: tamanho, fontSize: tamanho * 0.4 };
+  const estilo = { width: tamanho, height: tamanho, fontSize: tamanho * 0.4, background: "var(--accent)" };
 
   return (
     <div
       style={estilo}
-      className={`rounded-full flex items-center justify-center text-white font-semibold shrink-0 bg-allied-accent ${className}`}
+      className={`rounded-full flex items-center justify-center text-white font-semibold shrink-0 ${className}`}
     >
       {iniciaisNome(nome)}
     </div>

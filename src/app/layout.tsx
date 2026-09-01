@@ -21,6 +21,17 @@ export default function RootLayout({
                 if (localStorage.getItem('allied-tema') === 'light') {
                   document.documentElement.classList.add('light');
                 }
+                if (localStorage.getItem('allied-cor-padrao') === '0') {
+                  var accent = localStorage.getItem('allied-cor-accent');
+                  var accent2 = localStorage.getItem('allied-cor-accent2');
+                  if (accent && accent2) {
+                    document.documentElement.style.setProperty('--accent', accent);
+                    document.documentElement.style.setProperty('--accent2', accent2);
+                    var n = parseInt(accent2.replace('#', ''), 16);
+                    var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+                    document.documentElement.style.setProperty('--accent-glow', 'rgba(' + r + ',' + g + ',' + b + ',0.28)');
+                  }
+                }
               } catch (e) {}
             `,
           }}

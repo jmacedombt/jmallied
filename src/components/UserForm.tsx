@@ -156,7 +156,8 @@ export default function UserForm() {
       <button
         type="submit"
         disabled={carregando}
-        className="rounded-lg bg-allied-accent hover:bg-allied-accent2 disabled:opacity-60 text-white font-medium text-sm px-5 py-3 transition shadow-glow"
+        className="rounded-lg bg-[var(--accent)] hover:bg-[var(--accent2)] disabled:opacity-60 text-white font-medium text-sm px-5 py-3 transition"
+        style={{ boxShadow: "0 0 40px var(--accent-glow)" }}
       >
         {carregando ? "Cadastrando..." : "Cadastrar usuário"}
       </button>
@@ -165,7 +166,7 @@ export default function UserForm() {
 }
 
 const inputClass =
-  "w-full rounded-lg border px-4 py-2.5 text-sm outline-none focus:border-allied-accent2 focus:ring-1 focus:ring-allied-accent2 transition bg-[var(--surface)] border-[var(--line)] text-[var(--ink)] placeholder:text-[var(--muted)]";
+  "w-full rounded-lg border px-4 py-2.5 text-sm outline-none focus:border-[var(--accent2)] focus:ring-1 focus:ring-[var(--accent2)] transition bg-[var(--surface)] border-[var(--line)] text-[var(--ink)] placeholder:text-[var(--muted)]";
 
 function Campo({
   label,

@@ -10,6 +10,7 @@ import {
   Database,
   FileText,
   Home,
+  LayoutGrid,
   LogOut,
   Menu,
   Settings,
@@ -20,6 +21,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import BotaoTema from "@/components/BotaoTema";
+import ColorPickerSistema from "@/components/ColorPickerSistema";
 
 type Perfil = {
   nome: string;
@@ -117,24 +119,29 @@ export default function AppShell({
 
       {/* sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r border-allied-border transition-transform duration-200 md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r transition-transform duration-200 md:translate-x-0 ${
           sidebarAberta ? "translate-x-0" : "-translate-x-full"
         }`}
-        style={{
-          background: "linear-gradient(180deg, #132a52, #0a1830)",
-        }}
+        style={{ background: "var(--surface)", borderColor: "var(--line)" }}
       >
         <div className="flex items-center justify-between px-5 py-5">
-          <Link href="/dashboard" className="flex items-center gap-2.5" onClick={() => setSidebarAberta(false)}>
-            <div className="relative h-8 w-8 shrink-0">
-              <Image src="/logo-allied.png" alt="Allied" fill sizes="32px" className="object-contain" />
+          <Link href="/dashboard" className="flex items-center min-w-0" onClick={() => setSidebarAberta(false)}>
+            <div className="relative w-full shrink-0" style={{ aspectRatio: "445 / 225" }}>
+              <Image
+                src="/logo-parceria-menu.png"
+                alt="J.Macedo + Allied"
+                fill
+                sizes="216px"
+                className="object-contain"
+                priority
+              />
             </div>
-            <span className="text-sm font-semibold text-white">Allied</span>
           </Link>
           <button
             type="button"
             onClick={() => setSidebarAberta(false)}
-            className="text-allied-silver/60 hover:text-white md:hidden"
+            className="md:hidden shrink-0 transition"
+            style={{ color: "var(--muted)" }}
             aria-label="Fechar menu"
           >
             <X size={18} />
@@ -145,14 +152,29 @@ export default function AppShell({
           <Link
             href="/dashboard"
             onClick={() => setSidebarAberta(false)}
-            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition ${
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
+            style={
               pathname === "/dashboard"
-                ? "bg-white/10 text-white font-medium"
-                : "text-allied-silver/75 hover:bg-white/5 hover:text-white"
-            }`}
+                ? { background: "var(--surface2)", color: "var(--ink)", fontWeight: 500 }
+                : { color: "var(--muted)" }
+            }
           >
             <Home size={17} />
             Início
+          </Link>
+
+          <Link
+            href="/operacional"
+            onClick={() => setSidebarAberta(false)}
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
+            style={
+              pathname?.startsWith("/operacional")
+                ? { background: "var(--surface2)", color: "var(--ink)", fontWeight: 500 }
+                : { color: "var(--muted)" }
+            }
+          >
+            <LayoutGrid size={17} />
+            Operacional
           </Link>
 
           {GRUPOS_MENU.map((grupo) => {
@@ -163,7 +185,8 @@ export default function AppShell({
                 <button
                   type="button"
                   onClick={() => alternarGrupo(grupo.id)}
-                  className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg text-sm text-allied-silver/75 hover:bg-white/5 hover:text-white transition"
+                  className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
+                  style={{ color: "var(--muted)" }}
                 >
                   <span className="flex items-center gap-2.5">
                     <IconeGrupo size={17} />
@@ -175,7 +198,7 @@ export default function AppShell({
                   />
                 </button>
                 {aberto && (
-                  <div className="mt-1 ml-4 pl-3 border-l border-white/10 space-y-1">
+                  <div className="mt-1 ml-4 pl-3 border-l space-y-1" style={{ borderColor: "var(--line)" }}>
                     {grupo.itens.map((item) => {
                       const IconeItem = item.icone;
                       const ativo = pathname?.startsWith(item.href);
@@ -184,11 +207,12 @@ export default function AppShell({
                           key={item.href}
                           href={item.href}
                           onClick={() => setSidebarAberta(false)}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition ${
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
+                          style={
                             ativo
-                              ? "bg-white/10 text-white font-medium"
-                              : "text-allied-silver/70 hover:bg-white/5 hover:text-white"
-                          }`}
+                              ? { background: "var(--surface2)", color: "var(--ink)", fontWeight: 500 }
+                              : { color: "var(--muted)" }
+                          }
                         >
                           <IconeItem size={15} />
                           {item.label}
@@ -202,11 +226,12 @@ export default function AppShell({
           })}
         </nav>
 
-        <div className="p-3 border-t border-white/10">
+        <div className="p-3 border-t" style={{ borderColor: "var(--line)" }}>
           <button
             type="button"
             onClick={sair}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-allied-silver/75 hover:bg-white/5 hover:text-white transition"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
+            style={{ color: "var(--muted)" }}
           >
             <LogOut size={17} />
             Sair
@@ -249,6 +274,7 @@ export default function AppShell({
             </div>
           </div>
 
+          <ColorPickerSistema />
           <BotaoTema />
         </header>
 

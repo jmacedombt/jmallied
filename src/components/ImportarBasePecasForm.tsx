@@ -4,6 +4,8 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UploadCloud } from "lucide-react";
 import { formatarDataBr } from "@/lib/pecas";
+import { uploadComProgresso } from "@/lib/uploadComProgresso";
+import BarraProgresso from "@/components/BarraProgresso";
 
 type Resultado = {
   linhasNoArquivo: number;
@@ -18,6 +20,7 @@ export default function ImportarBasePecasForm() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [carregando, setCarregando] = useState(false);
+  const [percentual, setPercentual] = useState(0);
   const [erro, setErro] = useState<string | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [nomeArquivo, setNomeArquivo] = useState<string | null>(null);
@@ -28,6 +31,7 @@ export default function ImportarBasePecasForm() {
     if (!arquivo) return;
 
     setCarregando(true);
+    setPercentual(0);
     setErro(null);
     setResultado(null);
     setNomeArquivo(arquivo.name);
@@ -36,16 +40,13 @@ export default function ImportarBasePecasForm() {
     formData.append("arquivo", arquivo);
 
     try {
-      const res = await fetch("/api/bases/pecas/importar", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
+      const { ok, data } = await uploadComProgresso("/api/bases/pecas/importar", formData, setPercentual);
+      const resposta = data as (Resultado & { error?: string }) | null;
 
-      if (!res.ok) {
-        setErro(data.error || "Não foi possível importar a base.");
-      } else {
-        setResultado(data);
+      if (!ok) {
+        setErro(resposta?.error || "Não foi possível importar a base.");
+      } else if (resposta) {
+        setResultado(resposta);
         if (inputRef.current) inputRef.current.value = "";
         router.refresh();
       }
@@ -63,7 +64,7 @@ export default function ImportarBasePecasForm() {
     >
       <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-3">
         <label
-          className="flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm cursor-pointer transition hover:border-allied-accent2"
+          className="flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm cursor-pointer transition hover:border-[var(--accent2)]"
           style={{ borderColor: "var(--line)", color: "var(--ink)" }}
         >
           <UploadCloud size={16} />
@@ -80,7 +81,8 @@ export default function ImportarBasePecasForm() {
         <button
           type="submit"
           disabled={carregando}
-          className="rounded-lg bg-allied-accent hover:bg-allied-accent2 disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 transition shadow-glow"
+          className="rounded-lg bg-[var(--accent)] hover:bg-[var(--accent2)] disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 transition"
+          style={{ boxShadow: "0 0 40px var(--accent-glow)" }}
         >
           {carregando ? "Importando..." : "Carregar base"}
         </button>
@@ -90,6 +92,13 @@ export default function ImportarBasePecasForm() {
           entrega, quantidade e valor) são ignoradas automaticamente.
         </p>
       </form>
+
+      {carregando && (
+        <BarraProgresso
+          percentual={percentual}
+          rotulo={percentual < 100 ? "Enviando arquivo..." : "Processando no servidor..."}
+        />
+      )}
 
       {erro && (
         <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mt-4">

@@ -122,6 +122,31 @@ export function lerLinhaOrcamento(linha: unknown[]): LinhaOrcamentoImportada | n
   };
 }
 
+// fluxo do menu Operacional — ordem de exibição dos cards
+export const STATUS_OPERACIONAL = [
+  { valor: "Ag. Abertura", slug: "ag-abertura", label: "Ag. Abertura" },
+  { valor: "1 - Ag. Triagem", slug: "1-ag-triagem", label: "1 - Ag. Triagem" },
+  { valor: "2 - Ag. Análise", slug: "2-ag-analise", label: "2 - Ag. Análise" },
+  { valor: "3 - Ag. Resposta de Orçamento", slug: "3-ag-resposta-orcamento", label: "3 - Ag. Resposta de Orçamento" },
+  { valor: "4 - Ag. Resposta de Reorçamento", slug: "4-ag-resposta-reorcamento", label: "4 - Ag. Resposta de Reorçamento" },
+  { valor: "5 - Ag. Peças", slug: "5-ag-pecas", label: "5 - Ag. Peças" },
+  { valor: "6 - Ag. Reparo", slug: "6-ag-reparo", label: "6 - Ag. Reparo" },
+  { valor: "7 - Reparo Finalizado", slug: "7-reparo-finalizado", label: "7 - Reparo Finalizado" },
+  { valor: "8 - Orçamento Reprovado", slug: "8-orcamento-reprovado", label: "8 - Orçamento Reprovado" },
+  { valor: "Produto Entregue", slug: "produto-entregue", label: "Produto Entregue" },
+] as const;
+
+export type StatusOperacional = (typeof STATUS_OPERACIONAL)[number]["valor"];
+
+export function statusPorSlug(slug: string) {
+  return STATUS_OPERACIONAL.find((s) => s.slug === slug) ?? null;
+}
+
+/** Valida o formato da OS Reparadora: só números, 10 caracteres (ex: 4123456789). */
+export function osReparadoraValida(valor: string): boolean {
+  return /^[0-9]{10}$/.test(valor.trim());
+}
+
 export type ConfiguracaoMaoDeObra = {
   valor_sem_peca: number;
   valor_uma_peca: number;

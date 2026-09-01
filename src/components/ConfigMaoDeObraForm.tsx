@@ -82,7 +82,8 @@ export default function ConfigMaoDeObraForm({
       <button
         type="submit"
         disabled={salvando}
-        className="rounded-lg bg-allied-accent hover:bg-allied-accent2 disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 transition shadow-glow"
+        className="rounded-lg bg-[var(--accent)] hover:bg-[var(--accent2)] disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 transition"
+        style={{ boxShadow: "0 0 40px var(--accent-glow)" }}
       >
         {salvando ? "Salvando..." : "Salvar"}
       </button>
@@ -101,7 +102,7 @@ function ValorInput({ id, value, onChange }: { id: string; value: string; onChan
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border pl-9 pr-4 py-2.5 text-sm outline-none focus:border-allied-accent2 focus:ring-1 focus:ring-allied-accent2 transition bg-[var(--surface2)] border-[var(--line)] text-[var(--ink)]"
+        className="w-full rounded-lg border pl-9 pr-4 py-2.5 text-sm outline-none focus:border-[var(--accent2)] focus:ring-1 focus:ring-[var(--accent2)] transition bg-[var(--surface2)] border-[var(--line)] text-[var(--ink)]"
       />
     </div>
   );
