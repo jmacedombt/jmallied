@@ -2,8 +2,8 @@
 
 import { Fragment, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Save, Pencil, Check } from "lucide-react";
-import { osReparadoraValida } from "@/lib/orcamentos";
+import { Copy, Save, Pencil, Check, RotateCcw } from "lucide-react";
+import { deriveImeiReparadora, osReparadoraValida } from "@/lib/orcamentos";
 
 export type AparelhoAgAbertura = {
   id: string;
@@ -53,7 +53,13 @@ function BotaoCopiar({ texto, chave, copiado, onCopiar }: { texto: string; chave
   );
 }
 
-export default function TabelaAgAbertura({ aparelhos }: { aparelhos: AparelhoAgAbertura[] }) {
+export default function TabelaAgAbertura({
+  aparelhos,
+  mensagemVazia = "Nenhum aparelho aguardando abertura no momento.",
+}: {
+  aparelhos: AparelhoAgAbertura[];
+  mensagemVazia?: string;
+}) {
   const router = useRouter();
 
   const [expandido, setExpandido] = useState<string | null>(null);
@@ -61,6 +67,7 @@ export default function TabelaAgAbertura({ aparelhos }: { aparelhos: AparelhoAgA
   const [salvando, setSalvando] = useState<Record<string, boolean>>({});
   const [erros, setErros] = useState<Record<string, string>>({});
   const [salvos, setSalvos] = useState<Record<string, boolean>>({});
+  const [revertidos, setRevertidos] = useState<Record<string, boolean>>({});
   const [copiado, setCopiado] = useState<string | null>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -76,7 +83,8 @@ export default function TabelaAgAbertura({ aparelhos }: { aparelhos: AparelhoAgA
 
   async function salvar(id: string) {
     const valor = (valores[id] ?? "").trim();
-    if (!osReparadoraValida(valor)) {
+    const limpando = valor === "";
+    if (!limpando && !osReparadoraValida(valor)) {
       setErros((e) => ({ ...e, [id]: "Precisa ter exatamente 10 números." }));
       return;
     }
@@ -90,6 +98,9 @@ export default function TabelaAgAbertura({ aparelhos }: { aparelhos: AparelhoAgA
       const data = await res.json();
       if (!res.ok) {
         setErros((e) => ({ ...e, [id]: data.error || "Não foi possível salvar." }));
+      } else if (limpando) {
+        setRevertidos((s) => ({ ...s, [id]: true }));
+        setTimeout(() => router.refresh(), 900);
       } else {
         setSalvos((s) => ({ ...s, [id]: true }));
         setTimeout(() => router.refresh(), 900);
@@ -113,7 +124,7 @@ export default function TabelaAgAbertura({ aparelhos }: { aparelhos: AparelhoAgA
   if (aparelhos.length === 0) {
     return (
       <p className="text-sm py-10 text-center" style={{ color: "var(--muted)" }}>
-        Nenhum aparelho aguardando abertura no momento.
+        {mensagemVazia}
       </p>
     );
   }
@@ -134,6 +145,8 @@ export default function TabelaAgAbertura({ aparelhos }: { aparelhos: AparelhoAgA
           {aparelhos.map((a) => {
             const aberto = expandido === a.id;
             const salvo = !!salvos[a.id];
+            const revertido = !!revertidos[a.id];
+            const imeiAllied = deriveImeiReparadora(a.imei_allied) ?? "";
             const descricaoPrimeiraPalavra = (a.descricao_completa ?? "").split(" ")[0];
 
             const defeitos = Array.from({ length: 10 }, (_, i) => {
@@ -149,13 +162,21 @@ export default function TabelaAgAbertura({ aparelhos }: { aparelhos: AparelhoAgA
                   className="border-t cursor-pointer transition-colors"
                   style={{
                     borderColor: "var(--line)",
-                    background: salvo ? "rgba(34,197,94,0.14)" : "var(--surface)",
+                    background: salvo
+                      ? "rgba(34,197,94,0.14)"
+                      : revertido
+                        ? "rgba(245,158,11,0.14)"
+                        : "var(--surface)",
                   }}
                 >
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                     {salvo ? (
                       <span className="inline-flex items-center gap-1.5 text-emerald-500 font-medium">
                         <Check size={14} /> {valores[a.id]}
+                      </span>
+                    ) : revertido ? (
+                      <span className="inline-flex items-center gap-1.5 text-amber-500 font-medium">
+                        <RotateCcw size={14} /> Voltou p/ Ag. Abertura
                       </span>
                     ) : (
                       <div>
@@ -184,7 +205,7 @@ export default function TabelaAgAbertura({ aparelhos }: { aparelhos: AparelhoAgA
                           </button>
                           <button
                             type="button"
-                            title="Salvar"
+                            title={valorAtual(a).trim() === "" ? "Salvar em branco (volta p/ Ag. Abertura)" : "Salvar"}
                             disabled={salvando[a.id]}
                             onClick={() => salvar(a.id)}
                             className="w-7 h-7 flex items-center justify-center rounded hover:bg-black/10 shrink-0 disabled:opacity-50"
@@ -211,8 +232,8 @@ export default function TabelaAgAbertura({ aparelhos }: { aparelhos: AparelhoAgA
                   </td>
                   <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
                     <span className="inline-flex items-center gap-1.5">
-                      {a.imei_allied}
-                      <BotaoCopiar texto={a.imei_allied ?? ""} chave={`imei-${a.id}`} copiado={copiado} onCopiar={copiar} />
+                      {imeiAllied}
+                      <BotaoCopiar texto={imeiAllied} chave={`imei-${a.id}`} copiado={copiado} onCopiar={copiar} />
                     </span>
                   </td>
                   <td className="px-4 py-2.5" style={{ color: "var(--ink)" }} title={a.descricao_completa ?? ""}>

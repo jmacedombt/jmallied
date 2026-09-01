@@ -36,19 +36,26 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     </Link>
   );
 
-  if (status.slug === "ag-abertura") {
+  if (status.slug === "ag-abertura" || status.slug === "1-ag-triagem") {
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
         "id, os_reparadora, os_care_allied, trade_allied, imei_allied, descricao_completa, modelo_comercial, descricao_defeito_1, descricao_defeito_2, descricao_defeito_3, descricao_defeito_4, descricao_defeito_5, descricao_defeito_6, descricao_defeito_7, descricao_defeito_8, descricao_defeito_9, descricao_defeito_10, peca_defeito_1, peca_defeito_2, peca_defeito_3, peca_defeito_4, peca_defeito_5, peca_defeito_6, peca_defeito_7, peca_defeito_8, peca_defeito_9, peca_defeito_10"
       )
       .eq("status_operacional", status.valor)
-      .order("created_at", { ascending: true });
+      .order(status.slug === "ag-abertura" ? "created_at" : "os_reparadora_definida_em", { ascending: true });
 
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         {voltar}
-        <TabelaAgAbertura aparelhos={(aparelhos ?? []) as AparelhoAgAbertura[]} />
+        <TabelaAgAbertura
+          aparelhos={(aparelhos ?? []) as AparelhoAgAbertura[]}
+          mensagemVazia={
+            status.slug === "ag-abertura"
+              ? "Nenhum aparelho aguardando abertura no momento."
+              : "Nenhum aparelho em Ag. Triagem no momento."
+          }
+        />
       </AppShell>
     );
   }
