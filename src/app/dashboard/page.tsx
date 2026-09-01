@@ -5,6 +5,7 @@ import {
   Database,
   FileText,
   LayoutGrid,
+  Search,
   SlidersHorizontal,
   Tags,
   Users,
@@ -55,6 +56,14 @@ const CARDS_PAINEL = [
     icone: Tags,
     cor: "#be185d",
     corClara: "#f472b6",
+  },
+  {
+    href: "/bases/bid/consulta",
+    label: "Consulta BID",
+    descricao: "Busca rápida por Part Number, com o detalhe de como o preço foi calculado.",
+    icone: Search,
+    cor: "#4338ca",
+    corClara: "#818cf8",
   },
   {
     href: "/bases/bid/pendencias",
