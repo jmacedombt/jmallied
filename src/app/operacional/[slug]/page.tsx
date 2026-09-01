@@ -25,20 +25,21 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     perfil = data;
   }
 
-  // Botão flutuante de voltar: fica fixo do lado direito da área de
-  // trabalho, um pouco abaixo dos ícones de tema/cor do sistema no topo.
-  // Sem fundo — só a seta com brilho e um anel fino que gira ao redor
-  // do contorno (classe .botao-voltar-brilho em globals.css).
+  // Botão de voltar: fica no fluxo normal da página (não mais "fixed"),
+  // canto superior esquerdo, logo acima da coluna OS Reparadora — assim
+  // ele nunca fica atrás da tabela nem depende de z-index/scroll pra se
+  // posicionar certo. Sem fundo — só a seta com brilho e um anel fino
+  // que gira ao redor do contorno (classe .botao-voltar-brilho em
+  // globals.css).
   const voltar = (
     <Link
       href="/operacional"
       title="Voltar para Operacional"
       aria-label="Voltar para Operacional"
-      className="botao-voltar-brilho fixed right-4 md:right-6 z-10 w-12 h-12 rounded-full flex items-center justify-center transition-transform hover:scale-110 active:scale-100"
-      style={{ top: "72px" }}
+      className="botao-voltar-brilho relative inline-flex items-center justify-center w-11 h-11 rounded-full mb-3 transition-transform hover:scale-110 active:scale-100"
     >
       <ArrowLeft
-        size={22}
+        size={20}
         strokeWidth={2.5}
         style={{ color: "var(--accent2)", filter: "drop-shadow(0 0 5px var(--accent2))" }}
       />
