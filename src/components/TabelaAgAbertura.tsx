@@ -8,6 +8,7 @@ import { deriveImeiReparadora, osReparadoraValida } from "@/lib/orcamentos";
 export type AparelhoAgAbertura = {
   id: string;
   os_reparadora: string | null;
+  data_reconhecimento: string | null;
   os_care_allied: string | null;
   trade_allied: string;
   imei_allied: string | null;
@@ -134,7 +135,7 @@ export default function TabelaAgAbertura({
       {/* O scroll acontece AQUI dentro (não na página), então a barra de
           títulos gruda em top:0 desse contêiner — sem depender da altura
           do cabeçalho do app nem vazar pedaço de linha por trás. */}
-      <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 230px)" }}>
+      <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 170px)" }}>
         <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
           <thead>
             <tr className="text-left">
@@ -143,6 +144,12 @@ export default function TabelaAgAbertura({
                 style={{ background: "var(--surface2)", color: "var(--muted)" }}
               >
                 OS Reparadora
+              </th>
+              <th
+                className="sticky top-0 z-10 px-4 py-2.5 font-medium"
+                style={{ background: "var(--surface2)", color: "var(--muted)" }}
+              >
+                Data Reconhecimento
               </th>
               <th
                 className="sticky top-0 z-10 px-4 py-2.5 font-medium"
@@ -247,6 +254,11 @@ export default function TabelaAgAbertura({
                       </div>
                     )}
                   </td>
+                  <td className="px-4 py-2.5" style={{ color: a.data_reconhecimento ? "var(--ink)" : "var(--muted)" }}>
+                    {a.data_reconhecimento
+                      ? new Date(`${a.data_reconhecimento}T00:00:00`).toLocaleDateString("pt-BR")
+                      : "—"}
+                  </td>
                   <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
                     <span className="inline-flex items-center gap-1.5">
                       {a.os_care_allied}
@@ -280,7 +292,7 @@ export default function TabelaAgAbertura({
 
                 {aberto && (
                   <tr style={{ background: "var(--surface2)" }}>
-                    <td colSpan={5} className="px-4 py-4">
+                    <td colSpan={6} className="px-4 py-4">
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-xs">
                         <div>
                           <p className="uppercase tracking-wide mb-0.5" style={{ color: "var(--muted)" }}>

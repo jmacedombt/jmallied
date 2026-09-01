@@ -35,7 +35,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       title="Voltar para Operacional"
       aria-label="Voltar para Operacional"
       className="botao-voltar-brilho fixed right-4 md:right-6 z-10 w-12 h-12 rounded-full flex items-center justify-center transition-transform hover:scale-110 active:scale-100"
-      style={{ top: "84px" }}
+      style={{ top: "72px" }}
     >
       <ArrowLeft
         size={22}
@@ -49,7 +49,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        "id, os_reparadora, os_care_allied, trade_allied, imei_allied, descricao_completa, modelo_comercial, descricao_defeito_1, descricao_defeito_2, descricao_defeito_3, descricao_defeito_4, descricao_defeito_5, descricao_defeito_6, descricao_defeito_7, descricao_defeito_8, descricao_defeito_9, descricao_defeito_10, peca_defeito_1, peca_defeito_2, peca_defeito_3, peca_defeito_4, peca_defeito_5, peca_defeito_6, peca_defeito_7, peca_defeito_8, peca_defeito_9, peca_defeito_10"
+        "id, os_reparadora, data_reconhecimento, os_care_allied, trade_allied, imei_allied, descricao_completa, modelo_comercial, descricao_defeito_1, descricao_defeito_2, descricao_defeito_3, descricao_defeito_4, descricao_defeito_5, descricao_defeito_6, descricao_defeito_7, descricao_defeito_8, descricao_defeito_9, descricao_defeito_10, peca_defeito_1, peca_defeito_2, peca_defeito_3, peca_defeito_4, peca_defeito_5, peca_defeito_6, peca_defeito_7, peca_defeito_8, peca_defeito_9, peca_defeito_10"
       )
       .eq("status_operacional", status.valor)
       .order(status.slug === "ag-abertura" ? "created_at" : "os_reparadora_definida_em", { ascending: true });

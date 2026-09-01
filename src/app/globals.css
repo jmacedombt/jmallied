@@ -11,6 +11,16 @@ body {
   @apply bg-allied-bg text-allied-silver;
 }
 
+/* faz o calendário nativo do <input type="date"> (Reconhecimento Lote)
+   seguir o claro/escuro do painel, e não sempre o escuro do sistema
+   operacional */
+input[type="date"] {
+  color-scheme: dark;
+}
+html.light input[type="date"] {
+  color-scheme: light;
+}
+
 /*
   Variáveis usadas pela área logada (AppShell: barra lateral, topo e
   conteúdo). A tela de login não usa essas variáveis, então o alternar
@@ -57,7 +67,12 @@ input:-webkit-autofill {
 }
 
 .botao-voltar-brilho {
-  position: relative;
+  /* posição (fixed) já vem da classe utilitária no componente — não
+     sobrescrever aqui, senão o botão perde o "fixed" e passa a ficar
+     dentro do fluxo normal da página (foi o que causou ele aparecer
+     baixo, em cima dos dados, em vez de flutuando fixo na tela). O
+     "fixed" do Tailwind já serve de referência pros pseudo-elementos
+     abaixo (::before/::after), então só falta o fundo transparente. */
   background: transparent;
 }
 

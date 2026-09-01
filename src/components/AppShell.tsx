@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
+  CalendarCheck2,
   ChevronDown,
   Database,
   FileText,
@@ -48,6 +49,15 @@ type GrupoMenu = {
 // solicitadas.
 const GRUPOS_MENU: GrupoMenu[] = [
   {
+    id: "operacional",
+    label: "Operacional",
+    icone: LayoutGrid,
+    itens: [
+      { href: "/operacional", label: "Painel", icone: LayoutGrid },
+      { href: "/operacional/reconhecimento-lote", label: "Reconhecimento Lote", icone: CalendarCheck2 },
+    ],
+  },
+  {
     id: "bases",
     label: "Bases",
     icone: Database,
@@ -79,6 +89,18 @@ const ESTILO_ATIVO: React.CSSProperties = {
   fontWeight: 500,
   boxShadow: "inset 3px 0 0 var(--accent)",
 };
+
+// Dentro de um grupo, mais de um item pode "bater" com a rota atual (ex:
+// "/operacional" e "/operacional/reconhecimento-lote" começam ambos com
+// "/operacional") — pega sempre o href mais específico (mais longo) que
+// combina, pra só um item ficar destacado por vez.
+function hrefMaisEspecificoAtivo(itens: ItemMenu[], pathname: string | null): string | null {
+  if (!pathname) return null;
+  const candidatos = itens
+    .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+    .sort((a, b) => b.href.length - a.href.length);
+  return candidatos[0]?.href ?? null;
+}
 
 export default function AppShell({
   titulo,
@@ -174,19 +196,10 @@ export default function AppShell({
             Início
           </Link>
 
-          <Link
-            href="/operacional"
-            onClick={() => setSidebarAberta(false)}
-            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
-            style={pathname?.startsWith("/operacional") ? ESTILO_ATIVO : { color: "var(--muted)" }}
-          >
-            <LayoutGrid size={17} />
-            Operacional
-          </Link>
-
           {GRUPOS_MENU.map((grupo) => {
             const IconeGrupo = grupo.icone;
             const aberto = gruposAbertos[grupo.id];
+            const hrefAtivo = hrefMaisEspecificoAtivo(grupo.itens, pathname);
             return (
               <div key={grupo.id} className="pt-1">
                 <button
@@ -208,7 +221,7 @@ export default function AppShell({
                   <div className="mt-1 ml-4 pl-3 border-l space-y-1" style={{ borderColor: "var(--line)" }}>
                     {grupo.itens.map((item) => {
                       const IconeItem = item.icone;
-                      const ativo = pathname?.startsWith(item.href);
+                      const ativo = item.href === hrefAtivo;
                       return (
                         <Link
                           key={item.href}
