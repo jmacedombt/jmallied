@@ -1,17 +1,16 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Printer } from "lucide-react";
+import { ArrowRightCircle } from "lucide-react";
 import TabelaAgAbertura, { type AparelhoAgAbertura, type TabelaAgAberturaHandle } from "@/components/TabelaAgAbertura";
 import PopupBipagemTriagem from "@/components/PopupBipagemTriagem";
 import PopupConfirmar from "@/components/PopupConfirmar";
-import { processarBipagem } from "@/lib/etiquetas";
 
-// Tela de Ag. Triagem: além do popup de bipar um por um (que já existia),
-// dá pra selecionar várias linhas na tabela e mandar imprimir + avançar
-// tudo de uma vez — reaproveitando exatamente o mesmo fluxo de
-// localizar/imprimir/confirmar do popup, só que disparado em sequência
-// pra cada linha marcada.
+// Tela de Ag. Triagem: o popup de bipar um por um (que já existia) é o
+// único lugar que imprime etiqueta. A seleção em massa na tabela (com
+// "selecionar todos") NÃO imprime nada — só avança de uma vez os
+// aparelhos marcados pra 2 - Ag. Análise, pra liberar o lote sem
+// disparar dezenas de impressões de uma vez.
 export default function PainelAgTriagem({
   aparelhos,
   mensagemVazia,
@@ -43,17 +42,20 @@ export default function PainelAgTriagem({
   async function confirmarLote() {
     setProcessando(true);
 
-    const mapaPorId = new Map(aparelhos.map((a) => [a.id, a]));
-    const itens = Array.from(selecionados)
-      .map((id) => mapaPorId.get(id))
-      .filter((a): a is AparelhoAgAbertura => !!a)
-      .map((a) => ({
-        id: a.id,
-        executar: async () => {
-          const resultado = await processarBipagem(a.trade_allied, "triagem");
-          return { ok: resultado.ok, erro: resultado.ok ? undefined : resultado.mensagem };
-        },
-      }));
+    const idsSelecionados = Array.from(selecionados);
+    const itens = idsSelecionados.map((id) => ({
+      id,
+      executar: async () => {
+        try {
+          const res = await fetch(`/api/operacional/orcamentos/${id}/avancar-triagem`, { method: "POST" });
+          const data = await res.json();
+          if (!res.ok) return { ok: false, erro: data.error || "Não foi possível avançar esse aparelho." };
+          return { ok: true };
+        } catch {
+          return { ok: false, erro: "Falha de conexão." };
+        }
+      },
+    }));
 
     setConfirmando(false);
     setSelecionados(new Set());
@@ -72,8 +74,8 @@ export default function PainelAgTriagem({
           className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent2)] text-white text-sm font-medium px-4 py-2.5 transition"
           style={{ boxShadow: "0 0 30px var(--accent-glow)" }}
         >
-          <Printer size={15} />
-          Confirmar triagem/impressão ({selecionados.size})
+          <ArrowRightCircle size={15} />
+          Avançar para Ag. Análise ({selecionados.size})
         </button>
       )}
 
@@ -89,14 +91,15 @@ export default function PainelAgTriagem({
 
       {confirmando && (
         <PopupConfirmar
-          titulo="Confirmar triagem/impressão"
+          titulo="Avançar para Ag. Análise"
           carregando={processando}
-          rotuloConfirmar={`Confirmar ${selecionados.size}`}
+          rotuloConfirmar={`Avançar ${selecionados.size}`}
           mensagem={
             <>
-              Vou imprimir a etiqueta e avançar <strong style={{ color: "var(--ink)" }}>{selecionados.size}</strong>{" "}
-              aparelho(s) selecionado(s) para <strong style={{ color: "var(--ink)" }}>2 - Ag. Análise</strong>, um
-              por um.
+              Vou avançar <strong style={{ color: "var(--ink)" }}>{selecionados.size}</strong> aparelho(s)
+              selecionado(s) direto para <strong style={{ color: "var(--ink)" }}>2 - Ag. Análise</strong>, um por
+              um — <strong style={{ color: "var(--ink)" }}>sem imprimir etiqueta</strong> (a impressão continua sendo
+              feita bipando no popup acima).
             </>
           }
           onConfirmar={confirmarLote}
