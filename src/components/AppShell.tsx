@@ -23,6 +23,7 @@ import {
   Tags,
   TrendingUp,
   Users,
+  Wrench,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -73,6 +74,7 @@ const GRUPOS_MENU: GrupoMenu[] = [
       { href: "/bases/bid", label: "BID", icone: Tags },
       { href: "/bases/bid/consulta", label: "Consulta BID", icone: Search },
       { href: "/bases/bid/pendencias", label: "Pendências BID", icone: AlertTriangle },
+      { href: "/bases/gspn", label: "Base GSPN", icone: Wrench },
     ],
   },
   {

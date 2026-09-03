@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { Fragment, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, Save, Pencil, Check, RotateCcw, Loader2, X } from "lucide-react";
 import { deriveImeiReparadora, osReparadoraValida } from "@/lib/orcamentos";
@@ -95,8 +95,18 @@ const TabelaAgAbertura = forwardRef<
   const [salvos, setSalvos] = useState<Record<string, boolean>>({});
   const [revertidos, setRevertidos] = useState<Record<string, boolean>>({});
   const [processandoId, setProcessandoId] = useState<string | null>(null);
+  const [saindo, setSaindo] = useState<Record<string, boolean>>({});
+  const [removidos, setRemovidos] = useState<Record<string, boolean>>({});
   const [copiado, setCopiado] = useState<string | null>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // se a lista que vem do servidor mudar (ex: depois do router.refresh()
+  // no fim de um lote), os itens que já saíram de verdade não existem
+  // mais nela — não precisa mais escondê-los "na mão".
+  useEffect(() => {
+    setRemovidos({});
+    setSaindo({});
+  }, [aparelhos]);
 
   useImperativeHandle(ref, () => ({
     async processarLote(itens, opts) {
@@ -115,6 +125,15 @@ const TabelaAgAbertura = forwardRef<
         }
         setProcessandoId(null);
         await esperar(atrasoMs);
+
+        // já transferiu pra próxima etapa: some da lista aqui mesmo (com
+        // uma leve transição), em vez de esperar todo o lote terminar —
+        // assim a lista vai subindo item a item conforme processa.
+        if (resultado.ok) {
+          setSaindo((s) => ({ ...s, [item.id]: true }));
+          await esperar(260);
+          setRemovidos((r) => ({ ...r, [item.id]: true }));
+        }
       }
       router.refresh();
     },
@@ -170,7 +189,12 @@ const TabelaAgAbertura = forwardRef<
     }
   }
 
-  if (aparelhos.length === 0) {
+  // itens que já foram transferidos de status por um processamento em
+  // lote somem da lista aqui mesmo (ver processarLote acima) — sem
+  // esperar o router.refresh() no fim do lote pra sumir todos de uma vez.
+  const aparelhosVisiveis = aparelhos.filter((a) => !removidos[a.id]);
+
+  if (aparelhosVisiveis.length === 0) {
     return (
       <p className="text-sm py-10 text-center" style={{ color: "var(--muted)" }}>
         {mensagemVazia}
@@ -178,7 +202,8 @@ const TabelaAgAbertura = forwardRef<
     );
   }
 
-  const todosSelecionados = selecionavel && aparelhos.length > 0 && aparelhos.every((a) => selecionados?.has(a.id));
+  const todosSelecionados =
+    selecionavel && aparelhosVisiveis.length > 0 && aparelhosVisiveis.every((a) => selecionados?.has(a.id));
 
   return (
     <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
@@ -242,11 +267,12 @@ const TabelaAgAbertura = forwardRef<
             </tr>
           </thead>
           <tbody>
-          {aparelhos.map((a) => {
+          {aparelhosVisiveis.map((a) => {
             const aberto = expandido === a.id;
             const salvo = !!salvos[a.id];
             const revertido = !!revertidos[a.id];
             const processandoLote = processandoId === a.id;
+            const saindoAgora = !!saindo[a.id];
             const imeiAllied = deriveImeiReparadora(a.imei_allied) ?? "";
             const descricaoPrimeiraPalavra = (a.descricao_completa ?? "").split(" ")[0];
 
@@ -260,7 +286,7 @@ const TabelaAgAbertura = forwardRef<
               <Fragment key={a.id}>
                 <tr
                   onClick={() => setExpandido(aberto ? null : a.id)}
-                  className="border-t cursor-pointer transition-colors"
+                  className="border-t cursor-pointer transition-all duration-200 ease-in"
                   style={{
                     borderColor: "var(--line)",
                     background: processandoLote
@@ -270,6 +296,8 @@ const TabelaAgAbertura = forwardRef<
                         : revertido
                           ? "rgba(245,158,11,0.14)"
                           : "var(--surface)",
+                    opacity: saindoAgora ? 0 : 1,
+                    transform: saindoAgora ? "translateX(12px)" : "translateX(0)",
                   }}
                 >
                   {selecionavel && (

@@ -10,6 +10,7 @@ import {
   SlidersHorizontal,
   Tags,
   Users,
+  Wrench,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
@@ -73,6 +74,14 @@ const CARDS_PAINEL = [
     icone: AlertTriangle,
     cor: "#f59e0b",
     corClara: "#fcd34d",
+  },
+  {
+    href: "/bases/gspn",
+    label: "Base GSPN",
+    descricao: "Importar os chamados do sistema Samsung GSPN e atualizar as peças na base de orçamentos.",
+    icone: Wrench,
+    cor: "#0284c7",
+    corClara: "#38bdf8",
   },
   {
     href: "/impressao/avulsa",
