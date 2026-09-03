@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, useRef, useState } from "react";
+import { Fragment, forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Save, Pencil, Check, RotateCcw } from "lucide-react";
+import { Copy, Save, Pencil, Check, RotateCcw, Loader2, X } from "lucide-react";
 import { deriveImeiReparadora, osReparadoraValida } from "@/lib/orcamentos";
 
 export type AparelhoAgAbertura = {
@@ -36,6 +36,24 @@ export type AparelhoAgAbertura = {
   peca_defeito_10: string | null;
 };
 
+// Um item de uma rotina de processamento em massa (upload de planilha em
+// Ag. Abertura, confirmação em massa em Ag. Triagem etc). A tabela só
+// cuida da parte visual (linha vira verde uma por uma); quem chama
+// decide o que "executar" de fato pra cada linha.
+export type ItemProcessamentoLote = {
+  id: string;
+  valorExibicao?: string; // se informado, atualiza a coluna OS Reparadora antes de marcar sucesso
+  executar: () => Promise<{ ok: boolean; erro?: string }>;
+};
+
+export type TabelaAgAberturaHandle = {
+  processarLote: (itens: ItemProcessamentoLote[], opts?: { atrasoMs?: number }) => Promise<void>;
+};
+
+function esperar(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function BotaoCopiar({ texto, chave, copiado, onCopiar }: { texto: string; chave: string; copiado: string | null; onCopiar: (t: string, c: string) => void }) {
   if (!texto) return null;
   return (
@@ -54,13 +72,20 @@ function BotaoCopiar({ texto, chave, copiado, onCopiar }: { texto: string; chave
   );
 }
 
-export default function TabelaAgAbertura({
-  aparelhos,
-  mensagemVazia = "Nenhum aparelho aguardando abertura no momento.",
-}: {
-  aparelhos: AparelhoAgAbertura[];
-  mensagemVazia?: string;
-}) {
+const TabelaAgAbertura = forwardRef<
+  TabelaAgAberturaHandle,
+  {
+    aparelhos: AparelhoAgAbertura[];
+    mensagemVazia?: string;
+    selecionavel?: boolean;
+    selecionados?: Set<string>;
+    aoAlternarSelecao?: (id: string) => void;
+    aoAlternarTodos?: () => void;
+  }
+>(function TabelaAgAbertura(
+  { aparelhos, mensagemVazia = "Nenhum aparelho aguardando abertura no momento.", selecionavel, selecionados, aoAlternarSelecao, aoAlternarTodos },
+  ref
+) {
   const router = useRouter();
 
   const [expandido, setExpandido] = useState<string | null>(null);
@@ -69,8 +94,31 @@ export default function TabelaAgAbertura({
   const [erros, setErros] = useState<Record<string, string>>({});
   const [salvos, setSalvos] = useState<Record<string, boolean>>({});
   const [revertidos, setRevertidos] = useState<Record<string, boolean>>({});
+  const [processandoId, setProcessandoId] = useState<string | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  useImperativeHandle(ref, () => ({
+    async processarLote(itens, opts) {
+      const atrasoMs = opts?.atrasoMs ?? 450;
+      for (const item of itens) {
+        setProcessandoId(item.id);
+        setErros((e) => ({ ...e, [item.id]: "" }));
+        const resultado = await item.executar();
+        if (resultado.ok) {
+          if (item.valorExibicao !== undefined) {
+            setValores((v) => ({ ...v, [item.id]: item.valorExibicao! }));
+          }
+          setSalvos((s) => ({ ...s, [item.id]: true }));
+        } else {
+          setErros((e) => ({ ...e, [item.id]: resultado.erro || "Falha ao processar." }));
+        }
+        setProcessandoId(null);
+        await esperar(atrasoMs);
+      }
+      router.refresh();
+    },
+  }));
 
   function valorAtual(a: AparelhoAgAbertura) {
     return valores[a.id] ?? a.os_reparadora ?? "";
@@ -130,6 +178,8 @@ export default function TabelaAgAbertura({
     );
   }
 
+  const todosSelecionados = selecionavel && aparelhos.length > 0 && aparelhos.every((a) => selecionados?.has(a.id));
+
   return (
     <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
       {/* O scroll acontece AQUI dentro (não na página), então a barra de
@@ -139,6 +189,20 @@ export default function TabelaAgAbertura({
         <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
           <thead>
             <tr className="text-left">
+              {selecionavel && (
+                <th
+                  className="sticky top-0 z-10 px-4 py-2.5 font-medium w-10"
+                  style={{ background: "var(--surface2)", color: "var(--muted)" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!todosSelecionados}
+                    onChange={() => aoAlternarTodos?.()}
+                    aria-label="Selecionar todos"
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                </th>
+              )}
               <th
                 className="sticky top-0 z-10 px-4 py-2.5 font-medium w-64"
                 style={{ background: "var(--surface2)", color: "var(--muted)" }}
@@ -182,6 +246,7 @@ export default function TabelaAgAbertura({
             const aberto = expandido === a.id;
             const salvo = !!salvos[a.id];
             const revertido = !!revertidos[a.id];
+            const processandoLote = processandoId === a.id;
             const imeiAllied = deriveImeiReparadora(a.imei_allied) ?? "";
             const descricaoPrimeiraPalavra = (a.descricao_completa ?? "").split(" ")[0];
 
@@ -198,17 +263,34 @@ export default function TabelaAgAbertura({
                   className="border-t cursor-pointer transition-colors"
                   style={{
                     borderColor: "var(--line)",
-                    background: salvo
-                      ? "rgba(34,197,94,0.14)"
-                      : revertido
-                        ? "rgba(245,158,11,0.14)"
-                        : "var(--surface)",
+                    background: processandoLote
+                      ? "rgba(37,99,235,0.14)"
+                      : salvo
+                        ? "rgba(34,197,94,0.14)"
+                        : revertido
+                          ? "rgba(245,158,11,0.14)"
+                          : "var(--surface)",
                   }}
                 >
+                  {selecionavel && (
+                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={!!selecionados?.has(a.id)}
+                        onChange={() => aoAlternarSelecao?.(a.id)}
+                        aria-label={`Selecionar ${a.trade_allied}`}
+                        className="w-4 h-4 cursor-pointer"
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    {salvo ? (
+                    {processandoLote ? (
+                      <span className="inline-flex items-center gap-1.5" style={{ color: "var(--accent2)" }}>
+                        <Loader2 size={14} className="animate-spin" /> Processando...
+                      </span>
+                    ) : salvo ? (
                       <span className="inline-flex items-center gap-1.5 text-emerald-500 font-medium">
-                        <Check size={14} /> {valores[a.id]}
+                        <Check size={14} /> {valores[a.id] || a.os_reparadora}
                       </span>
                     ) : revertido ? (
                       <span className="inline-flex items-center gap-1.5 text-amber-500 font-medium">
@@ -250,7 +332,11 @@ export default function TabelaAgAbertura({
                             <Save size={14} />
                           </button>
                         </div>
-                        {erros[a.id] && <p className="text-[11px] text-red-400 mt-1">{erros[a.id]}</p>}
+                        {erros[a.id] && (
+                          <p className="text-[11px] text-red-400 mt-1 inline-flex items-center gap-1">
+                            <X size={11} /> {erros[a.id]}
+                          </p>
+                        )}
                       </div>
                     )}
                   </td>
@@ -292,7 +378,7 @@ export default function TabelaAgAbertura({
 
                 {aberto && (
                   <tr style={{ background: "var(--surface2)" }}>
-                    <td colSpan={6} className="px-4 py-4">
+                    <td colSpan={selecionavel ? 7 : 6} className="px-4 py-4">
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-xs">
                         <div>
                           <p className="uppercase tracking-wide mb-0.5" style={{ color: "var(--muted)" }}>
@@ -348,4 +434,6 @@ export default function TabelaAgAbertura({
       </div>
     </div>
   );
-}
+});
+
+export default TabelaAgAbertura;

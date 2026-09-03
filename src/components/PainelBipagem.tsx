@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, ScanBarcode, XCircle } from "lucide-react";
-import { ErroImpressaoAgente, imprimirViaAgente, type TipoBipagem } from "@/lib/etiquetas";
+import { processarBipagem, type TipoBipagem } from "@/lib/etiquetas";
 
 type LinhaHistorico = {
   id: number;
@@ -32,19 +32,6 @@ export default function PainelBipagem({ modo }: { modo: TipoBipagem }) {
     ]);
   }
 
-  async function confirmar(logId: string, sucesso: boolean, mensagemErro?: string) {
-    try {
-      await fetch(`/api/operacional/etiquetas/${logId}/confirmar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sucesso, mensagem_erro: mensagemErro }),
-      });
-    } catch {
-      // a impressão/pedido já foi resolvido de um jeito ou de outro — só
-      // o registro do histórico no banco que pode não ter sido salvo
-    }
-  }
-
   async function aoBipar(e?: React.FormEvent) {
     e?.preventDefault();
     const valor = codigo.trim();
@@ -53,57 +40,9 @@ export default function PainelBipagem({ modo }: { modo: TipoBipagem }) {
 
     setProcessando(true);
     try {
-      const res = await fetch("/api/operacional/etiquetas/localizar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ codigo: valor, tipo: modo }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        registrar(false, data.error || "Erro ao buscar esse código.");
-        return;
-      }
-
-      if (!data.encontrado || !data.orcamento) {
-        registrar(
-          false,
-          modo === "triagem"
-            ? `Código "${valor}" não encontrado em Ag. Triagem.`
-            : `Código "${valor}" não encontrado na base de orçamentos.`
-        );
-        return;
-      }
-
-      const orc = data.orcamento;
-
-      if (!orc.os_reparadora) {
-        await confirmar(data.logId, false, "Aparelho ainda sem OS Reparadora registrada.");
-        registrar(false, `${orc.trade_allied} encontrado, mas ainda sem OS Reparadora — não dá pra imprimir a etiqueta.`);
-        return;
-      }
-
-      try {
-        await imprimirViaAgente({
-          os_reparadora: orc.os_reparadora,
-          nf_remessa_allied: orc.nf_remessa_allied,
-          modelo_comercial: orc.modelo_comercial,
-        });
-      } catch (erro) {
-        const mensagem = erro instanceof ErroImpressaoAgente ? erro.message : "Erro inesperado ao imprimir.";
-        await confirmar(data.logId, false, mensagem);
-        registrar(false, `OS ${orc.os_reparadora} encontrada, mas falhou ao imprimir: ${mensagem}`);
-        return;
-      }
-
-      await confirmar(data.logId, true);
-      registrar(
-        true,
-        `OS ${orc.os_reparadora} | NF ${orc.nf_remessa_allied} | ${orc.modelo_comercial ?? "—"} — etiqueta enviada.` +
-          (modo === "triagem" ? " Avançou para 2 - Ag. Análise." : "")
-      );
-
-      if (modo === "triagem") {
+      const resultado = await processarBipagem(valor, modo);
+      registrar(resultado.ok, resultado.mensagem);
+      if (resultado.ok && modo === "triagem") {
         router.refresh();
       }
     } catch {

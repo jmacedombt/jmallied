@@ -4,12 +4,15 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import { statusPorSlug } from "@/lib/orcamentos";
-import TabelaAgAbertura, { type AparelhoAgAbertura } from "@/components/TabelaAgAbertura";
-import PopupBipagemTriagem from "@/components/PopupBipagemTriagem";
+import { type AparelhoAgAbertura } from "@/components/TabelaAgAbertura";
+import PainelAgAbertura from "@/components/PainelAgAbertura";
+import PainelAgTriagem from "@/components/PainelAgTriagem";
+import ContadorAoVivo from "@/components/ContadorAoVivo";
 
 export default async function StatusOperacionalPage({ params }: { params: { slug: string } }) {
-  const status = statusPorSlug(params.slug);
-  if (!status) notFound();
+  const statusEncontrado = statusPorSlug(params.slug);
+  if (!statusEncontrado) notFound();
+  const status = statusEncontrado;
 
   const supabase = createClient();
   const {
@@ -47,6 +50,20 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     </Link>
   );
 
+  // Badge com a contagem de pendências dessa etapa, ao vivo (Realtime) —
+  // atualiza sozinho assim que um aparelho entra ou sai daqui.
+  function badgeContador(contagemInicial: number) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium mb-3 ml-2"
+        style={{ borderColor: "var(--line)", background: "var(--surface2)", color: "var(--ink)" }}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <ContadorAoVivo status={status.valor} contagemInicial={contagemInicial} /> pendente(s) nessa etapa
+      </span>
+    );
+  }
+
   if (status.slug === "ag-abertura" || status.slug === "1-ag-triagem") {
     const { data: aparelhos } = await supabase
       .from("orcamentos")
@@ -56,17 +73,30 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       .eq("status_operacional", status.valor)
       .order(status.slug === "ag-abertura" ? "created_at" : "os_reparadora_definida_em", { ascending: true });
 
+    if (status.slug === "ag-abertura") {
+      return (
+        <AppShell titulo={status.label} perfil={perfil}>
+          <div className="flex items-center flex-wrap">
+            {voltar}
+            {badgeContador(aparelhos?.length ?? 0)}
+          </div>
+          <PainelAgAbertura
+            aparelhos={(aparelhos ?? []) as AparelhoAgAbertura[]}
+            mensagemVazia="Nenhum aparelho aguardando abertura no momento."
+          />
+        </AppShell>
+      );
+    }
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
-        {status.slug === "1-ag-triagem" && <PopupBipagemTriagem />}
-        {voltar}
-        <TabelaAgAbertura
+        <div className="flex items-center flex-wrap">
+          {voltar}
+          {badgeContador(aparelhos?.length ?? 0)}
+        </div>
+        <PainelAgTriagem
           aparelhos={(aparelhos ?? []) as AparelhoAgAbertura[]}
-          mensagemVazia={
-            status.slug === "ag-abertura"
-              ? "Nenhum aparelho aguardando abertura no momento."
-              : "Nenhum aparelho em Ag. Triagem no momento."
-          }
+          mensagemVazia="Nenhum aparelho em Ag. Triagem no momento."
         />
       </AppShell>
     );
@@ -80,7 +110,10 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
 
   return (
     <AppShell titulo={status.label} perfil={perfil}>
-      {voltar}
+      <div className="flex items-center flex-wrap">
+        {voltar}
+        {badgeContador(aparelhos?.length ?? 0)}
+      </div>
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
         <table className="w-full text-sm">
           <thead>

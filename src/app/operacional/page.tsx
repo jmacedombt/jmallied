@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
+import ContadorAoVivo from "@/components/ContadorAoVivo";
 import { STATUS_OPERACIONAL } from "@/lib/orcamentos";
 
 const ICONES: Record<string, typeof Inbox> = {
@@ -102,7 +103,7 @@ export default async function OperacionalPage() {
               <div className="flex items-center gap-3 mb-2">
                 <Icone size={26} strokeWidth={2} style={{ color: cores.cor }} />
                 <span className="text-2xl font-bold leading-none" style={{ color: "var(--ink)" }}>
-                  {quantidade}
+                  <ContadorAoVivo status={status.valor} contagemInicial={quantidade} />
                 </span>
               </div>
               <p className="text-[13px] font-medium leading-snug" style={{ color: "var(--muted)" }}>
