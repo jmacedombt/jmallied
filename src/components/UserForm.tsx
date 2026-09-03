@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CARGOS, gerarUsuario } from "@/lib/auth";
+import PopupNovoUsuario from "@/components/PopupNovoUsuario";
 
 export default function UserForm() {
   const router = useRouter();
@@ -146,11 +147,7 @@ export default function UserForm() {
       )}
 
       {sucesso && (
-        <p className="text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2">
-          Usuário <strong>{sucesso.usuario}</strong> cadastrado com senha
-          temporária <strong>{sucesso.senha}</strong>. Ele(a) será obrigado(a)
-          a trocar a senha no primeiro acesso.
-        </p>
+        <PopupNovoUsuario usuario={sucesso.usuario} senha={sucesso.senha} aoFechar={() => setSucesso(null)} />
       )}
 
       <button
