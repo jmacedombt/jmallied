@@ -37,9 +37,12 @@ type Analise = {
 export default function PainelAgAbertura({
   aparelhos,
   mensagemVazia,
+  topo,
 }: {
   aparelhos: AparelhoAgAbertura[];
   mensagemVazia?: string;
+  /** botão "voltar" + badge de contagem, renderizados na mesma linha da barra de upload */
+  topo?: React.ReactNode;
 }) {
   const tabelaRef = useRef<TabelaAgAberturaHandle>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -111,32 +114,28 @@ export default function PainelAgAbertura({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border p-4" style={{ background: "var(--surface)", borderColor: "var(--line)" }}>
-        <p className="text-sm font-medium mb-1 flex items-center gap-2" style={{ color: "var(--ink)" }}>
-          <FileSpreadsheet size={16} style={{ color: "var(--accent2)" }} />
-          Preencher OS Reparadora em massa
-        </p>
-        <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
-          Baixe o modelo, preencha OS Care Allied + OS Reparadora e envie de volta — o sistema casa cada linha com
-          as pendências desta tela e avança automaticamente pra Ag. Triagem.
-        </p>
+      <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
+        <div className="flex items-center flex-wrap [&>*]:!mb-0">{topo}</div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center flex-wrap gap-1.5" title="Preencher OS Reparadora em massa via planilha">
+          <FileSpreadsheet size={14} className="mr-0.5 shrink-0" style={{ color: "var(--accent2)" }} />
           <a
             href="/api/operacional/ag-abertura/modelo-planilha"
-            className="inline-flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm transition hover:border-[var(--accent2)]"
+            title="Baixar modelo (.xlsx)"
+            className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition hover:border-[var(--accent2)]"
             style={{ borderColor: "var(--line)", color: "var(--ink)" }}
           >
-            <Download size={16} />
-            Baixar modelo (.xlsx)
+            <Download size={13} />
+            Modelo
           </a>
 
           <label
-            className="flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm cursor-pointer transition hover:border-[var(--accent2)]"
+            title={nomeArquivo || "Escolher planilha preenchida"}
+            className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs cursor-pointer transition hover:border-[var(--accent2)] max-w-[9rem] sm:max-w-[12rem]"
             style={{ borderColor: "var(--line)", color: "var(--ink)" }}
           >
-            <UploadCloud size={16} />
-            {nomeArquivo || "Escolher planilha preenchida"}
+            <UploadCloud size={13} className="shrink-0" />
+            <span className="truncate">{nomeArquivo || "Escolher planilha"}</span>
             <input
               ref={inputRef}
               type="file"
@@ -154,20 +153,20 @@ export default function PainelAgAbertura({
             type="button"
             onClick={analisarArquivo}
             disabled={!nomeArquivo || analisando}
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent2)] disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 transition"
-            style={{ boxShadow: "0 0 30px var(--accent-glow)" }}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent2)] disabled:opacity-60 text-white text-xs font-medium px-3 py-1.5 transition"
+            style={{ boxShadow: "0 0 20px var(--accent-glow)" }}
           >
-            {analisando && <Loader2 size={14} className="animate-spin" />}
-            {analisando ? "Analisando..." : "Analisar planilha"}
+            {analisando && <Loader2 size={12} className="animate-spin" />}
+            {analisando ? "Analisando..." : "Analisar"}
           </button>
         </div>
-
-        {erroAnalise && (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mt-3">
-            {erroAnalise}
-          </p>
-        )}
       </div>
+
+      {erroAnalise && (
+        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+          {erroAnalise}
+        </p>
+      )}
 
       {analise && (
         <PopupConfirmarAnalise

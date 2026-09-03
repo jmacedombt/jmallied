@@ -76,13 +76,15 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     if (status.slug === "ag-abertura") {
       return (
         <AppShell titulo={status.label} perfil={perfil}>
-          <div className="flex items-center flex-wrap">
-            {voltar}
-            {badgeContador(aparelhos?.length ?? 0)}
-          </div>
           <PainelAgAbertura
             aparelhos={(aparelhos ?? []) as AparelhoAgAbertura[]}
             mensagemVazia="Nenhum aparelho aguardando abertura no momento."
+            topo={
+              <>
+                {voltar}
+                {badgeContador(aparelhos?.length ?? 0)}
+              </>
+            }
           />
         </AppShell>
       );
