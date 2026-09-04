@@ -30,7 +30,7 @@ export default async function BidPage({ searchParams }: { searchParams: { busca?
   let query = supabase
     .from("bid_pecas")
     .select(
-      "id, modelo, part_number, custo_peca_samsung, custo_peca_allied, mao_de_obra, bid_solucoes(id, peca_solucao, principal)",
+      "id, modelo, part_number, custo_peca_samsung, custo_peca_allied, valor_imposto, mao_de_obra, bid_solucoes(id, peca_solucao, principal)",
       { count: "exact" }
     );
 

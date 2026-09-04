@@ -16,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   const { data, error } = await supabase
     .from("bid_historico_valores")
     .select(
-      "id, custo_peca_samsung_anterior, custo_peca_samsung_novo, valor_com_margem_anterior, valor_com_margem_novo, origem, criado_em, usuarios:alterado_por (nome, sobrenome)"
+      "id, custo_peca_samsung_anterior, custo_peca_samsung_novo, valor_com_margem_anterior, valor_com_margem_novo, custo_peca_allied_anterior, custo_peca_allied_novo, valor_imposto_anterior, valor_imposto_novo, origem, criado_em, usuarios:alterado_por (nome, sobrenome)"
     )
     .eq("bid_peca_id", params.id)
     .order("criado_em", { ascending: false })

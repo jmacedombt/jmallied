@@ -21,16 +21,18 @@ export default async function ConsultaBidPage() {
     perfil = data;
   }
 
-  const { data: faixasBrutas } = await supabase
-    .from("configuracoes_bid_markup")
-    .select("valor_min, valor_max, multiplicador")
-    .order("ordem", { ascending: true });
+  const [{ data: faixasBrutas }, { data: configImposto }] = await Promise.all([
+    supabase.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+    supabase.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+  ]);
 
   const faixas: FaixaMarkup[] = (faixasBrutas ?? []).map((f) => ({
     valor_min: Number(f.valor_min),
     valor_max: f.valor_max == null ? null : Number(f.valor_max),
     multiplicador: Number(f.multiplicador),
   }));
+
+  const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
 
   // Consulta BID trabalha com a base completa carregada no navegador
   // (busca e filtros instantâneos, sem ida ao servidor) — busca tudo
@@ -40,7 +42,7 @@ export default async function ConsultaBidPage() {
     const { data, error } = await supabase
       .from("bid_pecas")
       .select(
-        "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, mao_de_obra, travado, travado_em, bid_solucoes(id, peca_solucao, principal)"
+        "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, mao_de_obra, travado, travado_em, bid_solucoes(id, peca_solucao, principal)"
       )
       .order("modelo", { ascending: true })
       .order("part_number", { ascending: true })
@@ -60,7 +62,7 @@ export default async function ConsultaBidPage() {
         Busca instantânea na base completa do BID. Combine os filtros de Part Number, Modelo e Peça Solução, e passe
         o mouse sobre o Custo Peça (Allied) pra ver como o valor foi calculado.
       </p>
-      <ConsultaBidPanel pecasIniciais={pecas} faixas={faixas} podeEditar={podeEditar} />
+      <ConsultaBidPanel pecasIniciais={pecas} faixas={faixas} icmsPercentual={icmsPercentual} podeEditar={podeEditar} />
     </AppShell>
   );
 }

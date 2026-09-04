@@ -54,13 +54,39 @@ export function faixaMarkupPara(custo: number, faixas: FaixaMarkup[]): FaixaMark
   return null;
 }
 
-/** Custo Peça (Allied) = teto(custo da Base Peças x multiplicador da
- * faixa, 2 casas decimais). Retorna null se nenhuma faixa cobrir o
- * valor (configuração incompleta). */
+/** Valor com margem = teto(custo da Base Peças x multiplicador da
+ * faixa, 2 casas decimais) — é o valor ANTES do imposto. Retorna null
+ * se nenhuma faixa cobrir o valor (configuração incompleta). */
 export function calcularValorComMargem(custoSamsung: number, faixas: FaixaMarkup[]): number | null {
   const faixa = faixaMarkupPara(custoSamsung, faixas);
   if (!faixa) return null;
   return arredondarParaCima(custoSamsung * faixa.multiplicador, 2);
+}
+
+export type ResultadoCalculoBid = {
+  /** Custo da Base Peças x multiplicador da faixa — sem imposto (2 casas decimais). */
+  valorComMargem: number;
+  /** Parcela de ICMS em R$, sobre o valor com margem (2 casas decimais). */
+  valorImposto: number;
+  /** valor_com_margem + valor_imposto, arredondado pra cima pro número
+   * inteiro mais próximo — esse é o preço final usado no sistema. */
+  custoPecaAllied: number;
+};
+
+/** Custo Peça (Allied) = teto(valor com margem + imposto ICMS sobre o
+ * valor com margem, arredondado pro número inteiro — nunca fica
+ * "quebrado", ex: 43,35 vira 44,00). Retorna null se nenhuma faixa
+ * cobrir o custo informado (configuração incompleta). */
+export function calcularCustoPecaAllied(
+  custoSamsung: number,
+  faixas: FaixaMarkup[],
+  icmsPercentual: number
+): ResultadoCalculoBid | null {
+  const valorComMargem = calcularValorComMargem(custoSamsung, faixas);
+  if (valorComMargem == null) return null;
+  const valorImposto = arredondarParaCima(valorComMargem * (icmsPercentual / 100), 2);
+  const custoPecaAllied = arredondarParaCima(valorComMargem + valorImposto, 0);
+  return { valorComMargem, valorImposto, custoPecaAllied };
 }
 
 /** Percentual de lucro de uma edição manual do Custo Peça (Allied):
@@ -83,6 +109,7 @@ export type PecaBidConsulta = {
   custo_peca_samsung: number | null;
   valor_com_margem: number | null;
   custo_peca_allied: number | null;
+  valor_imposto: number | null;
   mao_de_obra: number | null;
   travado: boolean;
   travado_em: string | null;

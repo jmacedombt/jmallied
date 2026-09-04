@@ -28,7 +28,7 @@ export default async function PendenciasBidPage({ searchParams }: { searchParams
   const { data: pecas, count } = await supabase
     .from("bid_pecas")
     .select(
-      "id, modelo, part_number, custo_peca_samsung, custo_peca_allied, mao_de_obra, bid_solucoes(id, peca_solucao, principal)",
+      "id, modelo, part_number, custo_peca_samsung, custo_peca_allied, valor_imposto, mao_de_obra, bid_solucoes(id, peca_solucao, principal)",
       { count: "exact" }
     )
     .is("custo_peca_samsung", null)

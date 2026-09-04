@@ -35,7 +35,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
   const { data: peca, error: erroPeca } = await admin
     .from("bid_pecas")
-    .select("id, custo_peca_samsung, valor_com_margem")
+    .select("id, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto")
     .eq("id", params.id)
     .single();
 
@@ -43,9 +43,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: "Peça não encontrada." }, { status: 404 });
   }
 
+  // edição manual sobrescreve o valor final direto — deixa de refletir
+  // a fórmula (markup + imposto), então zera valor_imposto (não dá mais
+  // pra saber quanto dessa peça é imposto) até a peça ser recalculada.
   const { error: erroUpdate } = await admin
     .from("bid_pecas")
-    .update({ valor_com_margem: valorArredondado, custo_peca_allied: valorArredondado })
+    .update({ valor_com_margem: valorArredondado, custo_peca_allied: valorArredondado, valor_imposto: null })
     .eq("id", params.id);
 
   if (erroUpdate) {
@@ -58,6 +61,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     custo_peca_samsung_novo: peca.custo_peca_samsung,
     valor_com_margem_anterior: peca.valor_com_margem,
     valor_com_margem_novo: valorArredondado,
+    custo_peca_allied_anterior: peca.custo_peca_allied,
+    custo_peca_allied_novo: valorArredondado,
+    valor_imposto_anterior: peca.valor_imposto,
+    valor_imposto_novo: null,
     origem: "edicao_manual",
     alterado_por: user.id,
   });
@@ -66,5 +73,6 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     ok: true,
     custo_peca_allied: valorArredondado,
     valor_com_margem: valorArredondado,
+    valor_imposto: null,
   });
 }

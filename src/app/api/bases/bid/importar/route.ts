@@ -5,7 +5,7 @@ import {
   COL_BID_MODELO,
   COL_BID_PART_NUMBER,
   COL_BID_PECA_SOLUCAO,
-  calcularValorComMargem,
+  calcularCustoPecaAllied,
   podeImportarBid,
   prefixoPartNumber,
   type FaixaMarkup,
@@ -29,6 +29,8 @@ type PecaExistente = {
   part_number: string;
   custo_peca_samsung: number | null;
   valor_com_margem: number | null;
+  custo_peca_allied: number | null;
+  valor_imposto: number | null;
   mao_de_obra: number | null;
   travado: boolean;
 };
@@ -189,17 +191,22 @@ export async function POST(request: Request) {
     grupo.maoDeObraVotos.push(linha.mao_de_obra);
   }
 
-  const [{ data: pecasExistentes }, { data: faixasMarkupBrutas }, { data: configMaoDeObra }] = await Promise.all([
-    admin
-      .from("bid_pecas")
-      .select("id, modelo, part_number, custo_peca_samsung, valor_com_margem, mao_de_obra, travado") as unknown as Promise<{
-      data: PecaExistente[] | null;
-    }>,
-    admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
-    admin.from("configuracoes_mao_de_obra").select("valor_uma_peca").eq("id", 1).single(),
-  ]);
+  const [{ data: pecasExistentes }, { data: faixasMarkupBrutas }, { data: configMaoDeObra }, { data: configImposto }] =
+    await Promise.all([
+      admin
+        .from("bid_pecas")
+        .select(
+          "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, mao_de_obra, travado"
+        ) as unknown as Promise<{
+        data: PecaExistente[] | null;
+      }>,
+      admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+      admin.from("configuracoes_mao_de_obra").select("valor_uma_peca").eq("id", 1).single(),
+      admin.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+    ]);
 
   const valorPadraoMaoDeObra = Number(configMaoDeObra?.valor_uma_peca ?? 80);
+  const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
   const faixas: FaixaMarkup[] = (
     (faixasMarkupBrutas ?? []) as { valor_min: number; valor_max: number | null; multiplicador: number }[]
   ).map((f) => ({
@@ -268,17 +275,20 @@ export async function POST(request: Request) {
     // peça travada na Consulta BID: mantém o preço definido manualmente,
     // não recalcula a partir da Base Peças nessa importação
     const custoSamsungCalculado = custosPorPartNumber.get(grupo.part_number) ?? null;
-    const valorComMargemCalculado =
-      custoSamsungCalculado != null ? calcularValorComMargem(custoSamsungCalculado, faixas) : null;
+    const resultadoCalculado =
+      custoSamsungCalculado != null ? calcularCustoPecaAllied(custoSamsungCalculado, faixas, icmsPercentual) : null;
     const custoSamsung = travado ? existente!.custo_peca_samsung : custoSamsungCalculado;
-    const valorComMargem = travado ? existente!.valor_com_margem : valorComMargemCalculado;
+    const valorComMargem = travado ? existente!.valor_com_margem : resultadoCalculado?.valorComMargem ?? null;
+    const valorImposto = travado ? existente!.valor_imposto : resultadoCalculado?.valorImposto ?? null;
+    const custoPecaAllied = travado ? existente!.custo_peca_allied : resultadoCalculado?.custoPecaAllied ?? null;
 
     linhasUpsertPecas.push({
       modelo: grupo.modelo,
       part_number: grupo.part_number,
       custo_peca_samsung: custoSamsung,
       valor_com_margem: valorComMargem,
-      custo_peca_allied: valorComMargem,
+      custo_peca_allied: custoPecaAllied,
+      valor_imposto: valorImposto,
       mao_de_obra: maoDeObra,
       bid_importacao_id: importacao.id,
     });
@@ -288,7 +298,8 @@ export async function POST(request: Request) {
     } else {
       const mudou =
         valoresDiferentes(existente.custo_peca_samsung, custoSamsung) ||
-        valoresDiferentes(existente.valor_com_margem, valorComMargem);
+        valoresDiferentes(existente.valor_com_margem, valorComMargem) ||
+        valoresDiferentes(existente.custo_peca_allied, custoPecaAllied);
       if (mudou) {
         pecasAtualizadas += 1;
         linhasHistorico.push({
@@ -297,6 +308,10 @@ export async function POST(request: Request) {
           custo_peca_samsung_novo: custoSamsung,
           valor_com_margem_anterior: existente.valor_com_margem,
           valor_com_margem_novo: valorComMargem,
+          custo_peca_allied_anterior: existente.custo_peca_allied,
+          custo_peca_allied_novo: custoPecaAllied,
+          valor_imposto_anterior: existente.valor_imposto,
+          valor_imposto_novo: valorImposto,
           origem: "importacao_bid",
           alterado_por: user.id,
         });

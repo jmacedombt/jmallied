@@ -12,6 +12,7 @@ export type PecaBid = {
   part_number: string;
   custo_peca_samsung: number | null;
   custo_peca_allied: number | null;
+  valor_imposto: number | null;
   mao_de_obra: number | null;
   bid_solucoes: SolucaoBid[];
 };
@@ -22,6 +23,8 @@ type LinhaHistorico = {
   custo_peca_samsung_novo: number | null;
   valor_com_margem_anterior: number | null;
   valor_com_margem_novo: number | null;
+  custo_peca_allied_anterior: number | null;
+  custo_peca_allied_novo: number | null;
   origem: string;
   criado_em: string;
   usuarios: { nome: string; sobrenome: string } | { nome: string; sobrenome: string }[] | null;
@@ -90,7 +93,15 @@ export default function TabelaBidPecas({ pecas }: { pecas: PecaBid[] }) {
         <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
           <thead>
             <tr className="text-left">
-              {["Modelo", "Part Number", "Peça Solução", "Custo Peça Samsung", "Mão de Obra", "Custo Peça (Allied)"].map(
+              {[
+                "Modelo",
+                "Part Number",
+                "Peça Solução",
+                "Custo Peça Samsung",
+                "Mão de Obra",
+                "Imposto (ICMS)",
+                "Custo Peça (Allied)",
+              ].map(
                 (titulo) => (
                   <th
                     key={titulo}
@@ -174,6 +185,9 @@ export default function TabelaBidPecas({ pecas }: { pecas: PecaBid[] }) {
                     <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
                       {formatarMoeda(peca.mao_de_obra)}
                     </td>
+                    <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
+                      {formatarMoeda(peca.valor_imposto)}
+                    </td>
                     <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
                       {formatarMoeda(peca.custo_peca_allied)}
                     </td>
@@ -181,7 +195,7 @@ export default function TabelaBidPecas({ pecas }: { pecas: PecaBid[] }) {
 
                   {aberto && (
                     <tr style={{ background: "var(--surface2)" }}>
-                      <td colSpan={6} className="px-4 py-4">
+                      <td colSpan={7} className="px-4 py-4">
                         <p
                           className="text-xs uppercase tracking-wide mb-2 flex items-center gap-1.5"
                           style={{ color: "var(--muted)" }}
@@ -202,6 +216,13 @@ export default function TabelaBidPecas({ pecas }: { pecas: PecaBid[] }) {
                           <div className="space-y-1.5">
                             {historico.map((h) => {
                               const usuario = Array.isArray(h.usuarios) ? h.usuarios[0] : h.usuarios;
+                              // linhas de histórico antigas (de antes do imposto entrar no
+                              // cálculo) não têm custo_peca_allied_anterior/novo — nesse caso
+                              // valor_com_margem_* já era o valor final, então serve de fallback.
+                              const anterior = h.custo_peca_allied_anterior ?? h.valor_com_margem_anterior;
+                              const novo = h.custo_peca_allied_novo ?? h.valor_com_margem_novo;
+                              const aumentou = anterior != null && novo != null && novo > anterior;
+                              const diminuiu = anterior != null && novo != null && novo < anterior;
                               return (
                                 <div key={h.id} className="text-xs flex flex-wrap items-center gap-1.5" style={{ color: "var(--ink)" }}>
                                   <span
@@ -209,11 +230,17 @@ export default function TabelaBidPecas({ pecas }: { pecas: PecaBid[] }) {
                                     style={{ background: "var(--surface)", color: "var(--muted)" }}
                                   >
                                     <RefreshCcw size={10} />
-                                    {h.origem === "importacao_bid" ? "Importação BID" : "Recálculo"}
+                                    {h.origem === "importacao_bid"
+                                      ? "Importação BID"
+                                      : h.origem === "edicao_manual"
+                                        ? "Edição manual"
+                                        : "Recálculo"}
                                   </span>
                                   <span>
-                                    Custo Peça (Allied): {formatarMoeda(h.valor_com_margem_anterior)} →{" "}
-                                    <strong>{formatarMoeda(h.valor_com_margem_novo)}</strong>
+                                    Custo Peça (Allied): {formatarMoeda(anterior)} →{" "}
+                                    <strong>{formatarMoeda(novo)}</strong>{" "}
+                                    {aumentou && <span style={{ color: "#ef4444" }}>▲</span>}
+                                    {diminuiu && <span style={{ color: "#22c55e" }}>▼</span>}
                                   </span>
                                   <span style={{ color: "var(--muted)" }}>
                                     ({new Date(h.criado_em).toLocaleString("pt-BR")}

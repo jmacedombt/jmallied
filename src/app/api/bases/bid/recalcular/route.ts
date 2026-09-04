@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { calcularValorComMargem, podeImportarBid, type FaixaMarkup } from "@/lib/bid";
+import { calcularCustoPecaAllied, podeImportarBid, type FaixaMarkup } from "@/lib/bid";
 
 export const maxDuration = 60;
 const TAMANHO_LOTE = 400;
@@ -10,6 +10,8 @@ type PecaExistente = {
   part_number: string;
   custo_peca_samsung: number | null;
   valor_com_margem: number | null;
+  custo_peca_allied: number | null;
+  valor_imposto: number | null;
   travado: boolean;
 };
 
@@ -40,11 +42,14 @@ export async function POST() {
     return NextResponse.json({ error: "Seu cargo não tem permissão para recalcular o BID." }, { status: 403 });
   }
 
-  const [{ data: pecas }, { data: faixasBrutas }] = await Promise.all([
-    admin.from("bid_pecas").select("id, part_number, custo_peca_samsung, valor_com_margem, travado") as unknown as Promise<{
+  const [{ data: pecas }, { data: faixasBrutas }, { data: configImposto }] = await Promise.all([
+    admin
+      .from("bid_pecas")
+      .select("id, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, travado") as unknown as Promise<{
       data: PecaExistente[] | null;
     }>,
     admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+    admin.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
   ]);
 
   if (!pecas || pecas.length === 0) {
@@ -59,6 +64,8 @@ export async function POST() {
     multiplicador: Number(f.multiplicador),
   }));
 
+  const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
+
   const partNumbersUnicos = Array.from(new Set(pecas.map((p) => p.part_number)));
   const custosPorPartNumber = new Map<string, number>();
   for (let i = 0; i < partNumbersUnicos.length; i += TAMANHO_LOTE) {
@@ -67,7 +74,13 @@ export async function POST() {
     for (const linha of data ?? []) custosPorPartNumber.set(linha.codigo, Number(linha.valor_unitario));
   }
 
-  const atualizacoes: { id: string; custo_peca_samsung: number | null; valor_com_margem: number | null }[] = [];
+  const atualizacoes: {
+    id: string;
+    custo_peca_samsung: number | null;
+    valor_com_margem: number | null;
+    custo_peca_allied: number | null;
+    valor_imposto: number | null;
+  }[] = [];
   const historico: Record<string, unknown>[] = [];
 
   for (const peca of pecas) {
@@ -76,21 +89,35 @@ export async function POST() {
     if (peca.travado) continue;
 
     const custoSamsung = custosPorPartNumber.get(peca.part_number) ?? null;
-    const valorComMargem = custoSamsung != null ? calcularValorComMargem(custoSamsung, faixas) : null;
+    const resultado = custoSamsung != null ? calcularCustoPecaAllied(custoSamsung, faixas, icmsPercentual) : null;
+    const valorComMargem = resultado?.valorComMargem ?? null;
+    const valorImposto = resultado?.valorImposto ?? null;
+    const custoPecaAllied = resultado?.custoPecaAllied ?? null;
 
     const mudou =
       valoresDiferentes(peca.custo_peca_samsung, custoSamsung) ||
-      valoresDiferentes(peca.valor_com_margem, valorComMargem);
+      valoresDiferentes(peca.valor_com_margem, valorComMargem) ||
+      valoresDiferentes(peca.custo_peca_allied, custoPecaAllied);
 
     if (!mudou) continue;
 
-    atualizacoes.push({ id: peca.id, custo_peca_samsung: custoSamsung, valor_com_margem: valorComMargem });
+    atualizacoes.push({
+      id: peca.id,
+      custo_peca_samsung: custoSamsung,
+      valor_com_margem: valorComMargem,
+      custo_peca_allied: custoPecaAllied,
+      valor_imposto: valorImposto,
+    });
     historico.push({
       bid_peca_id: peca.id,
       custo_peca_samsung_anterior: peca.custo_peca_samsung,
       custo_peca_samsung_novo: custoSamsung,
       valor_com_margem_anterior: peca.valor_com_margem,
       valor_com_margem_novo: valorComMargem,
+      custo_peca_allied_anterior: peca.custo_peca_allied,
+      custo_peca_allied_novo: custoPecaAllied,
+      valor_imposto_anterior: peca.valor_imposto,
+      valor_imposto_novo: valorImposto,
       origem: "recalculo",
       alterado_por: user.id,
     });
@@ -102,7 +129,8 @@ export async function POST() {
       .update({
         custo_peca_samsung: item.custo_peca_samsung,
         valor_com_margem: item.valor_com_margem,
-        custo_peca_allied: item.valor_com_margem,
+        custo_peca_allied: item.custo_peca_allied,
+        valor_imposto: item.valor_imposto,
       })
       .eq("id", item.id);
   }

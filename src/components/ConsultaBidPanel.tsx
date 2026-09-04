@@ -18,7 +18,15 @@ function ordenarSolucoes(peca: PecaBidConsulta) {
   return [...(peca.bid_solucoes ?? [])].sort((a, b) => Number(b.principal) - Number(a.principal));
 }
 
-function TooltipCalculo({ peca, faixas }: { peca: PecaBidConsulta; faixas: FaixaMarkup[] }) {
+function TooltipCalculo({
+  peca,
+  faixas,
+  icmsPercentual,
+}: {
+  peca: PecaBidConsulta;
+  faixas: FaixaMarkup[];
+  icmsPercentual: number;
+}) {
   if (peca.travado) {
     return (
       <div className="text-xs space-y-1.5 min-w-[220px]">
@@ -77,11 +85,21 @@ function TooltipCalculo({ peca, faixas }: { peca: PecaBidConsulta; faixas: Faixa
           </span>
         </p>
         <p className="flex justify-between gap-4">
+          <span style={{ color: "var(--muted)" }}>= Valor com margem</span>
+          <strong>{formatarMoeda(peca.valor_com_margem)}</strong>
+        </p>
+      </div>
+      <div className="border-t pt-1.5 mt-1.5" style={{ borderColor: "var(--line)" }}>
+        <p className="flex justify-between gap-4">
+          <span style={{ color: "var(--muted)" }}>Imposto (ICMS {icmsPercentual}%)</span>
+          <strong>+ {formatarMoeda(peca.valor_imposto)}</strong>
+        </p>
+        <p className="flex justify-between gap-4">
           <span style={{ color: "var(--muted)" }}>= Custo Peça (Allied)</span>
           <strong style={{ color: "var(--accent2)" }}>{formatarMoeda(peca.custo_peca_allied)}</strong>
         </p>
       </div>
-      <p style={{ color: "var(--muted)" }}>(arredondado pra cima, 2 casas decimais)</p>
+      <p style={{ color: "var(--muted)" }}>(arredondado pra cima, sempre número inteiro)</p>
     </div>
   );
 }
@@ -91,10 +109,12 @@ type Tooltip = { peca: PecaBidConsulta; x: number; y: number };
 export default function ConsultaBidPanel({
   pecasIniciais,
   faixas,
+  icmsPercentual,
   podeEditar,
 }: {
   pecasIniciais: PecaBidConsulta[];
   faixas: FaixaMarkup[];
+  icmsPercentual: number;
   podeEditar: boolean;
 }) {
   const [pecas, setPecas] = useState<PecaBidConsulta[]>(pecasIniciais);
@@ -209,7 +229,14 @@ export default function ConsultaBidPanel({
       if (res.ok) {
         setPecas((atual) =>
           atual.map((p) =>
-            p.id === peca.id ? { ...p, custo_peca_allied: data.custo_peca_allied, valor_com_margem: data.valor_com_margem } : p
+            p.id === peca.id
+              ? {
+                  ...p,
+                  custo_peca_allied: data.custo_peca_allied,
+                  valor_com_margem: data.valor_com_margem,
+                  valor_imposto: data.valor_imposto ?? null,
+                }
+              : p
           )
         );
         cancelarEdicao();
@@ -387,7 +414,7 @@ export default function ConsultaBidPanel({
                     />
                   </th>
                 )}
-                {["Modelo", "Part Number", "Peça Solução", "Mão de Obra", "Custo Peça (Allied)"].map((titulo) => (
+                {["Modelo", "Part Number", "Peça Solução", "Mão de Obra", "Imposto (ICMS)", "Custo Peça (Allied)"].map((titulo) => (
                   <th
                     key={titulo}
                     className="sticky top-0 z-10 px-4 py-2.5 font-medium"
@@ -439,6 +466,9 @@ export default function ConsultaBidPanel({
                     </td>
                     <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
                       {formatarMoeda(peca.mao_de_obra)}
+                    </td>
+                    <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
+                      {formatarMoeda(peca.valor_imposto)}
                     </td>
                     <td className="px-4 py-2.5 relative">
                       {emEdicao ? (
@@ -536,7 +566,7 @@ export default function ConsultaBidPanel({
               {pecasFiltradas.length === 0 && (
                 <tr>
                   <td
-                    colSpan={podeEditar ? 7 : 5}
+                    colSpan={podeEditar ? 8 : 6}
                     className="px-4 py-8 text-center"
                     style={{ color: "var(--muted)", background: "var(--surface)" }}
                   >
@@ -554,7 +584,7 @@ export default function ConsultaBidPanel({
           className="fixed z-50 rounded-lg border shadow-2xl p-3"
           style={{ background: "var(--surface2)", borderColor: "var(--line)", left: tooltip.x, top: tooltip.y }}
         >
-          <TooltipCalculo peca={tooltip.peca} faixas={faixas} />
+          <TooltipCalculo peca={tooltip.peca} faixas={faixas} icmsPercentual={icmsPercentual} />
         </div>
       )}
     </div>
