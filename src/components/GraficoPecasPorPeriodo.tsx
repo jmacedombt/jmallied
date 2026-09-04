@@ -12,6 +12,14 @@ const OPCOES: { valor: Agrupamento; label: string }[] = [
   { valor: "ano", label: "Ano" },
 ];
 
+// quantos pontos (mais recentes) cada agrupamento mostra — "ano" não é
+// limitado porque dificilmente uma base acumula mais que uns poucos anos
+const JANELA: Record<Agrupamento, number | null> = {
+  mes: 12,
+  semana: 15,
+  ano: null,
+};
+
 function formatarRotulo(periodoIso: string, agrupamento: Agrupamento): string {
   const d = new Date(`${periodoIso}T00:00:00`);
   if (agrupamento === "ano") return String(d.getFullYear());
@@ -21,9 +29,20 @@ function formatarRotulo(periodoIso: string, agrupamento: Agrupamento): string {
   return d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).replace(".", "");
 }
 
-const ALTURA = 160;
-const LARGURA_BARRA = 18;
-const GAP = 6;
+// sistema de coordenadas do viewBox (unidades abstratas, não pixels) —
+// a largura é esticada por preserveAspectRatio="none" pra sempre ocupar
+// 100% do espaço disponível, só a altura fica fixa (em px reais)
+const VIEWBOX_LARGURA = 1000;
+const ALTURA_PX = 240;
+const PADDING_TOPO = 40; // espaço pra profundidade 3D + valor acima da barra
+const ALTURA_PLOT = 160; // altura máxima que uma barra pode ter
+const ALTURA_EIXO = 40; // espaço pro rótulo do período embaixo
+const BASELINE = PADDING_TOPO + ALTURA_PLOT;
+
+const CORES = {
+  normal: { frente: "#2f6fed", topo: "#7ab0ff", lado: "#1f4fb8" },
+  hover: { frente: "#5aa9ff", topo: "#a3cbff", lado: "#2f6fed" },
+};
 
 export default function GraficoPecasPorPeriodo({
   porMes,
@@ -37,9 +56,16 @@ export default function GraficoPecasPorPeriodo({
   const [agrupamento, setAgrupamento] = useState<Agrupamento>("mes");
   const [hover, setHover] = useState<number | null>(null);
 
-  const dados = agrupamento === "mes" ? porMes : agrupamento === "semana" ? porSemana : porAno;
+  const bruto = agrupamento === "mes" ? porMes : agrupamento === "semana" ? porSemana : porAno;
+  const janela = JANELA[agrupamento];
+  const dados = janela ? bruto.slice(-janela) : bruto;
   const max = useMemo(() => Math.max(1, ...dados.map((d) => d.quantidade)), [dados]);
-  const largura = Math.max(dados.length * (LARGURA_BARRA + GAP), 240);
+
+  const n = Math.max(dados.length, 1);
+  const slot = VIEWBOX_LARGURA / n;
+  const gap = slot * 0.28;
+  const profundidade = Math.min(slot * 0.22, 16);
+  const larguraBarra = Math.max(slot - gap - profundidade, 4);
 
   return (
     <div
@@ -77,59 +103,98 @@ export default function GraficoPecasPorPeriodo({
           Nenhum dado importado ainda.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <svg
-            width={largura}
-            height={ALTURA + 28}
-            role="img"
-            aria-label={`Peças registradas por ${agrupamento}`}
-          >
-            {dados.map((ponto, i) => {
-              const alturaBarra = Math.max(2, (ponto.quantidade / max) * ALTURA);
-              const x = i * (LARGURA_BARRA + GAP);
-              const y = ALTURA - alturaBarra;
-              const emHover = hover === i;
-              return (
-                <g
-                  key={ponto.periodo}
-                  onMouseEnter={() => setHover(i)}
-                  onMouseLeave={() => setHover((h) => (h === i ? null : h))}
-                >
-                  <rect x={x} y={0} width={LARGURA_BARRA} height={ALTURA} fill="transparent" />
-                  <rect
-                    x={x}
-                    y={y}
-                    width={LARGURA_BARRA}
-                    height={alturaBarra}
-                    rx={4}
-                    fill={emHover ? "#5aa9ff" : "#2f6fed"}
-                    opacity={emHover ? 1 : 0.85}
-                  />
-                  {emHover && (
-                    <text
-                      x={x + LARGURA_BARRA / 2}
-                      y={y - 6}
-                      textAnchor="middle"
-                      fontSize="10.5"
-                      fill="var(--ink)"
-                    >
-                      {ponto.quantidade}
-                    </text>
-                  )}
-                  <text
-                    x={x + LARGURA_BARRA / 2}
-                    y={ALTURA + 16}
-                    textAnchor="middle"
-                    fontSize="9.5"
-                    fill="var(--muted)"
-                  >
-                    {formatarRotulo(ponto.periodo, agrupamento)}
-                  </text>
+        <svg
+          width="100%"
+          height={ALTURA_PX}
+          viewBox={`0 0 ${VIEWBOX_LARGURA} ${PADDING_TOPO + ALTURA_PLOT + ALTURA_EIXO}`}
+          preserveAspectRatio="none"
+          role="img"
+          aria-label={`Peças registradas por ${agrupamento}`}
+        >
+          <defs>
+            <filter id="sombraBarra3d" x="-40%" y="-40%" width="180%" height="200%">
+              <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#000" floodOpacity="0.28" />
+            </filter>
+            <filter id="sombraChao3d" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="2.2" />
+            </filter>
+          </defs>
+
+          {dados.map((ponto, i) => {
+            const alturaBarra = Math.max(3, (ponto.quantidade / max) * ALTURA_PLOT);
+            const x = i * slot + gap / 2;
+            const y = BASELINE - alturaBarra;
+            const emHover = hover === i;
+            const cor = emHover ? CORES.hover : CORES.normal;
+
+            const topoPontos = [
+              `${x},${y}`,
+              `${x + profundidade},${y - profundidade}`,
+              `${x + larguraBarra + profundidade},${y - profundidade}`,
+              `${x + larguraBarra},${y}`,
+            ].join(" ");
+
+            const ladoPontos = [
+              `${x + larguraBarra},${y}`,
+              `${x + larguraBarra + profundidade},${y - profundidade}`,
+              `${x + larguraBarra + profundidade},${y - profundidade + alturaBarra}`,
+              `${x + larguraBarra},${y + alturaBarra}`,
+            ].join(" ");
+
+            return (
+              <g
+                key={ponto.periodo}
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover((h) => (h === i ? null : h))}
+                style={{ cursor: "pointer" }}
+              >
+                {/* área de detecção do hover, cobrindo toda a coluna */}
+                <rect x={i * slot} y={0} width={slot} height={BASELINE + ALTURA_EIXO} fill="transparent" />
+
+                {/* sombra projetada no "chão" do gráfico */}
+                <ellipse
+                  cx={x + larguraBarra / 2 + profundidade / 2}
+                  cy={BASELINE + 3}
+                  rx={larguraBarra / 2 + profundidade / 2 + 2}
+                  ry={4}
+                  fill="#000"
+                  opacity={0.25}
+                  filter="url(#sombraChao3d)"
+                />
+
+                <g filter="url(#sombraBarra3d)">
+                  {/* face frontal */}
+                  <rect x={x} y={y} width={larguraBarra} height={alturaBarra} fill={cor.frente} />
+                  {/* face lateral (direita) — mais escura, dá o volume */}
+                  <polygon points={ladoPontos} fill={cor.lado} />
+                  {/* face superior — mais clara, dá o efeito de "tampa" */}
+                  <polygon points={topoPontos} fill={cor.topo} />
                 </g>
-              );
-            })}
-          </svg>
-        </div>
+
+                <text
+                  x={x + larguraBarra / 2 + profundidade / 2}
+                  y={y - profundidade - 8}
+                  textAnchor="middle"
+                  fontSize="15"
+                  fontWeight={emHover ? 700 : 600}
+                  fill="var(--ink)"
+                >
+                  {ponto.quantidade}
+                </text>
+
+                <text
+                  x={x + larguraBarra / 2}
+                  y={BASELINE + ALTURA_EIXO - 12}
+                  textAnchor="middle"
+                  fontSize="12.5"
+                  fill="var(--muted)"
+                >
+                  {formatarRotulo(ponto.periodo, agrupamento)}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
       )}
     </div>
   );
