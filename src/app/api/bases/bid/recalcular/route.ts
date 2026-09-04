@@ -138,18 +138,13 @@ export async function POST() {
     });
   }
 
-  for (const item of atualizacoes) {
-    await admin
-      .from("bid_pecas")
-      .update({
-        custo_peca_samsung: item.custo_peca_samsung,
-        valor_com_margem: item.valor_com_margem,
-        custo_peca_allied: item.custo_peca_allied,
-        valor_imposto: item.valor_imposto,
-        valor_atualizado_em: item.valor_atualizado_em,
-        valor_direcao: item.valor_direcao,
-      })
-      .eq("id", item.id);
+  // upsert em lote (uma única requisição por lote, atualizando só as
+  // colunas informadas) em vez de um update por peça — com milhares de
+  // peças, um update sequencial por linha estourava o limite de tempo
+  // do plano gratuito da Vercel (10s por função).
+  for (let i = 0; i < atualizacoes.length; i += TAMANHO_LOTE) {
+    const lote = atualizacoes.slice(i, i + TAMANHO_LOTE);
+    await admin.from("bid_pecas").upsert(lote, { onConflict: "id" });
   }
 
   for (let i = 0; i < historico.length; i += TAMANHO_LOTE) {
