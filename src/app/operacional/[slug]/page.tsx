@@ -9,6 +9,7 @@ import PainelAgAbertura from "@/components/PainelAgAbertura";
 import PainelAgTriagem from "@/components/PainelAgTriagem";
 import PainelAgAnalise, { type AparelhoAgAnalise } from "@/components/PainelAgAnalise";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
+import { buscarPrecosBidPorPartNumber, type FaixaMarkup } from "@/lib/bid";
 
 const COLUNAS_PECAS =
   "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, custo_peca_1, custo_peca_2, custo_peca_3, custo_peca_4, custo_peca_5, custo_peca_6, custo_peca_7, custo_peca_8, custo_peca_9, custo_peca_10";
@@ -117,11 +118,37 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       .eq("status_operacional", status.valor)
       .order("updated_at", { ascending: false });
 
+    const listaAparelhos = (aparelhos ?? []) as AparelhoAgAnalise[];
+
+    // Part Numbers referenciados por esses aparelhos — busca o preço "ao
+    // vivo" no BID pra cada um (em vez do custo gravado no próprio
+    // orçamento), pra saber também quais estão sem cadastro no BID.
+    const partNumbersReferenciados = listaAparelhos.flatMap((a) =>
+      Array.from({ length: 10 }, (_, i) => a[`peca_${i + 1}` as keyof AparelhoAgAnalise] as string | null)
+    );
+
+    const [precosBid, { data: faixasBrutas }, { data: configImposto }] = await Promise.all([
+      buscarPrecosBidPorPartNumber(supabase, partNumbersReferenciados),
+      supabase.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+      supabase.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+    ]);
+
+    const faixas: FaixaMarkup[] = (faixasBrutas ?? []).map((f) => ({
+      valor_min: Number(f.valor_min),
+      valor_max: f.valor_max == null ? null : Number(f.valor_max),
+      multiplicador: Number(f.multiplicador),
+    }));
+    const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelAgAnalise
-          aparelhos={(aparelhos ?? []) as AparelhoAgAnalise[]}
+          aparelhos={listaAparelhos}
           mensagemVazia="Nenhum aparelho em Ag. Análise no momento."
+          perfil={perfil}
+          precosBidIniciais={precosBid}
+          faixas={faixas}
+          icmsPercentual={icmsPercentual}
           topo={
             <>
               {voltar}

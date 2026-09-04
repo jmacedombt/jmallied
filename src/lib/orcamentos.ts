@@ -159,6 +159,17 @@ export const STATUS_VALIDACAO_ORCAMENTOS = STATUS_OPERACIONAL.find((s) => s.slug
 // algum pedido em andamento precisa dela).
 export const STATUS_ORCAMENTO_FECHADOS = ["Produto Entregue", "8 - Orçamento Reprovado"] as const;
 
+// quem pode confirmar "Análise realizada" em lote (seleção múltipla) em
+// 2 - Ag. Análise — cadastro individual continua liberado pra qualquer
+// um que acesse a tela, só o modo em massa é restrito.
+export const CARGOS_AG_ANALISE_LOTE = ["Supervisor", "Gerente"] as const;
+
+export function podeConfirmarAnaliseEmLote(perfil: { cargo: string; is_master: boolean } | null): boolean {
+  if (!perfil) return false;
+  if (perfil.is_master) return true;
+  return (CARGOS_AG_ANALISE_LOTE as readonly string[]).includes(perfil.cargo);
+}
+
 /** Valida o formato da OS Reparadora: só números, 10 caracteres (ex: 4123456789). */
 export function osReparadoraValida(valor: string): boolean {
   return /^[0-9]{10}$/.test(valor.trim());

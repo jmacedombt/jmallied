@@ -147,6 +147,74 @@ export async function partNumbersReferenciadosEmOrcamentosAbertos(
   return referenciados;
 }
 
+// ---- Busca ao vivo do BID por Part Number (usado em Ag. Análise) ----
+
+export type InfoBidPeca = {
+  id: string;
+  modelo: string;
+  part_number: string;
+  peca_solucao: string | null;
+  custo_peca_samsung: number | null;
+  valor_com_margem: number | null;
+  custo_peca_allied: number | null;
+  valor_imposto: number | null;
+  mao_de_obra: number | null;
+  travado: boolean;
+};
+
+/** Busca, pra uma lista de Part Numbers, a peça do BID correspondente
+ * (se existir) — usado em Ag. Análise pra trazer o Custo Peça (Allied)
+ * "ao vivo" em vez do valor gravado no próprio orçamento. Um mesmo Part
+ * Number pode aparecer em mais de um "modelo" no BID (peça compartilhada
+ * entre aparelhos); nesse caso prioriza uma peça travada (preço definido
+ * na mão) e, faltando isso, uma que já tenha valor calculado. Part
+ * Number sem nenhuma linha no BID simplesmente não entra no resultado —
+ * quem chama trata a ausência como "pendente de cadastro". */
+export async function buscarPrecosBidPorPartNumber(
+  supabase: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  partNumbers: (string | null)[]
+): Promise<Record<string, InfoBidPeca>> {
+  const unicos = Array.from(new Set(partNumbers.map((p) => p?.trim()).filter((p): p is string => !!p)));
+  const resultado: Record<string, InfoBidPeca> = {};
+  if (unicos.length === 0) return resultado;
+
+  const LOTE = 400;
+  for (let i = 0; i < unicos.length; i += LOTE) {
+    const lote = unicos.slice(i, i + LOTE);
+    const { data } = await supabase
+      .from("bid_pecas")
+      .select(
+        "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, mao_de_obra, travado, bid_solucoes(peca_solucao, principal)"
+      )
+      .in("part_number", lote);
+
+    for (const linha of (data ?? []) as any[]) {
+      const solucoes = (linha.bid_solucoes ?? []) as { peca_solucao: string; principal: boolean }[];
+      const principal = solucoes.find((s) => s.principal) ?? solucoes[0];
+      const info: InfoBidPeca = {
+        id: linha.id,
+        modelo: linha.modelo,
+        part_number: linha.part_number,
+        peca_solucao: principal?.peca_solucao ?? null,
+        custo_peca_samsung: linha.custo_peca_samsung,
+        valor_com_margem: linha.valor_com_margem,
+        custo_peca_allied: linha.custo_peca_allied,
+        valor_imposto: linha.valor_imposto,
+        mao_de_obra: linha.mao_de_obra,
+        travado: linha.travado,
+      };
+      const existente = resultado[linha.part_number];
+      const melhorQueExistente =
+        !existente ||
+        (info.travado && !existente.travado) ||
+        (info.custo_peca_allied != null && existente.custo_peca_allied == null);
+      if (melhorQueExistente) resultado[linha.part_number] = info;
+    }
+  }
+
+  return resultado;
+}
+
 // ---- Consulta BID (busca com dados completos carregados na tela) ----
 
 export type SolucaoBidConsulta = { id: string; peca_solucao: string; principal: boolean };
