@@ -45,19 +45,33 @@ export async function POST() {
     return NextResponse.json({ error: "Seu cargo não tem permissão para recalcular o BID." }, { status: 403 });
   }
 
-  const [{ data: pecas }, { data: faixasBrutas }, { data: configImposto }] = await Promise.all([
-    admin
+  // busca TODAS as peças, paginando — sem isso o Supabase corta
+  // silenciosamente em 1000 linhas por consulta (limite padrão do
+  // PostgREST) e o restante da base nunca chega a ser reprocessado,
+  // não importa quantas vezes "Recalcular" seja clicado.
+  const LOTE_BUSCA = 1000;
+  const pecas: PecaExistente[] = [];
+  for (let inicio = 0; ; inicio += LOTE_BUSCA) {
+    const { data, error } = (await admin
       .from("bid_pecas")
       .select(
         "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, valor_atualizado_em, valor_direcao, travado"
-      ) as unknown as Promise<{
-      data: PecaExistente[] | null;
-    }>,
+      )
+      .range(inicio, inicio + LOTE_BUSCA - 1)) as unknown as { data: PecaExistente[] | null; error: { message: string } | null };
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (!data || data.length === 0) break;
+    pecas.push(...data);
+    if (data.length < LOTE_BUSCA) break;
+  }
+
+  const [{ data: faixasBrutas }, { data: configImposto }] = await Promise.all([
     admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
     admin.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
   ]);
 
-  if (!pecas || pecas.length === 0) {
+  if (pecas.length === 0) {
     return NextResponse.json({ pecasVerificadas: 0, pecasAlteradas: 0 });
   }
 

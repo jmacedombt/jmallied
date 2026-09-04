@@ -194,19 +194,32 @@ export async function POST(request: Request) {
     grupo.maoDeObraVotos.push(linha.mao_de_obra);
   }
 
-  const [{ data: pecasExistentes }, { data: faixasMarkupBrutas }, { data: configMaoDeObra }, { data: configImposto }] =
-    await Promise.all([
-      admin
-        .from("bid_pecas")
-        .select(
-          "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, valor_atualizado_em, valor_direcao, mao_de_obra, travado"
-        ) as unknown as Promise<{
-        data: PecaExistente[] | null;
-      }>,
-      admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
-      admin.from("configuracoes_mao_de_obra").select("valor_uma_peca").eq("id", 1).single(),
-      admin.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
-    ]);
+  // busca TODAS as peças já existentes, paginando — sem isso o Supabase
+  // corta silenciosamente em 1000 linhas por consulta (limite padrão do
+  // PostgREST), e o restante da base "some" da checagem de travado/mão
+  // de obra/histórico dessa importação (mesmo assim o upsert em si não
+  // perde nada, porque resolve por modelo+part_number no banco — mas o
+  // que depende desse mapa em memória, como respeitar travado, ficava
+  // errado pra quem passasse dessa marca de 1000).
+  const LOTE_BUSCA_EXISTENTES = 1000;
+  const pecasExistentes: PecaExistente[] = [];
+  for (let inicio = 0; ; inicio += LOTE_BUSCA_EXISTENTES) {
+    const { data } = (await admin
+      .from("bid_pecas")
+      .select(
+        "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, valor_atualizado_em, valor_direcao, mao_de_obra, travado"
+      )
+      .range(inicio, inicio + LOTE_BUSCA_EXISTENTES - 1)) as unknown as { data: PecaExistente[] | null };
+    if (!data || data.length === 0) break;
+    pecasExistentes.push(...data);
+    if (data.length < LOTE_BUSCA_EXISTENTES) break;
+  }
+
+  const [{ data: faixasMarkupBrutas }, { data: configMaoDeObra }, { data: configImposto }] = await Promise.all([
+    admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+    admin.from("configuracoes_mao_de_obra").select("valor_uma_peca").eq("id", 1).single(),
+    admin.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+  ]);
 
   const valorPadraoMaoDeObra = Number(configMaoDeObra?.valor_uma_peca ?? 80);
   const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
