@@ -20,11 +20,22 @@ const JANELA: Record<Agrupamento, number | null> = {
   ano: null,
 };
 
+/** Número da semana ISO-8601 (segunda-feira como início), igual ao que
+ * o Postgres usa em date_trunc('week', ...) — por isso bate certinho
+ * com o agrupamento que já vem do banco. */
+function semanaIso(data: Date): number {
+  const d = new Date(Date.UTC(data.getFullYear(), data.getMonth(), data.getDate()));
+  const diaSemana = d.getUTCDay() || 7; // domingo (0) vira 7
+  d.setUTCDate(d.getUTCDate() + 4 - diaSemana);
+  const inicioAno = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - inicioAno.getTime()) / 86400000 + 1) / 7);
+}
+
 function formatarRotulo(periodoIso: string, agrupamento: Agrupamento): string {
   const d = new Date(`${periodoIso}T00:00:00`);
   if (agrupamento === "ano") return String(d.getFullYear());
   if (agrupamento === "semana") {
-    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+    return `W${semanaIso(d)}`;
   }
   return d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).replace(".", "");
 }
