@@ -7,6 +7,7 @@ const TAMANHO_LOTE = 400;
 
 type PecaExistente = {
   id: string;
+  modelo: string;
   part_number: string;
   custo_peca_samsung: number | null;
   valor_com_margem: number | null;
@@ -48,7 +49,7 @@ export async function POST() {
     admin
       .from("bid_pecas")
       .select(
-        "id, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, valor_atualizado_em, valor_direcao, travado"
+        "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, valor_atualizado_em, valor_direcao, travado"
       ) as unknown as Promise<{
       data: PecaExistente[] | null;
     }>,
@@ -80,6 +81,8 @@ export async function POST() {
 
   const atualizacoes: {
     id: string;
+    modelo: string;
+    part_number: string;
     custo_peca_samsung: number | null;
     valor_com_margem: number | null;
     custo_peca_allied: number | null;
@@ -116,6 +119,8 @@ export async function POST() {
 
     atualizacoes.push({
       id: peca.id,
+      modelo: peca.modelo,
+      part_number: peca.part_number,
       custo_peca_samsung: custoSamsung,
       valor_com_margem: valorComMargem,
       custo_peca_allied: custoPecaAllied,
@@ -141,10 +146,16 @@ export async function POST() {
   // upsert em lote (uma única requisição por lote, atualizando só as
   // colunas informadas) em vez de um update por peça — com milhares de
   // peças, um update sequencial por linha estourava o limite de tempo
-  // do plano gratuito da Vercel (10s por função).
+  // do plano gratuito da Vercel (10s por função). modelo/part_number vão
+  // junto mesmo já existindo: o Postgres exige as colunas not null no
+  // payload do upsert pra validar a linha, mesmo quando cai no caminho
+  // de UPDATE (onConflict "id" já garante que não duplica nada).
   for (let i = 0; i < atualizacoes.length; i += TAMANHO_LOTE) {
     const lote = atualizacoes.slice(i, i + TAMANHO_LOTE);
-    await admin.from("bid_pecas").upsert(lote, { onConflict: "id" });
+    const { error } = await admin.from("bid_pecas").upsert(lote, { onConflict: "id" });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
   }
 
   for (let i = 0; i < historico.length; i += TAMANHO_LOTE) {
