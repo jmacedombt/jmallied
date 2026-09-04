@@ -7,7 +7,7 @@ export function uploadComProgresso(
   url: string,
   formData: FormData,
   onProgresso: (percentual: number) => void
-): Promise<{ ok: boolean; status: number; data: unknown }> {
+): Promise<{ ok: boolean; status: number; data: unknown; bruto?: string }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
@@ -23,9 +23,16 @@ export function uploadComProgresso(
       try {
         data = JSON.parse(xhr.responseText);
       } catch {
-        // resposta não era JSON — data fica null
+        // resposta não era JSON (ex: página de erro do servidor/hospedagem,
+        // como um "tempo esgotado") — guarda um trecho bruto pra dar uma
+        // pista melhor do que aconteceu do que uma mensagem genérica.
       }
-      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        data,
+        bruto: data === null ? xhr.responseText?.slice(0, 300) : undefined,
+      });
     };
 
     xhr.onerror = () => reject(new Error("Falha de conexão ao enviar o arquivo."));
