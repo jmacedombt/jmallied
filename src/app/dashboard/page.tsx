@@ -36,6 +36,14 @@ const CARDS_PAINEL = [
     corClara: "#22d3ee",
   },
   {
+    href: "/bases/gspn",
+    label: "Base GSPN",
+    descricao: "Importar os chamados do sistema Samsung GSPN e atualizar as peças na base de orçamentos.",
+    icone: Wrench,
+    cor: "#0284c7",
+    corClara: "#38bdf8",
+  },
+  {
     href: "/bases/pecas",
     label: "Base Peças",
     descricao: "Importar e consultar a base de peças recebidas.",
@@ -45,7 +53,7 @@ const CARDS_PAINEL = [
   },
   {
     href: "/bases/orcamentos",
-    label: "Orçamentos",
+    label: "Base Orçamentos",
     descricao: "Importar e consultar a base de aparelhos recebidos da Allied.",
     icone: FileText,
     cor: "#d97706",
@@ -53,7 +61,7 @@ const CARDS_PAINEL = [
   },
   {
     href: "/bases/bid",
-    label: "BID",
+    label: "Base BID",
     descricao: "Tabela de preços de peças enviada pra Allied, calculada a partir da Base Peças.",
     icone: Tags,
     cor: "#be185d",
@@ -74,14 +82,6 @@ const CARDS_PAINEL = [
     icone: AlertTriangle,
     cor: "#f59e0b",
     corClara: "#fcd34d",
-  },
-  {
-    href: "/bases/gspn",
-    label: "Base GSPN",
-    descricao: "Importar os chamados do sistema Samsung GSPN e atualizar as peças na base de orçamentos.",
-    icone: Wrench,
-    cor: "#0284c7",
-    corClara: "#38bdf8",
   },
   {
     href: "/impressao/avulsa",

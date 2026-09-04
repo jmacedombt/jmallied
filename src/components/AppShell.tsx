@@ -69,12 +69,12 @@ const GRUPOS_MENU: GrupoMenu[] = [
     label: "Bases",
     icone: Database,
     itens: [
+      { href: "/bases/gspn", label: "Base GSPN", icone: Wrench },
       { href: "/bases/pecas", label: "Base Peças", icone: Database },
-      { href: "/bases/orcamentos", label: "Orçamentos", icone: FileText },
-      { href: "/bases/bid", label: "BID", icone: Tags },
+      { href: "/bases/orcamentos", label: "Base Orçamentos", icone: FileText },
+      { href: "/bases/bid", label: "Base BID", icone: Tags },
       { href: "/bases/bid/consulta", label: "Consulta BID", icone: Search },
       { href: "/bases/bid/pendencias", label: "Pendências BID", icone: AlertTriangle },
-      { href: "/bases/gspn", label: "Base GSPN", icone: Wrench },
     ],
   },
   {

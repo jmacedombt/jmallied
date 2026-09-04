@@ -53,7 +53,7 @@ export default async function BidPage({ searchParams }: { searchParams: { busca?
   const totalPaginas = Math.max(1, Math.ceil((count ?? 0) / PAGINA_TAMANHO));
 
   return (
-    <AppShell titulo="BID" perfil={perfil}>
+    <AppShell titulo="Base BID" perfil={perfil}>
       <p className="text-sm mb-5" style={{ color: "var(--muted)" }}>
         Tabela de preços de peças enviada pra Allied. O Custo Peça (Allied) é sempre recalculado a partir do custo
         mais recente da Base Peças e das faixas de markup configuradas.

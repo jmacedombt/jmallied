@@ -51,7 +51,7 @@ export default async function OrcamentosPage() {
   ]);
 
   return (
-    <AppShell titulo="Orçamentos" perfil={perfil}>
+    <AppShell titulo="Base Orçamentos" perfil={perfil}>
       {podeImportarOrcamentos(perfil) && (
         <div className="mb-6">
           <ImportarOrcamentosForm />
