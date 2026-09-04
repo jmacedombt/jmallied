@@ -13,6 +13,7 @@ import {
   FileSpreadsheet,
   FileText,
   Home,
+  Info,
   LayoutGrid,
   LogOut,
   Menu,
@@ -127,10 +128,14 @@ function hrefMaisEspecificoAtivo(itens: ItemMenu[], pathname: string | null): st
 
 export default function AppShell({
   titulo,
+  tituloInfo,
   perfil,
   children,
 }: {
   titulo: string;
+  /** Texto explicativo da tela, mostrado num balão ao passar o mouse
+   * sobre o ícone "i" ao lado do título — mantém o cabeçalho enxuto. */
+  tituloInfo?: string;
   perfil: Perfil;
   children: React.ReactNode;
 }) {
@@ -295,8 +300,19 @@ export default function AppShell({
 
           <SininhoNotificacoes />
 
-          <h1 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+          <h1 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
             {titulo}
+            {tituloInfo && (
+              <span className="group relative inline-flex">
+                <Info size={14} style={{ color: "var(--muted)" }} className="cursor-help" />
+                <span
+                  className="pointer-events-none absolute left-0 top-6 z-30 hidden w-80 whitespace-normal rounded-lg border p-3 text-xs font-normal shadow-2xl group-hover:block"
+                  style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
+                >
+                  {tituloInfo}
+                </span>
+              </span>
+            )}
           </h1>
 
           <div className="flex-1" />

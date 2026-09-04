@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, FileSpreadsheet, Info } from "lucide-react";
+import { AlertTriangle, Database, FileSpreadsheet, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ImportarBidForm from "@/components/ImportarBidForm";
@@ -61,76 +61,65 @@ export default async function BidPage({ searchParams }: { searchParams: { busca?
 
   const totalPaginas = Math.max(1, Math.ceil((count ?? 0) / PAGINA_TAMANHO));
 
+  const tituloInfo =
+    "Tabela de preços de peças enviada pra Allied. O Custo Peça (Allied) é sempre recalculado a partir do custo mais recente da Base Peças e das faixas de markup configuradas.";
+
   return (
-    <AppShell titulo="Base BID" perfil={perfil}>
-      <div className="flex items-center gap-2 mb-5">
-        <p className="text-sm" style={{ color: "var(--ink)" }}>
-          Tabela de preços de peças enviada pra Allied.
-        </p>
-        <div className="group relative inline-flex">
-          <Info size={15} style={{ color: "var(--muted)" }} className="cursor-help" />
-          <div
-            className="pointer-events-none absolute left-0 top-6 z-20 hidden w-80 rounded-lg border p-3 text-xs shadow-2xl group-hover:block"
-            style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
+    <AppShell titulo="Base BID" tituloInfo={tituloInfo} perfil={perfil}>
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        {podeImportarBid(perfil) && <ImportarBidForm />}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs"
+            style={{ background: "var(--surface)", borderColor: "var(--line)", color: "var(--ink)" }}
           >
-            O Custo Peça (Allied) é sempre recalculado a partir do custo mais recente da Base Peças e das faixas de
-            markup configuradas.
-          </div>
-        </div>
-      </div>
+            <Database size={13} style={{ color: "var(--muted)" }} />
+            <strong>{totalPecas ?? 0}</strong> <span style={{ color: "var(--muted)" }}>peças no BID</span>
+          </span>
 
-      {podeImportarBid(perfil) && (
-        <div className="mb-6">
-          <ImportarBidForm />
-        </div>
-      )}
-
-      <div className="grid sm:grid-cols-3 gap-4 mb-6">
-        <div className="rounded-xl border p-4" style={{ background: "var(--surface)", borderColor: "var(--line)" }}>
-          <p className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--muted)" }}>
-            Peças no BID
-          </p>
-          <p className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
-            {totalPecas ?? 0}
-          </p>
-        </div>
-        <Link
-          href="/bases/bid/pendencias"
-          className="rounded-xl border p-4 transition hover:border-amber-500/50"
-          style={{ background: "var(--surface)", borderColor: "var(--line)" }}
-        >
-          <p className="text-xs uppercase tracking-wide mb-1 flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
-            <AlertTriangle size={13} className="text-amber-500" /> Pendências BID
-          </p>
-          <p className="text-2xl font-semibold" style={{ color: (totalPendentes ?? 0) > 0 ? "#f59e0b" : "var(--ink)" }}>
-            {totalPendentes ?? 0}
-          </p>
-        </Link>
-        {podeImportarBid(perfil) && (
           <Link
-            href="/bases/bid/relatorio"
-            className="rounded-xl border p-4 transition hover:border-[var(--accent2)] flex flex-col justify-center"
-            style={{ background: "var(--surface)", borderColor: "var(--line)" }}
+            href="/bases/bid/pendencias"
+            className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition hover:border-amber-500/60"
+            style={{
+              background: "var(--surface)",
+              borderColor: (totalPendentes ?? 0) > 0 ? "rgba(245,158,11,0.4)" : "var(--line)",
+              color: (totalPendentes ?? 0) > 0 ? "#f59e0b" : "var(--ink)",
+            }}
           >
-            <p className="text-xs uppercase tracking-wide mb-1 flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
-              <FileSpreadsheet size={13} /> Relatório BID
-            </p>
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
-              Exportar peças completas em Excel
-            </p>
+            <AlertTriangle size={13} />
+            <strong>{totalPendentes ?? 0}</strong> pendência(s)
           </Link>
-        )}
+
+          {podeImportarBid(perfil) && (
+            <Link
+              href="/bases/bid/relatorio"
+              className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition hover:border-[var(--accent2)]"
+              style={{ background: "var(--surface)", borderColor: "var(--line)", color: "var(--ink)" }}
+            >
+              <FileSpreadsheet size={13} />
+              Relatório BID
+            </Link>
+          )}
+        </div>
       </div>
 
       <form method="GET" className="mb-4 max-w-sm">
-        <input
-          type="text"
-          name="busca"
-          defaultValue={busca}
-          placeholder="Buscar por modelo ou Part Number..."
-          className="w-full rounded-lg border px-3.5 py-2.5 text-sm outline-none focus:border-[var(--accent2)] focus:ring-1 focus:ring-[var(--accent2)] transition bg-[var(--surface2)] border-[var(--line)]"
-          style={{ color: "var(--ink)" }}
-        />
+        <div className="relative">
+          <Search
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+            style={{ color: "var(--muted)" }}
+          />
+          <input
+            type="text"
+            name="busca"
+            defaultValue={busca}
+            placeholder="Buscar por modelo ou Part Number..."
+            className="w-full rounded-lg border pl-9 pr-3.5 py-2.5 text-sm outline-none focus:border-[var(--accent2)] focus:ring-1 focus:ring-[var(--accent2)] transition bg-[var(--surface2)] border-[var(--line)]"
+            style={{ color: "var(--ink)" }}
+          />
+        </div>
       </form>
 
       <TabelaBidPecas pecas={pecas ?? []} faixas={faixas} icmsPercentual={icmsPercentual} />
