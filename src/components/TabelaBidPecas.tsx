@@ -58,10 +58,15 @@ export default function TabelaBidPecas({
   pecas,
   faixas = [],
   icmsPercentual = 0,
+  partNumbersPrioritarios,
 }: {
   pecas: PecaBid[];
   faixas?: FaixaMarkup[];
   icmsPercentual?: number;
+  /** Part Numbers referenciados por algum pedido em aberto — exibidos em
+   * destaque (vermelho) e vêm primeiro na lista, já que o cadastro deles
+   * no BID é mais urgente. Usado só em Pendências BID. */
+  partNumbersPrioritarios?: Set<string>;
 }) {
   const router = useRouter();
 
@@ -163,19 +168,35 @@ export default function TabelaBidPecas({
               const outras = solucoes.slice(1);
               const aberto = expandido === peca.id;
               const historico = historicoPorPeca[peca.id];
+              const prioritaria = partNumbersPrioritarios?.has(peca.part_number) ?? false;
 
               return (
                 <Fragment key={peca.id}>
                   <tr
                     onClick={() => alternarExpandido(peca.id)}
                     className="border-t cursor-pointer transition-colors hover:bg-[var(--surface2)]"
-                    style={{ borderColor: "var(--line)", background: "var(--surface)" }}
+                    style={{
+                      borderColor: "var(--line)",
+                      background: prioritaria ? "rgba(239, 68, 68, 0.07)" : "var(--surface)",
+                    }}
                   >
                     <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
                       {peca.modelo}
                     </td>
-                    <td className="px-4 py-2.5 font-mono" style={{ color: "var(--ink)" }}>
+                    <td
+                      className="px-4 py-2.5 font-mono"
+                      style={{ color: prioritaria ? "#ef4444" : "var(--ink)", fontWeight: prioritaria ? 600 : 400 }}
+                      title={prioritaria ? "Existe pedido em aberto esperando o cadastro dessa peça no BID" : undefined}
+                    >
                       {peca.part_number}
+                      {prioritaria && (
+                        <span
+                          className="ml-2 inline-block text-[10px] font-sans font-semibold uppercase tracking-wide rounded-full px-1.5 py-0.5 align-middle"
+                          style={{ background: "rgba(239, 68, 68, 0.15)", color: "#ef4444" }}
+                        >
+                          Prioridade
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                       <div className="relative inline-block">

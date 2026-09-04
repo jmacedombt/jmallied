@@ -153,6 +153,12 @@ export function statusPorSlug(slug: string) {
 export const STATUS_AG_ANALISE = STATUS_OPERACIONAL.find((s) => s.slug === "2-ag-analise")!.valor;
 export const STATUS_VALIDACAO_ORCAMENTOS = STATUS_OPERACIONAL.find((s) => s.slug === "validacao-orcamentos")!.valor;
 
+// status que contam como "pedido fechado" — qualquer orçamento em
+// qualquer outro status conta como "em aberto" (usado, por exemplo, pra
+// saber se uma peça pendente no BID é prioridade de cadastro porque
+// algum pedido em andamento precisa dela).
+export const STATUS_ORCAMENTO_FECHADOS = ["Produto Entregue", "8 - Orçamento Reprovado"] as const;
+
 /** Valida o formato da OS Reparadora: só números, 10 caracteres (ex: 4123456789). */
 export function osReparadoraValida(valor: string): boolean {
   return /^[0-9]{10}$/.test(valor.trim());

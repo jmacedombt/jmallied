@@ -8,6 +8,7 @@
  */
 
 export { podeImportarBasePecas as podeImportarBid } from "@/lib/pecas";
+import { STATUS_ORCAMENTO_FECHADOS } from "@/lib/orcamentos";
 
 // colunas do arquivo BID padronizado pela Allied (0-indexed)
 export const COL_BID_MODELO = 0; // A - Peças (modelo do aparelho)
@@ -107,6 +108,43 @@ export function direcaoValor(anterior: number | null, novo: number | null): "+" 
 export function percentualLucro(valorEditado: number, custoBasePecas: number | null): number | null {
   if (custoBasePecas == null || custoBasePecas === 0) return null;
   return ((valorEditado - custoBasePecas) / custoBasePecas) * 100;
+}
+
+const COLUNAS_PECA_ORCAMENTO = Array.from({ length: 10 }, (_, i) => `peca_${i + 1}`);
+
+/** Busca o conjunto de Part Numbers referenciados em ao menos um
+ * orçamento "em aberto" (qualquer status fora de STATUS_ORCAMENTO_FECHADOS)
+ * — usado pra decidir prioridade de cadastro em Pendências BID e pro
+ * alerta de notificações. Aceita tanto o client de servidor (cookies)
+ * quanto o admin (service role); usa `any` porque os dois clientes têm
+ * tipagens diferentes e nenhuma delas é reaproveitada aqui. */
+export async function partNumbersReferenciadosEmOrcamentosAbertos(
+  supabase: any // eslint-disable-line @typescript-eslint/no-explicit-any
+): Promise<Set<string>> {
+  const LOTE = 1000;
+  const listaFechados = STATUS_ORCAMENTO_FECHADOS.map((s) => `"${s}"`).join(",");
+  const referenciados = new Set<string>();
+
+  for (let inicio = 0; ; inicio += LOTE) {
+    const { data, error } = await supabase
+      .from("orcamentos")
+      .select(COLUNAS_PECA_ORCAMENTO.join(", "))
+      .not("status_operacional", "in", `(${listaFechados})`)
+      .range(inicio, inicio + LOTE - 1);
+
+    if (error || !data || data.length === 0) break;
+
+    for (const linha of data as Record<string, string | null>[]) {
+      for (const coluna of COLUNAS_PECA_ORCAMENTO) {
+        const valor = linha[coluna];
+        if (valor && valor.trim()) referenciados.add(valor.trim());
+      }
+    }
+
+    if (data.length < LOTE) break;
+  }
+
+  return referenciados;
 }
 
 // ---- Consulta BID (busca com dados completos carregados na tela) ----

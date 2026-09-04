@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -323,6 +323,31 @@ export default function AppShell({
 
 function SininhoNotificacoes() {
   const [aberto, setAberto] = useState(false);
+  const [pendenciasBid, setPendenciasBid] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    async function buscarResumo() {
+      try {
+        const res = await fetch("/api/notificacoes/resumo");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelado) setPendenciasBid(data.pendenciasBid ?? 0);
+      } catch {
+        // silencioso — o sininho só deixa de mostrar o alerta, sem quebrar a tela
+      }
+    }
+    buscarResumo();
+    // reconfere de tempos em tempos, pra não precisar recarregar a
+    // página inteira pra ver o alerta sumir depois de cadastrar as peças
+    const intervalo = setInterval(buscarResumo, 5 * 60 * 1000);
+    return () => {
+      cancelado = true;
+      clearInterval(intervalo);
+    };
+  }, []);
+
+  const temPendencia = (pendenciasBid ?? 0) > 0;
 
   return (
     <div className="relative">
@@ -334,6 +359,12 @@ function SininhoNotificacoes() {
         style={{ borderColor: "var(--line)", color: "var(--muted)" }}
       >
         <Bell size={16} />
+        {temPendencia && (
+          <span
+            className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full"
+            style={{ background: "#ef4444", boxShadow: "0 0 0 2px var(--surface)" }}
+          />
+        )}
       </button>
 
       {aberto && (
@@ -348,9 +379,24 @@ function SininhoNotificacoes() {
                 Notificações
               </p>
             </div>
-            <p className="text-sm p-4" style={{ color: "var(--muted)" }}>
-              Nenhuma notificação por aqui.
-            </p>
+
+            {temPendencia ? (
+              <Link
+                href="/bases/bid/pendencias"
+                onClick={() => setAberto(false)}
+                className="flex items-start gap-2.5 px-4 py-3 text-sm transition hover:bg-[var(--surface2)]"
+              >
+                <AlertTriangle size={16} className="mt-0.5 shrink-0" style={{ color: "#ef4444" }} />
+                <span style={{ color: "var(--ink)" }}>
+                  <strong style={{ color: "#ef4444" }}>{pendenciasBid}</strong> peça(s) pendente(s) de cadastro no
+                  BID.
+                </span>
+              </Link>
+            ) : (
+              <p className="text-sm p-4" style={{ color: "var(--muted)" }}>
+                Nenhuma notificação por aqui.
+              </p>
+            )}
           </div>
         </>
       )}
