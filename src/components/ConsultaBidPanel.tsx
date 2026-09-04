@@ -2,7 +2,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Lock, Pencil, Save, Search, Unlock, X } from "lucide-react";
-import { faixaMarkupPara, percentualLucro, type FaixaMarkup, type PecaBidConsulta } from "@/lib/bid";
+import { percentualLucro, type FaixaMarkup, type PecaBidConsulta } from "@/lib/bid";
+import TooltipCalculoBid from "@/components/TooltipCalculoBid";
 
 function formatarMoeda(valor: number | null) {
   if (valor == null) return "—";
@@ -18,90 +19,11 @@ function ordenarSolucoes(peca: PecaBidConsulta) {
   return [...(peca.bid_solucoes ?? [])].sort((a, b) => Number(b.principal) - Number(a.principal));
 }
 
-function TooltipCalculo({
-  peca,
-  faixas,
-  icmsPercentual,
-}: {
-  peca: PecaBidConsulta;
-  faixas: FaixaMarkup[];
-  icmsPercentual: number;
-}) {
-  if (peca.travado) {
-    return (
-      <div className="text-xs space-y-1.5 min-w-[220px]">
-        <p className="font-medium flex items-center gap-1.5" style={{ color: "var(--accent2)" }}>
-          <Lock size={12} /> Valor travado manualmente
-        </p>
-        <p style={{ color: "var(--muted)" }}>
-          Esse preço foi definido na mão e não é recalculado por importação do BID nem por "Recalcular" — destrave
-          pra voltar ao cálculo automático.
-        </p>
-        <div className="border-t pt-1.5 mt-1.5" style={{ borderColor: "var(--line)" }}>
-          <p className="flex justify-between gap-4">
-            <span style={{ color: "var(--muted)" }}>Custo Peça (Allied)</span>
-            <strong style={{ color: "var(--accent2)" }}>{formatarMoeda(peca.custo_peca_allied)}</strong>
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (peca.custo_peca_samsung == null) {
-    return (
-      <div className="text-xs space-y-1">
-        <p className="font-medium text-amber-400">Ainda sem custo calculado</p>
-        <p style={{ color: "var(--muted)" }}>
-          Esse Part Number ainda não foi encontrado na Base Peças — assim que for importado lá, o custo aparece aqui
-          (ou clique em "Recalcular" na tela BID).
-        </p>
-      </div>
-    );
-  }
-
-  const faixa = faixaMarkupPara(peca.custo_peca_samsung, faixas);
-
-  return (
-    <div className="text-xs space-y-1.5 min-w-[220px]">
-      <p className="flex justify-between gap-4">
-        <span style={{ color: "var(--muted)" }}>Custo Peça (Base Peças)</span>
-        <strong>{formatarMoeda(peca.custo_peca_samsung)}</strong>
-      </p>
-      <p className="flex justify-between gap-4">
-        <span style={{ color: "var(--muted)" }}>Faixa aplicada</span>
-        <strong>
-          {faixa ? `${formatarMoeda(faixa.valor_min)} ${faixa.valor_max == null ? "acima" : `– ${formatarMoeda(faixa.valor_max)}`}` : "—"}
-        </strong>
-      </p>
-      <p className="flex justify-between gap-4">
-        <span style={{ color: "var(--muted)" }}>Markup usado</span>
-        <strong>{faixa ? `× ${faixa.multiplicador}` : "—"}</strong>
-      </p>
-      <div className="border-t pt-1.5 mt-1.5" style={{ borderColor: "var(--line)" }}>
-        <p className="flex justify-between gap-4">
-          <span style={{ color: "var(--muted)" }}>Cálculo</span>
-          <span>
-            {formatarMoeda(peca.custo_peca_samsung)} {faixa ? `× ${faixa.multiplicador}` : ""}
-          </span>
-        </p>
-        <p className="flex justify-between gap-4">
-          <span style={{ color: "var(--muted)" }}>= Valor com margem</span>
-          <strong>{formatarMoeda(peca.valor_com_margem)}</strong>
-        </p>
-      </div>
-      <div className="border-t pt-1.5 mt-1.5" style={{ borderColor: "var(--line)" }}>
-        <p className="flex justify-between gap-4">
-          <span style={{ color: "var(--muted)" }}>Imposto (ICMS {icmsPercentual}%)</span>
-          <strong>+ {formatarMoeda(peca.valor_imposto)}</strong>
-        </p>
-        <p className="flex justify-between gap-4">
-          <span style={{ color: "var(--muted)" }}>= Custo Peça (Allied)</span>
-          <strong style={{ color: "var(--accent2)" }}>{formatarMoeda(peca.custo_peca_allied)}</strong>
-        </p>
-      </div>
-      <p style={{ color: "var(--muted)" }}>(arredondado pra cima, sempre número inteiro)</p>
-    </div>
-  );
+function formatarUltimaAlteracao(data: string, direcao: "+" | "-" | null) {
+  const texto = new Date(data).toLocaleDateString("pt-BR");
+  if (direcao === "+") return { texto, seta: "▲", cor: "#ef4444" };
+  if (direcao === "-") return { texto, seta: "▼", cor: "#22c55e" };
+  return { texto, seta: null, cor: "var(--muted)" };
 }
 
 type Tooltip = { peca: PecaBidConsulta; x: number; y: number };
@@ -235,6 +157,8 @@ export default function ConsultaBidPanel({
                   custo_peca_allied: data.custo_peca_allied,
                   valor_com_margem: data.valor_com_margem,
                   valor_imposto: data.valor_imposto ?? null,
+                  valor_atualizado_em: data.valor_atualizado_em ?? p.valor_atualizado_em,
+                  valor_direcao: data.valor_direcao !== undefined ? data.valor_direcao : p.valor_direcao,
                 }
               : p
           )
@@ -414,7 +338,15 @@ export default function ConsultaBidPanel({
                     />
                   </th>
                 )}
-                {["Modelo", "Part Number", "Peça Solução", "Mão de Obra", "Imposto (ICMS)", "Custo Peça (Allied)"].map((titulo) => (
+                {[
+                  "Modelo",
+                  "Part Number",
+                  "Peça Solução",
+                  "Mão de Obra",
+                  "Imposto (ICMS)",
+                  "Custo Peça (Allied)",
+                  "Última alteração",
+                ].map((titulo) => (
                   <th
                     key={titulo}
                     className="sticky top-0 z-10 px-4 py-2.5 font-medium"
@@ -506,6 +438,17 @@ export default function ConsultaBidPanel({
                         </span>
                       )}
                     </td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      {(() => {
+                        const { texto, seta, cor } = formatarUltimaAlteracao(peca.valor_atualizado_em, peca.valor_direcao);
+                        return (
+                          <span className="inline-flex items-center gap-1" style={{ color: "var(--muted)" }}>
+                            {texto}
+                            {seta && <span style={{ color: cor }}>{seta}</span>}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     {podeEditar && (
                       <td className="px-4 py-2.5">
                         <div className="flex items-center justify-end gap-1.5">
@@ -566,7 +509,7 @@ export default function ConsultaBidPanel({
               {pecasFiltradas.length === 0 && (
                 <tr>
                   <td
-                    colSpan={podeEditar ? 8 : 6}
+                    colSpan={podeEditar ? 9 : 7}
                     className="px-4 py-8 text-center"
                     style={{ color: "var(--muted)", background: "var(--surface)" }}
                   >
@@ -584,7 +527,7 @@ export default function ConsultaBidPanel({
           className="fixed z-50 rounded-lg border shadow-2xl p-3"
           style={{ background: "var(--surface2)", borderColor: "var(--line)", left: tooltip.x, top: tooltip.y }}
         >
-          <TooltipCalculo peca={tooltip.peca} faixas={faixas} icmsPercentual={icmsPercentual} />
+          <TooltipCalculoBid peca={tooltip.peca} faixas={faixas} icmsPercentual={icmsPercentual} />
         </div>
       )}
     </div>

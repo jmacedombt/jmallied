@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import TabelaBidPecas, { type PecaBid } from "@/components/TabelaBidPecas";
+import { type FaixaMarkup } from "@/lib/bid";
 
 const PAGINA_TAMANHO = 50;
 
@@ -25,17 +26,28 @@ export default async function PendenciasBidPage({ searchParams }: { searchParams
   const pagina = Math.max(1, Number(searchParams.pagina ?? "1") || 1);
   const inicio = (pagina - 1) * PAGINA_TAMANHO;
 
-  const { data: pecas, count } = await supabase
-    .from("bid_pecas")
-    .select(
-      "id, modelo, part_number, custo_peca_samsung, custo_peca_allied, valor_imposto, mao_de_obra, bid_solucoes(id, peca_solucao, principal)",
-      { count: "exact" }
-    )
-    .is("custo_peca_samsung", null)
-    .order("modelo", { ascending: true })
-    .order("part_number", { ascending: true })
-    .range(inicio, inicio + PAGINA_TAMANHO - 1)
-    .returns<PecaBid[]>();
+  const [{ data: pecas, count }, { data: faixasBrutas }, { data: configImposto }] = await Promise.all([
+    supabase
+      .from("bid_pecas")
+      .select(
+        "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, mao_de_obra, travado, valor_atualizado_em, valor_direcao, bid_solucoes(id, peca_solucao, principal)",
+        { count: "exact" }
+      )
+      .is("custo_peca_samsung", null)
+      .order("modelo", { ascending: true })
+      .order("part_number", { ascending: true })
+      .range(inicio, inicio + PAGINA_TAMANHO - 1)
+      .returns<PecaBid[]>(),
+    supabase.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+    supabase.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+  ]);
+
+  const faixas: FaixaMarkup[] = (faixasBrutas ?? []).map((f) => ({
+    valor_min: Number(f.valor_min),
+    valor_max: f.valor_max == null ? null : Number(f.valor_max),
+    multiplicador: Number(f.multiplicador),
+  }));
+  const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
 
   const totalPaginas = Math.max(1, Math.ceil((count ?? 0) / PAGINA_TAMANHO));
 
@@ -60,7 +72,7 @@ export default async function PendenciasBidPage({ searchParams }: { searchParams
         <strong>{count ?? 0}</strong> peça(s) pendente(s).
       </p>
 
-      <TabelaBidPecas pecas={pecas ?? []} />
+      <TabelaBidPecas pecas={pecas ?? []} faixas={faixas} icmsPercentual={icmsPercentual} />
 
       {totalPaginas > 1 && (
         <div className="flex items-center gap-2 mt-4 text-sm">

@@ -89,6 +89,17 @@ export function calcularCustoPecaAllied(
   return { valorComMargem, valorImposto, custoPecaAllied };
 }
 
+/** Direção da última alteração de valor: "+" se o novo é maior que o
+ * anterior, "-" se é menor, null se não mudou. Ir de "sem valor" pra
+ * "com valor" conta como alta ("+"); o inverso conta como queda ("-"). */
+export function direcaoValor(anterior: number | null, novo: number | null): "+" | "-" | null {
+  if (anterior == null && novo == null) return null;
+  if (anterior == null) return "+";
+  if (novo == null) return "-";
+  if (novo === anterior) return null;
+  return novo > anterior ? "+" : "-";
+}
+
 /** Percentual de lucro de uma edição manual do Custo Peça (Allied):
  * "lucro sobre o custo" = (valor editado − custo Base Peças) / custo
  * Base Peças × 100. Retorna null sem custo de referência (peça
@@ -113,5 +124,7 @@ export type PecaBidConsulta = {
   mao_de_obra: number | null;
   travado: boolean;
   travado_em: string | null;
+  valor_atualizado_em: string;
+  valor_direcao: "+" | "-" | null;
   bid_solucoes: SolucaoBidConsulta[];
 };

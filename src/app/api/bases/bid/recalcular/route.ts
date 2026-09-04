@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { calcularCustoPecaAllied, podeImportarBid, type FaixaMarkup } from "@/lib/bid";
+import { calcularCustoPecaAllied, direcaoValor, podeImportarBid, type FaixaMarkup } from "@/lib/bid";
 
 export const maxDuration = 60;
 const TAMANHO_LOTE = 400;
@@ -12,6 +12,8 @@ type PecaExistente = {
   valor_com_margem: number | null;
   custo_peca_allied: number | null;
   valor_imposto: number | null;
+  valor_atualizado_em: string;
+  valor_direcao: "+" | "-" | null;
   travado: boolean;
 };
 
@@ -45,7 +47,9 @@ export async function POST() {
   const [{ data: pecas }, { data: faixasBrutas }, { data: configImposto }] = await Promise.all([
     admin
       .from("bid_pecas")
-      .select("id, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, travado") as unknown as Promise<{
+      .select(
+        "id, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, valor_atualizado_em, valor_direcao, travado"
+      ) as unknown as Promise<{
       data: PecaExistente[] | null;
     }>,
     admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
@@ -80,6 +84,8 @@ export async function POST() {
     valor_com_margem: number | null;
     custo_peca_allied: number | null;
     valor_imposto: number | null;
+    valor_atualizado_em: string;
+    valor_direcao: "+" | "-" | null;
   }[] = [];
   const historico: Record<string, unknown>[] = [];
 
@@ -101,12 +107,21 @@ export async function POST() {
 
     if (!mudou) continue;
 
+    // "última alteração" só muda quando o preço final (custo_peca_allied)
+    // de fato muda — não a cada ajuste fino de custo_peca_samsung que não
+    // chega a mexer no valor final por causa do arredondamento.
+    const mudouValorFinal = valoresDiferentes(peca.custo_peca_allied, custoPecaAllied);
+    const valorAtualizadoEm = mudouValorFinal ? new Date().toISOString() : peca.valor_atualizado_em;
+    const valorDirecao = mudouValorFinal ? direcaoValor(peca.custo_peca_allied, custoPecaAllied) : peca.valor_direcao;
+
     atualizacoes.push({
       id: peca.id,
       custo_peca_samsung: custoSamsung,
       valor_com_margem: valorComMargem,
       custo_peca_allied: custoPecaAllied,
       valor_imposto: valorImposto,
+      valor_atualizado_em: valorAtualizadoEm,
+      valor_direcao: valorDirecao,
     });
     historico.push({
       bid_peca_id: peca.id,
@@ -131,6 +146,8 @@ export async function POST() {
         valor_com_margem: item.valor_com_margem,
         custo_peca_allied: item.custo_peca_allied,
         valor_imposto: item.valor_imposto,
+        valor_atualizado_em: item.valor_atualizado_em,
+        valor_direcao: item.valor_direcao,
       })
       .eq("id", item.id);
   }

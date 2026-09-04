@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { podeImportarBid } from "@/lib/bid";
+import { direcaoValor, podeImportarBid } from "@/lib/bid";
 
 // Edição manual do Custo Peça (Allied) numa peça do BID (tela Consulta
 // BID). Atualiza custo_peca_allied e o espelho valor_com_margem, e
@@ -43,12 +43,22 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: "Peça não encontrada." }, { status: 404 });
   }
 
+  const valorMudou = peca.custo_peca_allied == null || Math.abs(peca.custo_peca_allied - valorArredondado) > 0.001;
+  const valorAtualizadoEm = valorMudou ? new Date().toISOString() : undefined;
+  const valorDirecao = valorMudou ? direcaoValor(peca.custo_peca_allied, valorArredondado) : undefined;
+
   // edição manual sobrescreve o valor final direto — deixa de refletir
   // a fórmula (markup + imposto), então zera valor_imposto (não dá mais
   // pra saber quanto dessa peça é imposto) até a peça ser recalculada.
   const { error: erroUpdate } = await admin
     .from("bid_pecas")
-    .update({ valor_com_margem: valorArredondado, custo_peca_allied: valorArredondado, valor_imposto: null })
+    .update({
+      valor_com_margem: valorArredondado,
+      custo_peca_allied: valorArredondado,
+      valor_imposto: null,
+      ...(valorAtualizadoEm && { valor_atualizado_em: valorAtualizadoEm }),
+      ...(valorMudou && { valor_direcao: valorDirecao }),
+    })
     .eq("id", params.id);
 
   if (erroUpdate) {
@@ -74,5 +84,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     custo_peca_allied: valorArredondado,
     valor_com_margem: valorArredondado,
     valor_imposto: null,
+    valor_atualizado_em: valorAtualizadoEm ?? undefined,
+    valor_direcao: valorMudou ? valorDirecao : undefined,
   });
 }

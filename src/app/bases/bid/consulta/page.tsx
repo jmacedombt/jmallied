@@ -42,7 +42,7 @@ export default async function ConsultaBidPage() {
     const { data, error } = await supabase
       .from("bid_pecas")
       .select(
-        "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, mao_de_obra, travado, travado_em, bid_solucoes(id, peca_solucao, principal)"
+        "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, mao_de_obra, travado, travado_em, valor_atualizado_em, valor_direcao, bid_solucoes(id, peca_solucao, principal)"
       )
       .order("modelo", { ascending: true })
       .order("part_number", { ascending: true })

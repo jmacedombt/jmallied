@@ -1,8 +1,10 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Clock, RefreshCcw } from "lucide-react";
+import { ChevronDown, Clock, Lock, RefreshCcw } from "lucide-react";
+import { type FaixaMarkup } from "@/lib/bid";
+import TooltipCalculoBid from "@/components/TooltipCalculoBid";
 
 export type SolucaoBid = { id: string; peca_solucao: string; principal: boolean };
 
@@ -11,9 +13,13 @@ export type PecaBid = {
   modelo: string;
   part_number: string;
   custo_peca_samsung: number | null;
+  valor_com_margem: number | null;
   custo_peca_allied: number | null;
   valor_imposto: number | null;
   mao_de_obra: number | null;
+  travado: boolean;
+  valor_atualizado_em: string;
+  valor_direcao: "+" | "-" | null;
   bid_solucoes: SolucaoBid[];
 };
 
@@ -39,13 +45,43 @@ function ordenarSolucoes(solucoes: SolucaoBid[]) {
   return [...solucoes].sort((a, b) => Number(b.principal) - Number(a.principal));
 }
 
-export default function TabelaBidPecas({ pecas }: { pecas: PecaBid[] }) {
+function formatarUltimaAlteracao(data: string, direcao: "+" | "-" | null) {
+  const texto = new Date(data).toLocaleDateString("pt-BR");
+  if (direcao === "+") return { texto, seta: "▲", cor: "#ef4444" };
+  if (direcao === "-") return { texto, seta: "▼", cor: "#22c55e" };
+  return { texto, seta: null as string | null, cor: "var(--muted)" };
+}
+
+type Tooltip = { peca: PecaBid; x: number; y: number };
+
+export default function TabelaBidPecas({
+  pecas,
+  faixas = [],
+  icmsPercentual = 0,
+}: {
+  pecas: PecaBid[];
+  faixas?: FaixaMarkup[];
+  icmsPercentual?: number;
+}) {
   const router = useRouter();
 
   const [expandido, setExpandido] = useState<string | null>(null);
   const [dropdownAberto, setDropdownAberto] = useState<string | null>(null);
   const [trocando, setTrocando] = useState<string | null>(null);
   const [historicoPorPeca, setHistoricoPorPeca] = useState<Record<string, LinhaHistorico[] | "carregando">>({});
+  const [tooltip, setTooltip] = useState<Tooltip | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  function mostrarTooltip(e: React.MouseEvent, peca: PecaBid) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const largura = 260;
+    const x = Math.min(rect.left, Math.max(8, window.innerWidth - largura - 8));
+    setTooltip({ peca, x, y: rect.bottom + 8 });
+  }
+
+  function ocultarTooltip() {
+    setTooltip(null);
+  }
 
   async function trocarPrincipal(pecaId: string, solucaoId: string) {
     setTrocando(solucaoId);
@@ -89,7 +125,12 @@ export default function TabelaBidPecas({ pecas }: { pecas: PecaBid[] }) {
 
   return (
     <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
-      <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
+      <div
+        ref={scrollRef}
+        onScroll={ocultarTooltip}
+        className="overflow-auto"
+        style={{ maxHeight: "calc(100vh - 260px)" }}
+      >
         <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
           <thead>
             <tr className="text-left">
@@ -101,6 +142,7 @@ export default function TabelaBidPecas({ pecas }: { pecas: PecaBid[] }) {
                 "Mão de Obra",
                 "Imposto (ICMS)",
                 "Custo Peça (Allied)",
+                "Última alteração",
               ].map(
                 (titulo) => (
                   <th
@@ -188,14 +230,33 @@ export default function TabelaBidPecas({ pecas }: { pecas: PecaBid[] }) {
                     <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
                       {formatarMoeda(peca.valor_imposto)}
                     </td>
-                    <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
-                      {formatarMoeda(peca.custo_peca_allied)}
+                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <span
+                        onMouseEnter={(e) => mostrarTooltip(e, peca)}
+                        onMouseLeave={ocultarTooltip}
+                        className="inline-flex items-center gap-1.5 font-medium cursor-help border-b border-dashed"
+                        style={{ color: "var(--ink)", borderColor: "var(--muted)" }}
+                      >
+                        {peca.travado && <Lock size={12} style={{ color: "var(--accent2)" }} />}
+                        {formatarMoeda(peca.custo_peca_allied)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      {(() => {
+                        const { texto, seta, cor } = formatarUltimaAlteracao(peca.valor_atualizado_em, peca.valor_direcao);
+                        return (
+                          <span className="inline-flex items-center gap-1" style={{ color: "var(--muted)" }}>
+                            {texto}
+                            {seta && <span style={{ color: cor }}>{seta}</span>}
+                          </span>
+                        );
+                      })()}
                     </td>
                   </tr>
 
                   {aberto && (
                     <tr style={{ background: "var(--surface2)" }}>
-                      <td colSpan={7} className="px-4 py-4">
+                      <td colSpan={8} className="px-4 py-4">
                         <p
                           className="text-xs uppercase tracking-wide mb-2 flex items-center gap-1.5"
                           style={{ color: "var(--muted)" }}
@@ -260,6 +321,15 @@ export default function TabelaBidPecas({ pecas }: { pecas: PecaBid[] }) {
           </tbody>
         </table>
       </div>
+
+      {tooltip && (
+        <div
+          className="fixed z-50 rounded-lg border shadow-2xl p-3"
+          style={{ background: "var(--surface2)", borderColor: "var(--line)", left: tooltip.x, top: tooltip.y }}
+        >
+          <TooltipCalculoBid peca={tooltip.peca} faixas={faixas} icmsPercentual={icmsPercentual} />
+        </div>
+      )}
     </div>
   );
 }

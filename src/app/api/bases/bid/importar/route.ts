@@ -6,6 +6,7 @@ import {
   COL_BID_PART_NUMBER,
   COL_BID_PECA_SOLUCAO,
   calcularCustoPecaAllied,
+  direcaoValor,
   podeImportarBid,
   prefixoPartNumber,
   type FaixaMarkup,
@@ -31,6 +32,8 @@ type PecaExistente = {
   valor_com_margem: number | null;
   custo_peca_allied: number | null;
   valor_imposto: number | null;
+  valor_atualizado_em: string;
+  valor_direcao: "+" | "-" | null;
   mao_de_obra: number | null;
   travado: boolean;
 };
@@ -196,7 +199,7 @@ export async function POST(request: Request) {
       admin
         .from("bid_pecas")
         .select(
-          "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, mao_de_obra, travado"
+          "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, valor_atualizado_em, valor_direcao, mao_de_obra, travado"
         ) as unknown as Promise<{
         data: PecaExistente[] | null;
       }>,
@@ -282,6 +285,16 @@ export async function POST(request: Request) {
     const valorImposto = travado ? existente!.valor_imposto : resultadoCalculado?.valorImposto ?? null;
     const custoPecaAllied = travado ? existente!.custo_peca_allied : resultadoCalculado?.custoPecaAllied ?? null;
 
+    // só mexe em "última alteração" quando o preço final realmente muda
+    // (peça travada nunca muda aqui, então nunca entra nesse ramo)
+    const mudouValor = existente ? valoresDiferentes(existente.custo_peca_allied, custoPecaAllied) : false;
+    const valorAtualizadoEm = !existente
+      ? new Date().toISOString() // peça nova: essa importação é a primeira carga dela
+      : mudouValor
+        ? new Date().toISOString()
+        : existente.valor_atualizado_em;
+    const valorDirecao = !existente ? null : mudouValor ? direcaoValor(existente.custo_peca_allied, custoPecaAllied) : existente.valor_direcao;
+
     linhasUpsertPecas.push({
       modelo: grupo.modelo,
       part_number: grupo.part_number,
@@ -289,6 +302,8 @@ export async function POST(request: Request) {
       valor_com_margem: valorComMargem,
       custo_peca_allied: custoPecaAllied,
       valor_imposto: valorImposto,
+      valor_atualizado_em: valorAtualizadoEm,
+      valor_direcao: valorDirecao,
       mao_de_obra: maoDeObra,
       bid_importacao_id: importacao.id,
     });
