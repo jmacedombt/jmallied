@@ -4,7 +4,7 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { lerLinhaGspn, podeImportarGspn, type LinhaGspnImportada } from "@/lib/gspn";
 
 export const maxDuration = 60;
-const TAMANHO_LOTE = 500;
+const TAMANHO_LOTE = 3000;
 
 function pecasComoObjeto(pecas: (string | null)[]) {
   const obj: Record<string, string | null> = {};
@@ -83,52 +83,37 @@ export async function POST(request: Request) {
   for (const l of linhasValidas) mapaArquivo.set(l.os_reparadora, l);
   const linhasUnicas = Array.from(mapaArquivo.values());
 
-  // descobre quais OS Reparadora já existiam na Base GSPN, pra separar
-  // "chamados novos" de "chamados atualizados" no resumo
-  const existentesNaBase = new Set<string>();
-  for (let i = 0; i < linhasUnicas.length; i += TAMANHO_LOTE) {
-    const pacote = linhasUnicas.slice(i, i + TAMANHO_LOTE).map((l) => l.os_reparadora);
-    const { data } = await admin.from("gspn_chamados").select("os_reparadora").in("os_reparadora", pacote);
-    for (const row of data ?? []) existentesNaBase.add(row.os_reparadora);
-  }
-
-  const agora = new Date().toISOString();
+  // uma única chamada por lote: upsert na Base GSPN + propagação pra
+  // orçamentos, tudo dentro da função no banco (ver migração
+  // 0012_gspn_importar_lote.sql) — bem menos idas ao banco que o modelo
+  // anterior (checar existentes + upsert + propagar, em 3 chamadas por lote).
+  let chamadosNovos = 0;
+  let chamadosAtualizados = 0;
   let pecasCasadasOrcamento = 0;
 
   for (let i = 0; i < linhasUnicas.length; i += TAMANHO_LOTE) {
     const pacote = linhasUnicas.slice(i, i + TAMANHO_LOTE);
 
-    // atualiza (ou insere) a Base GSPN em si
-    const { error: erroUpsert } = await admin.from("gspn_chamados").upsert(
-      pacote.map((l) => ({
+    const { data: resultadoLote, error: erroLote } = await admin.rpc("gspn_importar_lote", {
+      p_linhas: pacote.map((l) => ({
         os_reparadora: l.os_reparadora,
         asc_job_no: l.asc_job_no,
         status: l.status,
         motivo: l.motivo,
         ...pecasComoObjeto(l.pecas),
-        atualizado_em: agora,
       })),
-      { onConflict: "os_reparadora" }
-    );
-
-    if (erroUpsert) {
-      return NextResponse.json({ error: erroUpsert.message }, { status: 400 });
-    }
-
-    // propaga as peças pra tabela de orçamentos (por OS Reparadora)
-    const { data: atualizados, error: erroPropagar } = await admin.rpc("gspn_propagar_pecas", {
-      p_linhas: pacote.map((l) => ({ os_reparadora: l.os_reparadora, ...pecasComoObjeto(l.pecas) })),
     });
 
-    if (erroPropagar) {
-      return NextResponse.json({ error: erroPropagar.message }, { status: 400 });
+    if (erroLote) {
+      return NextResponse.json({ error: erroLote.message }, { status: 400 });
     }
 
-    pecasCasadasOrcamento += Number(atualizados ?? 0);
+    const linha = Array.isArray(resultadoLote) ? resultadoLote[0] : resultadoLote;
+    chamadosNovos += Number(linha?.chamados_novos ?? 0);
+    chamadosAtualizados += Number(linha?.chamados_atualizados ?? 0);
+    pecasCasadasOrcamento += Number(linha?.pecas_casadas_orcamento ?? 0);
   }
 
-  const chamadosAtualizados = linhasUnicas.filter((l) => existentesNaBase.has(l.os_reparadora)).length;
-  const chamadosNovos = linhasUnicas.length - chamadosAtualizados;
   const pecasNaoCasadasOrcamento = linhasUnicas.length - pecasCasadasOrcamento;
 
   await admin.from("gspn_importacoes").insert({
