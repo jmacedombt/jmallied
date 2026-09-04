@@ -7,7 +7,11 @@ import { statusPorSlug } from "@/lib/orcamentos";
 import { type AparelhoAgAbertura } from "@/components/TabelaAgAbertura";
 import PainelAgAbertura from "@/components/PainelAgAbertura";
 import PainelAgTriagem from "@/components/PainelAgTriagem";
+import PainelAgAnalise, { type AparelhoAgAnalise } from "@/components/PainelAgAnalise";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
+
+const COLUNAS_PECAS =
+  "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, custo_peca_1, custo_peca_2, custo_peca_3, custo_peca_4, custo_peca_5, custo_peca_6, custo_peca_7, custo_peca_8, custo_peca_9, custo_peca_10";
 
 export default async function StatusOperacionalPage({ params }: { params: { slug: string } }) {
   const statusEncontrado = statusPorSlug(params.slug);
@@ -99,6 +103,31 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         <PainelAgTriagem
           aparelhos={(aparelhos ?? []) as AparelhoAgAbertura[]}
           mensagemVazia="Nenhum aparelho em Ag. Triagem no momento."
+        />
+      </AppShell>
+    );
+  }
+
+  if (status.slug === "2-ag-analise") {
+    const { data: aparelhos } = await supabase
+      .from("orcamentos")
+      .select(
+        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, ${COLUNAS_PECAS}`
+      )
+      .eq("status_operacional", status.valor)
+      .order("updated_at", { ascending: false });
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <PainelAgAnalise
+          aparelhos={(aparelhos ?? []) as AparelhoAgAnalise[]}
+          mensagemVazia="Nenhum aparelho em Ag. Análise no momento."
+          topo={
+            <>
+              {voltar}
+              {badgeContador(aparelhos?.length ?? 0)}
+            </>
+          }
         />
       </AppShell>
     );

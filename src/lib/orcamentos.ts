@@ -122,11 +122,16 @@ export function lerLinhaOrcamento(linha: unknown[]): LinhaOrcamentoImportada | n
   };
 }
 
-// fluxo do menu Operacional — ordem de exibição dos cards
+// fluxo do menu Operacional — ordem de exibição dos cards.
+// "Validação de Orçamentos" foi inserida sem número entre as etapas 2 e
+// 3, pra não precisar renumerar (nem migrar os orçamentos já gravados
+// nas) etapas 3 a 8, que têm o número no próprio valor de
+// status_operacional.
 export const STATUS_OPERACIONAL = [
   { valor: "Ag. Abertura", slug: "ag-abertura", label: "Ag. Abertura" },
   { valor: "1 - Ag. Triagem", slug: "1-ag-triagem", label: "1 - Ag. Triagem" },
   { valor: "2 - Ag. Análise", slug: "2-ag-analise", label: "2 - Ag. Análise" },
+  { valor: "Validação de Orçamentos", slug: "validacao-orcamentos", label: "Validação de Orçamentos" },
   { valor: "3 - Ag. Resposta de Orçamento", slug: "3-ag-resposta-orcamento", label: "3 - Ag. Resposta de Orçamento" },
   { valor: "4 - Ag. Resposta de Reorçamento", slug: "4-ag-resposta-reorcamento", label: "4 - Ag. Resposta de Reorçamento" },
   { valor: "5 - Ag. Peças", slug: "5-ag-pecas", label: "5 - Ag. Peças" },
@@ -141,6 +146,12 @@ export type StatusOperacional = (typeof STATUS_OPERACIONAL)[number]["valor"];
 export function statusPorSlug(slug: string) {
   return STATUS_OPERACIONAL.find((s) => s.slug === slug) ?? null;
 }
+
+// valores usados na confirmação de análise (ver
+// api/operacional/orcamentos/[id]/confirmar-analise) — buscados pelo
+// slug, não por índice do array, pra não quebrar se a ordem mudar de novo.
+export const STATUS_AG_ANALISE = STATUS_OPERACIONAL.find((s) => s.slug === "2-ag-analise")!.valor;
+export const STATUS_VALIDACAO_ORCAMENTOS = STATUS_OPERACIONAL.find((s) => s.slug === "validacao-orcamentos")!.valor;
 
 /** Valida o formato da OS Reparadora: só números, 10 caracteres (ex: 4123456789). */
 export function osReparadoraValida(valor: string): boolean {
