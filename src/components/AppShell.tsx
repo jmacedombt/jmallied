@@ -10,6 +10,7 @@ import {
   CalendarCheck2,
   ChevronDown,
   Database,
+  FileSpreadsheet,
   FileText,
   Home,
   LayoutGrid,
@@ -75,6 +76,7 @@ const GRUPOS_MENU: GrupoMenu[] = [
       { href: "/bases/bid", label: "Base BID", icone: Tags },
       { href: "/bases/bid/consulta", label: "Consulta BID", icone: Search },
       { href: "/bases/bid/pendencias", label: "Pendências BID", icone: AlertTriangle },
+      { href: "/bases/bid/relatorio", label: "Relatório BID", icone: FileSpreadsheet },
     ],
   },
   {

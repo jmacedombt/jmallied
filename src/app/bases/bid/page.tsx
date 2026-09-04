@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, FileSpreadsheet, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ImportarBidForm from "@/components/ImportarBidForm";
@@ -63,10 +63,21 @@ export default async function BidPage({ searchParams }: { searchParams: { busca?
 
   return (
     <AppShell titulo="Base BID" perfil={perfil}>
-      <p className="text-sm mb-5" style={{ color: "var(--muted)" }}>
-        Tabela de preços de peças enviada pra Allied. O Custo Peça (Allied) é sempre recalculado a partir do custo
-        mais recente da Base Peças e das faixas de markup configuradas.
-      </p>
+      <div className="flex items-center gap-2 mb-5">
+        <p className="text-sm" style={{ color: "var(--ink)" }}>
+          Tabela de preços de peças enviada pra Allied.
+        </p>
+        <div className="group relative inline-flex">
+          <Info size={15} style={{ color: "var(--muted)" }} className="cursor-help" />
+          <div
+            className="pointer-events-none absolute left-0 top-6 z-20 hidden w-80 rounded-lg border p-3 text-xs shadow-2xl group-hover:block"
+            style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
+          >
+            O Custo Peça (Allied) é sempre recalculado a partir do custo mais recente da Base Peças e das faixas de
+            markup configuradas.
+          </div>
+        </div>
+      </div>
 
       {podeImportarBid(perfil) && (
         <div className="mb-6">
@@ -74,7 +85,7 @@ export default async function BidPage({ searchParams }: { searchParams: { busca?
         </div>
       )}
 
-      <div className="grid sm:grid-cols-2 gap-4 mb-6">
+      <div className="grid sm:grid-cols-3 gap-4 mb-6">
         <div className="rounded-xl border p-4" style={{ background: "var(--surface)", borderColor: "var(--line)" }}>
           <p className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--muted)" }}>
             Peças no BID
@@ -95,6 +106,20 @@ export default async function BidPage({ searchParams }: { searchParams: { busca?
             {totalPendentes ?? 0}
           </p>
         </Link>
+        {podeImportarBid(perfil) && (
+          <Link
+            href="/bases/bid/relatorio"
+            className="rounded-xl border p-4 transition hover:border-[var(--accent2)] flex flex-col justify-center"
+            style={{ background: "var(--surface)", borderColor: "var(--line)" }}
+          >
+            <p className="text-xs uppercase tracking-wide mb-1 flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
+              <FileSpreadsheet size={13} /> Relatório BID
+            </p>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Exportar peças completas em Excel
+            </p>
+          </Link>
+        )}
       </div>
 
       <form method="GET" className="mb-4 max-w-sm">

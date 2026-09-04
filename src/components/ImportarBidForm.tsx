@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCcw, UploadCloud } from "lucide-react";
+import { Info, RefreshCcw, UploadCloud } from "lucide-react";
 import { uploadComProgresso } from "@/lib/uploadComProgresso";
 import BarraProgresso from "@/components/BarraProgresso";
 
@@ -123,10 +123,16 @@ export default function ImportarBidForm() {
           {recalculando ? "Recalculando..." : "Recalcular"}
         </button>
 
-        <p className="text-xs w-full sm:w-auto" style={{ color: "var(--muted)" }}>
-          O custo é sempre recalculado a partir da Base Peças + faixas de markup — os valores que já vêm no arquivo
-          são ignorados.
-        </p>
+        <div className="group relative inline-flex">
+          <Info size={15} style={{ color: "var(--muted)" }} className="cursor-help" />
+          <div
+            className="pointer-events-none absolute left-0 top-6 z-20 hidden w-80 rounded-lg border p-3 text-xs shadow-2xl group-hover:block"
+            style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
+          >
+            O custo é sempre recalculado a partir da Base Peças + faixas de markup — os valores que já vêm no arquivo
+            são ignorados.
+          </div>
+        </div>
       </form>
 
       {carregando && (
