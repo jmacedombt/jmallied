@@ -3,7 +3,13 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
-import { statusPorSlug, calcularDetalheValidacao, STATUS_ETAPAS_ANTERIORES_A_VALIDACAO, type CamposPecasOrcamento } from "@/lib/orcamentos";
+import {
+  statusPorSlug,
+  calcularDetalheValidacao,
+  aplicarAjusteManualValidacao,
+  STATUS_ETAPAS_ANTERIORES_A_VALIDACAO,
+  type CamposPecasOrcamento,
+} from "@/lib/orcamentos";
 import { type AparelhoAgAbertura } from "@/components/TabelaAgAbertura";
 import PainelAgAbertura from "@/components/PainelAgAbertura";
 import PainelAgTriagem from "@/components/PainelAgTriagem";
@@ -170,7 +176,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhosBrutos } = await supabase
       .from("orcamentos")
       .select(
-        `id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_confirmado_sem_peca, ${COLUNAS_PECAS_VALIDACAO}`
+        `id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_confirmado_sem_peca, validacao_ajustado_manualmente, validacao_venda_manual, validacao_custo_manual, validacao_imposto_manual, validacao_mao_de_obra_manual, validacao_ajustado_em, ajustadoPor:validacao_ajustado_por (nome, sobrenome), ${COLUNAS_PECAS_VALIDACAO}`
       )
       .eq("status_operacional", status.valor)
       .order("nf_remessa_allied", { ascending: true })
@@ -250,13 +256,25 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     }));
 
     const listaAparelhos: AparelhoValidacao[] = listaBruta.map((a) => {
-      const detalhe = calcularDetalheValidacao(
+      const detalheAutomatico = calcularDetalheValidacao(
         a as CamposPecasOrcamento,
         custosPorCodigo,
         icmsPercentual,
         configMaoDeObra,
         faixasMarkup
       );
+      // se alguém já ajustou manualmente esse orçamento (lápis no
+      // pop-up), os 4 totais do resumo vêm congelados do banco em vez de
+      // recalculados agora — só a tabela de peças individuais continua
+      // sempre automática (ver aplicarAjusteManualValidacao).
+      const detalhe = a.validacao_ajustado_manualmente
+        ? aplicarAjusteManualValidacao(detalheAutomatico, {
+            vendaTotalPecas: Number(a.validacao_venda_manual ?? detalheAutomatico.vendaTotalPecas),
+            custoTotalPecas: Number(a.validacao_custo_manual ?? detalheAutomatico.custoTotalPecas),
+            impostoTotalPecas: Number(a.validacao_imposto_manual ?? detalheAutomatico.impostoTotalPecas),
+            maoDeObra: Number(a.validacao_mao_de_obra_manual ?? detalheAutomatico.maoDeObra),
+          })
+        : detalheAutomatico;
       return {
         id: a.id,
         nf_remessa_allied: a.nf_remessa_allied,
@@ -267,6 +285,9 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         sku: a.sku,
         descricao_completa: a.descricao_completa,
         validacaoConfirmadoSemPeca: a.validacao_confirmado_sem_peca,
+        ajustadoManualmente: a.validacao_ajustado_manualmente,
+        ajustadoEm: a.validacao_ajustado_em,
+        ajustadoPor: a.ajustadoPor,
         ...detalhe,
       };
     });

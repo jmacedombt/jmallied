@@ -383,3 +383,44 @@ export function calcularDetalheValidacao(
     pecas,
   };
 }
+
+// ---- Ajuste manual dos totais de Validação de Orçamentos ----
+// (ver PopupPecasValidacao.tsx e migration 0021_validacao_ajuste_manual)
+
+export type AjusteManualValidacao = {
+  vendaTotalPecas: number;
+  custoTotalPecas: number;
+  impostoTotalPecas: number;
+  maoDeObra: number;
+};
+
+/**
+ * Substitui os 4 totais do resumo (Venda de Peças, Custo, Imposto e Mão
+ * de obra) pelos valores gravados manualmente e recalcula tudo que
+ * depende deles (Lucro Líquido da Peça, Lucro Total e os dois
+ * percentuais) — mantém quantidadePecas/pecas/temPecaSemCusto do cálculo
+ * automático original, já que só os totais agregados são editáveis (a
+ * tabela de peças individuais continua sempre informativa/automática).
+ */
+export function aplicarAjusteManualValidacao(
+  detalhe: DetalheValidacaoOrcamento,
+  ajuste: AjusteManualValidacao
+): DetalheValidacaoOrcamento {
+  const lucroLiquidoPeca = ajuste.vendaTotalPecas - ajuste.custoTotalPecas - ajuste.impostoTotalPecas;
+  const lucroTotal = lucroLiquidoPeca + ajuste.maoDeObra;
+  const percLucroPecas = ajuste.vendaTotalPecas > 0 ? (lucroLiquidoPeca / ajuste.vendaTotalPecas) * 100 : 0;
+  const baseLucroTotal = ajuste.vendaTotalPecas + ajuste.maoDeObra;
+  const percLucroTotal = baseLucroTotal > 0 ? (lucroTotal / baseLucroTotal) * 100 : 0;
+
+  return {
+    ...detalhe,
+    vendaTotalPecas: ajuste.vendaTotalPecas,
+    custoTotalPecas: ajuste.custoTotalPecas,
+    impostoTotalPecas: ajuste.impostoTotalPecas,
+    maoDeObra: ajuste.maoDeObra,
+    lucroLiquidoPeca,
+    lucroTotal,
+    percLucroPecas,
+    percLucroTotal,
+  };
+}

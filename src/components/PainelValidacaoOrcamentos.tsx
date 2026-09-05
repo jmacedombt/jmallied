@@ -512,6 +512,15 @@ export default function PainelValidacaoOrcamentos({
                           PRIORIDADE
                         </span>
                       )}
+                      {a.ajustadoManualmente && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{ color: "#b45309", background: "rgba(249, 168, 37, 0.15)" }}
+                          title="Valores ajustados manualmente"
+                        >
+                          MANUAL
+                        </span>
+                      )}
                     </span>
                   </td>
                   <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
@@ -573,6 +582,7 @@ export default function PainelValidacaoOrcamentos({
           icmsPercentual={icmsPercentual}
           podeCadastrarPeca={podeCadastrarPeca}
           podeConfirmarSemPeca={podeConfirmarLote}
+          podeAjustarValores={podeConfirmarLote}
           onAtualizado={() => router.refresh()}
           onFechar={() => setDetalhe(null)}
         />
