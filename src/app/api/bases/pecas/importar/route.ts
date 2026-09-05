@@ -10,6 +10,7 @@ import {
   COLUNA_QUANTIDADE,
   COLUNA_VALOR_TOTAL,
   converterDataBr,
+  converterNumeroPlanilha,
   type LinhaPecaImportada,
 } from "@/lib/pecas";
 
@@ -55,7 +56,21 @@ export async function POST(request: Request) {
 
   let linhasBrutas: unknown[][];
   try {
-    const workbook = XLSX.read(bytes, { type: "buffer", cellDates: true });
+    // raw:true é essencial aqui: vários relatórios de peça (ex: "Ship_*.xls" da
+    // Samsung) na verdade são uma tabela HTML salva com extensão .xls, não um
+    // binário Excel de verdade. Nesse formato, o leitor de HTML do SheetJS
+    // tenta "adivinhar" datas tipo "01/09/2026" e, quando dia e mês são os
+    // dois ≤ 12, interpreta errado como mês/dia (padrão americano) em vez de
+    // dia/mês — trocando silenciosamente o dia com o mês (ex: 01/09/2026,
+    // 1º de setembro, virava 9 de janeiro). Isso fazia uma compra mais
+    // recente parecer mais antiga que outra, e a coluna F (Data NF) parar de
+    // bater com a "peça mais recente" de verdade. Com raw:true o SheetJS não
+    // faz esse palpite: entrega o texto original de cada célula (ex:
+    // "01/09/2026") pra gente mesmo interpretar com converterDataBr (que já
+    // assume dia/mês/ano, formato brasileiro). Arquivo .xlsx binário de
+    // verdade não é afetado por essa opção — datas continuam vindo como
+    // objeto Date normalmente.
+    const workbook = XLSX.read(bytes, { type: "buffer", cellDates: true, raw: true });
     const primeiraAba = workbook.SheetNames[0];
     const planilha = workbook.Sheets[primeiraAba];
     linhasBrutas = XLSX.utils.sheet_to_json(planilha, { header: 1, blankrows: false }) as unknown[][];
@@ -75,8 +90,8 @@ export async function POST(request: Request) {
   for (const linha of linhasDados) {
     const codigo = String(linha[COLUNA_CODIGO] ?? "").trim();
     const dataCompra = converterDataBr(linha[COLUNA_DATA_COMPRA]);
-    const quantidade = Number(linha[COLUNA_QUANTIDADE]);
-    const valorTotal = Number(linha[COLUNA_VALOR_TOTAL]);
+    const quantidade = converterNumeroPlanilha(linha[COLUNA_QUANTIDADE]);
+    const valorTotal = converterNumeroPlanilha(linha[COLUNA_VALOR_TOTAL]);
     const delivery = String(linha[COLUNA_DELIVERY] ?? "").trim();
     const descricao = linha[COLUNA_DESCRICAO] != null ? String(linha[COLUNA_DESCRICAO]).trim() : null;
 
