@@ -237,6 +237,10 @@ export default function PainelValidacaoOrcamentos({
     formula?: string;
     cor?: string;
     formatar: (r: ResumoValidacao) => string;
+    /** conta feita com os números reais (todos os lotes juntos), pra
+     * mostrar ao passar o mouse em cima do valor no pop-up de detalhe —
+     * só nos cards calculados, não nas somas simples. */
+    explicacaoResultado?: (r: ResumoValidacao) => string;
   }[] = [
     { key: "quantidadePecas", icone: LayoutList, label: "Quantidade de Peças", formatar: (r) => String(r.quantidadePecas) },
     { key: "custoTotalPecas", icone: Coins, label: "Total de Custo de Peças", formatar: (r) => formatarReal(r.custoTotalPecas) },
@@ -249,6 +253,8 @@ export default function PainelValidacaoOrcamentos({
       formula: "Venda de Peças − Custo das Peças − Imposto (sem mão de obra)",
       cor: resumo.lucroLiquidoPeca >= 0 ? "#22c55e" : "#ef4444",
       formatar: (r) => formatarReal(r.lucroLiquidoPeca),
+      explicacaoResultado: (r) =>
+        `${formatarReal(r.vendaTotalPecas)} − ${formatarReal(r.custoTotalPecas)} − ${formatarReal(r.impostoTotalPecas)} = ${formatarReal(r.lucroLiquidoPeca)}`,
     },
     { key: "maoDeObraTotal", icone: Wrench, label: "Mão de Obra", formatar: (r) => formatarReal(r.maoDeObraTotal) },
     {
@@ -258,6 +264,8 @@ export default function PainelValidacaoOrcamentos({
       formula: "Lucro Líquido da Peça + Mão de obra",
       cor: resumo.lucroTotal >= 0 ? "#22c55e" : "#ef4444",
       formatar: (r) => formatarReal(r.lucroTotal),
+      explicacaoResultado: (r) =>
+        `${formatarReal(r.lucroLiquidoPeca)} + ${formatarReal(r.maoDeObraTotal)} = ${formatarReal(r.lucroTotal)}`,
     },
     {
       key: "percLucroPecas",
@@ -266,6 +274,8 @@ export default function PainelValidacaoOrcamentos({
       formula: "(Venda − Custo − Imposto) ÷ Venda",
       cor: corPercentualLucro(resumo.percLucroPecas),
       formatar: (r) => formatarPercentual(r.percLucroPecas),
+      explicacaoResultado: (r) =>
+        `${formatarReal(r.lucroLiquidoPeca)} ÷ ${formatarReal(r.vendaTotalPecas)} × 100 = ${formatarPercentual(r.percLucroPecas)}`,
     },
     {
       key: "percLucroTotal",
@@ -274,6 +284,8 @@ export default function PainelValidacaoOrcamentos({
       formula: "Lucro Total ÷ (Venda + Mão de obra)",
       cor: corPercentualLucro(resumo.percLucroTotal),
       formatar: (r) => formatarPercentual(r.percLucroTotal),
+      explicacaoResultado: (r) =>
+        `${formatarReal(r.lucroTotal)} ÷ ${formatarReal(r.vendaTotalPecas + r.maoDeObraTotal)} × 100 = ${formatarPercentual(r.percLucroTotal)}`,
     },
   ];
 
@@ -509,6 +521,7 @@ export default function PainelValidacaoOrcamentos({
           valorAtual={cardAberto === "pendentes" ? String(aparelhos.length) : cardDetalhe!.formatar(resumo)}
           corValor={cardAberto === "pendentes" ? undefined : cardDetalhe!.cor}
           formula={cardAberto === "pendentes" ? undefined : cardDetalhe!.formula}
+          explicacaoResultado={cardAberto === "pendentes" ? undefined : cardDetalhe!.explicacaoResultado?.(resumo)}
           baseCalculo={baseCalculoCard}
           linhas={linhasDetalheCard}
           onFechar={() => setCardAberto(null)}

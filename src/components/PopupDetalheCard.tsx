@@ -67,6 +67,7 @@ export default function PopupDetalheCard({
   valorAtual,
   corValor,
   formula,
+  explicacaoResultado,
   baseCalculo,
   linhas,
   onFechar,
@@ -77,6 +78,11 @@ export default function PopupDetalheCard({
   valorAtual: string;
   corValor?: string;
   formula?: string;
+  /** conta feita com os números reais (todos os lotes), já substituídos
+   * na fórmula — ex: "R$1.559,00 − R$788,58 − R$121,05 = R$649,37".
+   * Aparece ao passar o mouse em cima do valor principal, igual às linhas
+   * da base de cálculo — o resultado também precisa se explicar. */
+  explicacaoResultado?: string;
   /** só nos cards de Lucro Total / % Lucro Peças / % Lucro Total — mostra
    * Custo, Imposto, Venda e Mão de obra (agregados) como base do cálculo. */
   baseCalculo?: BaseCalculoResumo;
@@ -99,6 +105,7 @@ export default function PopupDetalheCard({
     const texto = [
       `${label}: ${valorAtual}`,
       formula ? `Fórmula: ${formula}` : null,
+      explicacaoResultado ? `Cálculo: ${explicacaoResultado}` : null,
       ...linhasBase,
       "",
       "Por lote (NF Remessa):",
@@ -145,14 +152,27 @@ export default function PopupDetalheCard({
           </button>
         </div>
 
-        <p className="text-2xl font-semibold mb-1" style={{ color: corValor ?? "var(--ink)" }}>
-          {valorAtual}
-        </p>
-        {formula && (
-          <p className="text-[11px] mb-3" style={{ color: "var(--muted)" }}>
-            {formula}
+        <div className={`group relative mb-3 ${explicacaoResultado ? "cursor-help" : ""}`}>
+          <p className="text-2xl font-semibold mb-1" style={{ color: corValor ?? "var(--ink)" }}>
+            {valorAtual}
           </p>
-        )}
+          {formula && (
+            <p className="text-[11px]" style={{ color: "var(--muted)" }}>
+              {formula}
+            </p>
+          )}
+          {explicacaoResultado && (
+            <div
+              className="pointer-events-none absolute left-0 top-full mt-1 z-20 hidden w-72 rounded-lg border p-2.5 text-[11px] leading-snug shadow-2xl group-hover:block"
+              style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--ink)" }}
+            >
+              <p className="mb-1 font-medium" style={{ color: "var(--muted)" }}>
+                Como chegou nesse valor:
+              </p>
+              {explicacaoResultado}
+            </div>
+          )}
+        </div>
 
         {baseCalculo && (
           <div
