@@ -267,17 +267,17 @@ export type DetalheValidacaoOrcamento = {
    * peça — o que efetivamente vai ser cobrado pelas peças do reparo. */
   vendaTotalPecas: number;
   maoDeObra: number;
-  /** Lucro Bruto da Peça: venda de peças − custo das peças − imposto —
+  /** Lucro Líquido da Peça: venda de peças − custo das peças − imposto —
    * só o bloco de peça, sem misturar mão de obra. Mesmo o Imposto já
    * estando embutido no valor de venda (venda de peça = custo x markup +
    * imposto), ele é dinheiro que passa pela empresa e vai pro governo —
    * não fica de lucro — por isso desconta de novo aqui: venda é a
    * receita bruta faturada, e o imposto é um repasse, não lucro. */
-  lucroBrutoPeca: number;
-  /** lucroBrutoPeca + mão de obra — o resultado combinado (peça + mão de
+  lucroLiquidoPeca: number;
+  /** lucroLiquidoPeca + mão de obra — o resultado combinado (peça + mão de
    * obra) do reparo inteiro. */
   lucroTotal: number;
-  /** Margem sobre venda: lucroBrutoPeca / venda de peças, em %. */
+  /** Margem sobre venda: lucroLiquidoPeca / venda de peças, em %. */
   percLucroPecas: number;
   /** lucroTotal / (venda de peças + mão de obra), em %. */
   percLucroTotal: number;
@@ -343,9 +343,9 @@ export function calcularDetalheValidacao(
 
   // bloco só de peça (venda − custo − imposto), sem misturar mão de
   // obra — e o combinado (+ mão de obra) por cima dele.
-  const lucroBrutoPeca = vendaTotalPecas - custoTotalPecas - impostoTotalPecas;
-  const lucroTotal = lucroBrutoPeca + maoDeObra;
-  const percLucroPecas = vendaTotalPecas > 0 ? (lucroBrutoPeca / vendaTotalPecas) * 100 : 0;
+  const lucroLiquidoPeca = vendaTotalPecas - custoTotalPecas - impostoTotalPecas;
+  const lucroTotal = lucroLiquidoPeca + maoDeObra;
+  const percLucroPecas = vendaTotalPecas > 0 ? (lucroLiquidoPeca / vendaTotalPecas) * 100 : 0;
   const baseLucroTotal = vendaTotalPecas + maoDeObra;
   const percLucroTotal = baseLucroTotal > 0 ? (lucroTotal / baseLucroTotal) * 100 : 0;
 
@@ -355,7 +355,7 @@ export function calcularDetalheValidacao(
     impostoTotalPecas,
     vendaTotalPecas,
     maoDeObra,
-    lucroBrutoPeca,
+    lucroLiquidoPeca,
     lucroTotal,
     percLucroPecas,
     percLucroTotal,

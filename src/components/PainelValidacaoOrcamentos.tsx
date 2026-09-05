@@ -37,7 +37,7 @@ type CardKey =
   | "custoTotalPecas"
   | "impostoTotalPecas"
   | "vendaTotalPecas"
-  | "lucroBrutoPeca"
+  | "lucroLiquidoPeca"
   | "maoDeObraTotal"
   | "lucroTotal"
   | "percLucroPecas"
@@ -68,11 +68,11 @@ function calcularResumoDeLista(lista: AparelhoValidacao[]): ResumoValidacao {
   );
   // venda é a receita bruta faturada (já inclui o imposto embutido no
   // preço), e o imposto é repasse pro governo — não fica de lucro — por
-  // isso desconta de novo aqui. Lucro Bruto da Peça é só o bloco de
+  // isso desconta de novo aqui. Lucro Líquido da Peça é só o bloco de
   // peça (sem misturar mão de obra); Lucro Total é o combinado.
-  const lucroBrutoPeca = base.vendaTotalPecas - base.custoTotalPecas - base.impostoTotalPecas;
-  const lucroTotal = lucroBrutoPeca + base.maoDeObraTotal;
-  const percLucroPecas = base.vendaTotalPecas > 0 ? (lucroBrutoPeca / base.vendaTotalPecas) * 100 : 0;
+  const lucroLiquidoPeca = base.vendaTotalPecas - base.custoTotalPecas - base.impostoTotalPecas;
+  const lucroTotal = lucroLiquidoPeca + base.maoDeObraTotal;
+  const percLucroPecas = base.vendaTotalPecas > 0 ? (lucroLiquidoPeca / base.vendaTotalPecas) * 100 : 0;
   const baseLucroTotal = base.vendaTotalPecas + base.maoDeObraTotal;
   const percLucroTotal = baseLucroTotal > 0 ? (lucroTotal / baseLucroTotal) * 100 : 0;
   return {
@@ -81,7 +81,7 @@ function calcularResumoDeLista(lista: AparelhoValidacao[]): ResumoValidacao {
     custoTotalPecas: base.custoTotalPecas,
     impostoTotalPecas: base.impostoTotalPecas,
     maoDeObraTotal: base.maoDeObraTotal,
-    lucroBrutoPeca,
+    lucroLiquidoPeca,
     vendaTotalPecas: base.vendaTotalPecas,
     lucroTotal,
     percLucroPecas,
@@ -243,19 +243,19 @@ export default function PainelValidacaoOrcamentos({
     { key: "impostoTotalPecas", icone: Receipt, label: "Total de Imposto (ICMS)", formatar: (r) => formatarReal(r.impostoTotalPecas) },
     { key: "vendaTotalPecas", icone: Wallet, label: "Valor Venda de Peças", formatar: (r) => formatarReal(r.vendaTotalPecas) },
     {
-      key: "lucroBrutoPeca",
+      key: "lucroLiquidoPeca",
       icone: PiggyBank,
-      label: "Lucro Bruto da Peça",
+      label: "Lucro Líquido da Peça",
       formula: "Venda de Peças − Custo das Peças − Imposto (sem mão de obra)",
-      cor: resumo.lucroBrutoPeca >= 0 ? "#22c55e" : "#ef4444",
-      formatar: (r) => formatarReal(r.lucroBrutoPeca),
+      cor: resumo.lucroLiquidoPeca >= 0 ? "#22c55e" : "#ef4444",
+      formatar: (r) => formatarReal(r.lucroLiquidoPeca),
     },
     { key: "maoDeObraTotal", icone: Wrench, label: "Mão de Obra", formatar: (r) => formatarReal(r.maoDeObraTotal) },
     {
       key: "lucroTotal",
       icone: TrendingUp,
       label: "Lucro Total (R$)",
-      formula: "Lucro Bruto da Peça + Mão de obra",
+      formula: "Lucro Líquido da Peça + Mão de obra",
       cor: resumo.lucroTotal >= 0 ? "#22c55e" : "#ef4444",
       formatar: (r) => formatarReal(r.lucroTotal),
     },
@@ -277,22 +277,32 @@ export default function PainelValidacaoOrcamentos({
     },
   ];
 
-  // esses 3 cards são os únicos cuja conta depende da Mão de obra — que
-  // não tem card próprio na linha de cima (decidido pra não competir por
-  // espaço); em vez disso ela aparece como contexto dentro do pop-up
-  // desses cards, junto com Custo/Imposto/Venda.
-  const CARDS_COM_BASE: CardKey[] = ["lucroBrutoPeca", "lucroTotal", "percLucroPecas", "percLucroTotal"];
+  // cards de peça (Lucro Líquido da Peça, % Lucro Peças) mostram só
+  // Custo/Imposto/Venda — Mão de obra não entra, pra não misturar peça
+  // com mão de obra. Os cards combinados (Lucro Total, % Lucro Total)
+  // mostram os 4, já que a conta deles depende da Mão de obra também —
+  // que não tem card próprio na linha de cima (decidido pra não competir
+  // por espaço).
+  const CARDS_SO_PECA: CardKey[] = ["lucroLiquidoPeca", "percLucroPecas"];
+  const CARDS_COM_MAO_DE_OBRA: CardKey[] = ["lucroTotal", "percLucroTotal"];
 
   const cardDetalhe = cardAberto ? CARDS.find((c) => c.key === cardAberto) : undefined;
-  const baseCalculoCard: BaseCalculoResumo | undefined =
-    cardAberto && CARDS_COM_BASE.includes(cardAberto)
+  const baseCalculoCard: BaseCalculoResumo | undefined = !cardAberto
+    ? undefined
+    : CARDS_SO_PECA.includes(cardAberto)
       ? {
           custoTotalPecas: resumo.custoTotalPecas,
           impostoTotalPecas: resumo.impostoTotalPecas,
           vendaTotalPecas: resumo.vendaTotalPecas,
-          maoDeObra: resumo.maoDeObraTotal,
         }
-      : undefined;
+      : CARDS_COM_MAO_DE_OBRA.includes(cardAberto)
+        ? {
+            custoTotalPecas: resumo.custoTotalPecas,
+            impostoTotalPecas: resumo.impostoTotalPecas,
+            vendaTotalPecas: resumo.vendaTotalPecas,
+            maoDeObra: resumo.maoDeObraTotal,
+          }
+        : undefined;
   const linhasDetalheCard: LinhaDetalheCard[] =
     cardAberto === "pendentes"
       ? lotes.map((l) => ({ rotulo: l.nf, valor: String(l.quantidade) }))

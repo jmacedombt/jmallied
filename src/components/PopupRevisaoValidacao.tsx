@@ -11,7 +11,7 @@ export type ResumoValidacao = {
   maoDeObraTotal: number;
   vendaTotalPecas: number;
   /** venda − custo − imposto, sem misturar mão de obra (bloco de peça). */
-  lucroBrutoPeca: number;
+  lucroLiquidoPeca: number;
   lucroTotal: number;
   percLucroPecas: number;
   percLucroTotal: number;
@@ -32,7 +32,7 @@ function linhas(resumo: ResumoValidacao) {
     { label: "Total Custo de Peças (R$)", valor: formatarReal(resumo.custoTotalPecas) },
     { label: "Total de Imposto (ICMS)", valor: formatarReal(resumo.impostoTotalPecas) },
     { label: "Total Venda de Peças (R$)", valor: formatarReal(resumo.vendaTotalPecas) },
-    { label: "Lucro Bruto da Peça (R$)", valor: formatarReal(resumo.lucroBrutoPeca) },
+    { label: "Lucro Líquido da Peça (R$)", valor: formatarReal(resumo.lucroLiquidoPeca) },
     { label: "Total de Mão de Obra (R$)", valor: formatarReal(resumo.maoDeObraTotal) },
     { label: "Lucro Total (R$)", valor: formatarReal(resumo.lucroTotal), destaque: true },
     { label: "% Lucro Peças (margem sobre venda)", valor: formatarPercentual(resumo.percLucroPecas) },

@@ -6,18 +6,53 @@ import { Check, Copy, X } from "lucide-react";
 export type LinhaDetalheCard = { rotulo: string; valor: string };
 
 // Base de cálculo (todos os lotes juntos) mostrada como contexto extra
-// nos cards de Lucro Total / % Lucro Peças / % Lucro Total — em vez de
-// criar mais cards na linha de cima, a Mão de obra (que não tem card
-// próprio) e os outros 3 valores que compõem a conta aparecem aqui.
+// nos cards de Lucro Líquido da Peça / Lucro Total / % Lucro Peças /
+// % Lucro Total — em vez de criar mais cards na linha de cima, os
+// valores que compõem a conta aparecem aqui. maoDeObra fica de fora
+// (undefined) nos cards que são só de peça (Lucro Líquido da Peça e
+// % Lucro Peças) — não faz sentido misturar mão de obra ali.
 export type BaseCalculoResumo = {
   custoTotalPecas: number;
   impostoTotalPecas: number;
   vendaTotalPecas: number;
-  maoDeObra: number;
+  maoDeObra?: number;
 };
 
 function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+// explica como cada valor da base de cálculo chega no número mostrado —
+// aparece ao passar o mouse em cima da linha.
+const EXPLICACAO_CUSTO = "Soma do valor mais recente de compra de cada peça, direto da Base Peças.";
+const EXPLICACAO_IMPOSTO =
+  "ICMS sobre o valor já com a margem de markup aplicada (não sobre o custo cru) — arredondado pra cima, 2 casas.";
+const EXPLICACAO_VENDA =
+  "Custo × markup da faixa configurada, mais o Imposto — arredondado pra cima pro inteiro mais próximo (mesma regra do Custo Peça Allied no BID).";
+const EXPLICACAO_MAO_DE_OBRA =
+  "Valor fixo configurado em Configurações > Mão de obra, conforme a quantidade de peças de cada orçamento.";
+
+function LinhaComExplicacao({
+  label,
+  valor,
+  explicacao,
+}: {
+  label: string;
+  valor: string;
+  explicacao: string;
+}) {
+  return (
+    <div className="group relative flex justify-between gap-4 cursor-help">
+      <span style={{ color: "var(--muted)" }}>{label}</span>
+      <strong style={{ color: "var(--ink)" }}>{valor}</strong>
+      <div
+        className="pointer-events-none absolute right-0 top-full mt-1 z-20 hidden w-56 rounded-lg border p-2.5 text-[11px] leading-snug shadow-2xl group-hover:block"
+        style={{ background: "var(--surface)", borderColor: "var(--line)", color: "var(--muted)" }}
+      >
+        {explicacao}
+      </div>
+    </div>
+  );
 }
 
 // Pop-up genérico de "resumo relacionado ao card clicado" — qualquer
@@ -58,7 +93,7 @@ export default function PopupDetalheCard({
           `Custo das peças: ${formatarReal(baseCalculo.custoTotalPecas)}`,
           `Imposto (ICMS): ${formatarReal(baseCalculo.impostoTotalPecas)}`,
           `Venda de peças: ${formatarReal(baseCalculo.vendaTotalPecas)}`,
-          `Mão de obra: ${formatarReal(baseCalculo.maoDeObra)}`,
+          ...(baseCalculo.maoDeObra != null ? [`Mão de obra: ${formatarReal(baseCalculo.maoDeObra)}`] : []),
         ]
       : [];
     const texto = [
@@ -121,25 +156,31 @@ export default function PopupDetalheCard({
 
         {baseCalculo && (
           <div
-            className="rounded-xl border p-3 mb-3 text-xs space-y-1"
+            className="rounded-xl border p-3 mb-3 text-xs space-y-2"
             style={{ background: "var(--surface2)", borderColor: "var(--line)" }}
           >
-            <p className="flex justify-between gap-4">
-              <span style={{ color: "var(--muted)" }}>Custo das peças</span>
-              <strong style={{ color: "var(--ink)" }}>{formatarReal(baseCalculo.custoTotalPecas)}</strong>
-            </p>
-            <p className="flex justify-between gap-4">
-              <span style={{ color: "var(--muted)" }}>Imposto (ICMS)</span>
-              <strong style={{ color: "var(--ink)" }}>{formatarReal(baseCalculo.impostoTotalPecas)}</strong>
-            </p>
-            <p className="flex justify-between gap-4">
-              <span style={{ color: "var(--muted)" }}>Venda de peças</span>
-              <strong style={{ color: "var(--ink)" }}>{formatarReal(baseCalculo.vendaTotalPecas)}</strong>
-            </p>
-            <p className="flex justify-between gap-4">
-              <span style={{ color: "var(--muted)" }}>Mão de obra</span>
-              <strong style={{ color: "var(--ink)" }}>{formatarReal(baseCalculo.maoDeObra)}</strong>
-            </p>
+            <LinhaComExplicacao
+              label="Custo das peças"
+              valor={formatarReal(baseCalculo.custoTotalPecas)}
+              explicacao={EXPLICACAO_CUSTO}
+            />
+            <LinhaComExplicacao
+              label="Imposto (ICMS)"
+              valor={formatarReal(baseCalculo.impostoTotalPecas)}
+              explicacao={EXPLICACAO_IMPOSTO}
+            />
+            <LinhaComExplicacao
+              label="Venda de peças"
+              valor={formatarReal(baseCalculo.vendaTotalPecas)}
+              explicacao={EXPLICACAO_VENDA}
+            />
+            {baseCalculo.maoDeObra != null && (
+              <LinhaComExplicacao
+                label="Mão de obra"
+                valor={formatarReal(baseCalculo.maoDeObra)}
+                explicacao={EXPLICACAO_MAO_DE_OBRA}
+              />
+            )}
           </div>
         )}
 
