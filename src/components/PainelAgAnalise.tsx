@@ -6,8 +6,13 @@ import { AlertTriangle, Ban, CheckCheck, ClipboardCheck, Loader2, PackageCheck, 
 import PopupConfirmar from "@/components/PopupConfirmar";
 import PopupPecasOrcamento, { type AparelhoComPecas } from "@/components/PopupPecasOrcamento";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
+import PopupReprovarOrcamentoLote from "@/components/PopupReprovarOrcamentoLote";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
 import { podeImportarBid, type FaixaMarkup, type InfoBidPeca } from "@/lib/bid";
+
+function esperar(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export type AparelhoAgAnalise = AparelhoComPecas & {
   id: string;
@@ -73,6 +78,11 @@ export default function PainelAgAnalise({
   const [processandoLote, setProcessandoLote] = useState(false);
   const [erroLote, setErroLote] = useState<string | null>(null);
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
+  const [mostrarPopupRecusaLote, setMostrarPopupRecusaLote] = useState(false);
+  const [processandoRecusaLote, setProcessandoRecusaLote] = useState(false);
+  const [erroRecusaLote, setErroRecusaLote] = useState<string | null>(null);
+  const [emVermelho, setEmVermelho] = useState<Set<string>>(new Set());
+  const [saindoAgora, setSaindoAgora] = useState<Set<string>>(new Set());
 
   useEffect(() => setItens(aparelhos), [aparelhos]);
   useEffect(() => setPrecosBid(precosBidIniciais), [precosBidIniciais]);
@@ -153,15 +163,63 @@ export default function PainelAgAnalise({
     setProcessandoId(null);
   }
 
-  function aposReprovar(id: string) {
-    setItens((atual) => atual.filter((a) => a.id !== id));
+  // depois de reprovar (individual ou em lote): a(s) linha(s) ficam
+  // vermelhas por um instante — pra dar tempo da pessoa ver o que
+  // aconteceu — e só depois somem da lista (indo pra 8 - Orçamento
+  // Reprovado por trás).
+  async function animarSaidaPorReprovacao(ids: string[]) {
+    const idsSet = new Set(ids);
     setSelecionados((atual) => {
       const novo = new Set(atual);
-      novo.delete(id);
+      for (const id of ids) novo.delete(id);
       return novo;
     });
-    setReprovando(null);
+    setEmVermelho((atual) => new Set([...atual, ...ids]));
+    await esperar(1400);
+    setSaindoAgora((atual) => new Set([...atual, ...ids]));
+    await esperar(300);
+    setItens((atual) => atual.filter((a) => !idsSet.has(a.id)));
+    setEmVermelho((atual) => {
+      const novo = new Set(atual);
+      for (const id of ids) novo.delete(id);
+      return novo;
+    });
+    setSaindoAgora((atual) => {
+      const novo = new Set(atual);
+      for (const id of ids) novo.delete(id);
+      return novo;
+    });
     router.refresh();
+  }
+
+  async function recusarSelecionadosEmLote(motivo: string) {
+    const ids = Array.from(selecionados);
+    if (ids.length === 0) return;
+
+    setProcessandoRecusaLote(true);
+    setErroRecusaLote(null);
+
+    try {
+      const res = await fetch("/api/operacional/orcamentos/reprovar-em-massa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, motivo_reprova: motivo }),
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setErroRecusaLote(data?.error || "Não foi possível recusar os orçamentos selecionados.");
+        setProcessandoRecusaLote(false);
+        return;
+      }
+
+      setMostrarPopupRecusaLote(false);
+      setProcessandoRecusaLote(false);
+      await animarSaidaPorReprovacao(ids);
+    } catch {
+      setErroRecusaLote("Falha de conexão. Tente novamente.");
+      setProcessandoRecusaLote(false);
+    }
   }
 
   async function confirmarAnaliseEmLote() {
@@ -255,15 +313,26 @@ export default function PainelAgAnalise({
           <span className="text-sm" style={{ color: "var(--ink)" }}>
             <strong>{selecionados.size}</strong> selecionado(s)
           </span>
-          <button
-            type="button"
-            onClick={() => setConfirmandoLote(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition"
-            style={{ background: "var(--accent)" }}
-          >
-            <CheckCheck size={14} />
-            Confirmar Análise realizada ({selecionados.size})
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmandoLote(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition"
+              style={{ background: "var(--accent)" }}
+            >
+              <CheckCheck size={14} />
+              Confirmar Análise realizada ({selecionados.size})
+            </button>
+            <button
+              type="button"
+              onClick={() => setMostrarPopupRecusaLote(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition"
+              style={{ background: "#ef4444" }}
+            >
+              <Ban size={14} />
+              Recusar orçamento ({selecionados.size})
+            </button>
+          </div>
         </div>
       )}
 
@@ -295,19 +364,30 @@ export default function PainelAgAnalise({
               const faltando = faltandoPorAparelho.get(a.id) ?? [];
               const temFaltando = faltando.length > 0;
               const temPecas = temPecasAtreladas(a);
+              const reprovadaAgora = emVermelho.has(a.id);
+              const saindo = saindoAgora.has(a.id);
               return (
                 <tr
                   key={a.id}
-                  onClick={() => setDetalhe(a)}
-                  className="border-t cursor-pointer transition hover:bg-[var(--surface2)]"
+                  onClick={() => !reprovadaAgora && setDetalhe(a)}
+                  className="border-t cursor-pointer transition-all duration-300 ease-in hover:bg-[var(--surface2)]"
                   style={{
-                    borderColor: temFaltando ? "#ef4444" : "var(--line)",
-                    background: temFaltando ? "rgba(239, 68, 68, 0.07)" : "var(--surface)",
+                    borderColor: reprovadaAgora ? "#ef4444" : temFaltando ? "#ef4444" : "var(--line)",
+                    background: reprovadaAgora
+                      ? "rgba(239, 68, 68, 0.22)"
+                      : temFaltando
+                        ? "rgba(239, 68, 68, 0.07)"
+                        : "var(--surface)",
+                    opacity: saindo ? 0 : 1,
+                    transform: saindo ? "translateX(12px)" : "translateX(0)",
+                    pointerEvents: reprovadaAgora ? "none" : undefined,
                   }}
                   title={
-                    temFaltando
-                      ? `Peça(s) sem custo no BID: ${faltando.join(", ")} — clique pra ver e cadastrar`
-                      : "Clique pra ver as peças desse orçamento"
+                    reprovadaAgora
+                      ? "Reprovado — indo pra 8 - Orçamento Reprovado"
+                      : temFaltando
+                        ? `Peça(s) sem custo no BID: ${faltando.join(", ")} — clique pra ver e cadastrar`
+                        : "Clique pra ver as peças desse orçamento"
                   }
                 >
                   {podeLote && (
@@ -456,7 +536,25 @@ export default function PainelAgAnalise({
         <PopupReprovarOrcamento
           aparelho={reprovando}
           onFechar={() => setReprovando(null)}
-          onReprovado={() => aposReprovar(reprovando.id)}
+          onReprovado={() => {
+            const id = reprovando.id;
+            setReprovando(null);
+            animarSaidaPorReprovacao([id]);
+          }}
+        />
+      )}
+
+      {mostrarPopupRecusaLote && (
+        <PopupReprovarOrcamentoLote
+          quantidade={selecionados.size}
+          salvando={processandoRecusaLote}
+          erro={erroRecusaLote}
+          onFechar={() => {
+            if (processandoRecusaLote) return;
+            setMostrarPopupRecusaLote(false);
+            setErroRecusaLote(null);
+          }}
+          onSalvar={recusarSelecionadosEmLote}
         />
       )}
     </div>
