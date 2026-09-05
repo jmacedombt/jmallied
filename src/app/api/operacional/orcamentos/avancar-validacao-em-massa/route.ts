@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
   calcularDetalheValidacao,
   podeConfirmarAnaliseEmLote,
+  STATUS_ETAPAS_ANTERIORES_A_VALIDACAO,
   STATUS_OPERACIONAL,
   STATUS_VALIDACAO_ORCAMENTOS,
   type CamposPecasOrcamento,
@@ -28,8 +29,14 @@ type LinhaOrcamentoLote = CamposPecasOrcamento & {
 // Avança TODOS os aparelhos de um lote (NF Remessa) de "Validação de
 // Orçamentos" pra "3 - Ag. Resposta de Orçamento" de uma vez (botão
 // "Confirmar Envio") — sempre por lote, nunca lotes misturados, porque a
-// validação é sempre feita por NF Remessa. Revalida as duas travas no
-// servidor (nunca confia só na checagem que a tela já fez):
+// validação é sempre feita por NF Remessa. Revalida as travas no servidor
+// (nunca confia só na checagem que a tela já fez):
+//   0) nenhum aparelho do MESMO lote (mesma NF Remessa) pode ainda estar
+//      parado numa etapa anterior à análise (Ag. Abertura, 1 - Ag.
+//      Triagem ou 2 - Ag. Análise) — um lote pode chegar em partes, e só
+//      dá pra confirmar o envio depois que TODO aparelho dele já tiver
+//      sido analisado (estando em Validação de Orçamentos ou já
+//      reprovado em "8 - Orçamento Reprovado");
 //   1) nenhum aparelho do lote pode ter peça lançada sem custo na Base
 //      Peças (peça "prioridade", destaque vermelho);
 //   2) todo aparelho sem nenhuma peça lançada (destaque amarelo) precisa
@@ -75,6 +82,29 @@ export async function POST(request: Request) {
   if (lista.length === 0) {
     return NextResponse.json(
       { error: "Não há aparelhos desse lote em Validação de Orçamentos no momento." },
+      { status: 409 }
+    );
+  }
+
+  // 0ª trava: mesmo lote (NF Remessa) não pode ter aparelho ainda parado
+  // numa etapa anterior à análise — senão a resposta de orçamento sairia
+  // sem esperar todo mundo do lote ser analisado.
+  const { data: pendentesEtapaAnterior, error: erroPendencia } = await admin
+    .from("orcamentos")
+    .select("id")
+    .eq("nf_remessa_allied", nfRemessa)
+    .in("status_operacional", STATUS_ETAPAS_ANTERIORES_A_VALIDACAO as unknown as string[])
+    .limit(1);
+
+  if (erroPendencia) {
+    return NextResponse.json({ error: erroPendencia.message }, { status: 400 });
+  }
+  if ((pendentesEtapaAnterior ?? []).length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Esse lote ainda tem orçamento(s) pendente(s) em etapa anterior à análise (Ag. Abertura, 1 - Ag. Triagem ou 2 - Ag. Análise). Só é possível confirmar o envio depois que TODOS os aparelhos desse lote já tiverem sido analisados.",
+      },
       { status: 409 }
     );
   }

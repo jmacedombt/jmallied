@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
-import { statusPorSlug, calcularDetalheValidacao, type CamposPecasOrcamento } from "@/lib/orcamentos";
+import { statusPorSlug, calcularDetalheValidacao, STATUS_ETAPAS_ANTERIORES_A_VALIDACAO, type CamposPecasOrcamento } from "@/lib/orcamentos";
 import { type AparelhoAgAbertura } from "@/components/TabelaAgAbertura";
 import PainelAgAbertura from "@/components/PainelAgAbertura";
 import PainelAgTriagem from "@/components/PainelAgTriagem";
@@ -178,6 +178,35 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
 
     const listaBruta = aparelhosBrutos ?? [];
 
+    // NFs Remessa distintas presentes nessa tela — usadas pra checar se
+    // alguma delas ainda tem aparelho parado numa etapa anterior à
+    // análise (Ag. Abertura / 1 - Ag. Triagem / 2 - Ag. Análise). Um lote
+    // pode chegar em partes, então nem todo aparelho de uma NF entra em
+    // Validação junto — "Confirmar Envio" só pode liberar um lote depois
+    // que TODO aparelho dele já foi analisado (ver
+    // STATUS_ETAPAS_ANTERIORES_A_VALIDACAO em lib/orcamentos.ts).
+    const nfsDistintas = Array.from(
+      new Set(listaBruta.map((a) => a.nf_remessa_allied).filter((nf): nf is string => !!nf))
+    );
+
+    const nfsComPendenciaEtapaAnterior: string[] = [];
+    if (nfsDistintas.length > 0) {
+      const pendentesSet = new Set<string>();
+      const TAMANHO_LOTE_NFS = 400;
+      for (let i = 0; i < nfsDistintas.length; i += TAMANHO_LOTE_NFS) {
+        const loteNfs = nfsDistintas.slice(i, i + TAMANHO_LOTE_NFS);
+        const { data: pendentesBrutos } = await supabase
+          .from("orcamentos")
+          .select("nf_remessa_allied")
+          .in("nf_remessa_allied", loteNfs)
+          .in("status_operacional", STATUS_ETAPAS_ANTERIORES_A_VALIDACAO as unknown as string[]);
+        for (const linha of pendentesBrutos ?? []) {
+          if (linha.nf_remessa_allied) pendentesSet.add(linha.nf_remessa_allied);
+        }
+      }
+      nfsComPendenciaEtapaAnterior.push(...pendentesSet);
+    }
+
     // códigos de peça únicos referenciados (peça normal + peça
     // adicional) por todo mundo nessa etapa, pra buscar o custo mais
     // recente de cada um de uma vez só na Base Peças.
@@ -249,6 +278,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
           perfil={perfil}
           faixas={faixasMarkup}
           icmsPercentual={icmsPercentual}
+          nfsComPendenciaEtapaAnterior={nfsComPendenciaEtapaAnterior}
           mensagemVazia="Nenhum aparelho em Validação de Orçamentos no momento."
           topo={voltar}
           pendentesLabel={

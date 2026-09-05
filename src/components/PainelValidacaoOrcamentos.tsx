@@ -25,6 +25,7 @@ import PopupRevisaoValidacao, { type ResumoValidacao } from "@/components/PopupR
 import CelulaLucroPercentual, { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupDetalheCard, { type BaseCalculoResumo, type LinhaDetalheCard } from "@/components/PopupDetalheCard";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
+import PopupAviso from "@/components/PopupAviso";
 
 export type AparelhoValidacao = AparelhoValidacaoDetalhe & {
   id: string;
@@ -157,6 +158,7 @@ export default function PainelValidacaoOrcamentos({
   icmsPercentual,
   pendentesLabel,
   topo,
+  nfsComPendenciaEtapaAnterior = [],
   mensagemVazia = "Nenhum aparelho em Validação de Orçamentos no momento.",
 }: {
   aparelhos: AparelhoValidacao[];
@@ -172,6 +174,11 @@ export default function PainelValidacaoOrcamentos({
    * outros cards aqui. */
   pendentesLabel: React.ReactNode;
   topo: React.ReactNode;
+  /** NFs Remessa que ainda têm algum aparelho parado numa etapa anterior
+   * à análise (Ag. Abertura / 1 - Ag. Triagem / 2 - Ag. Análise) — usado
+   * pra travar "Confirmar Envio" do lote selecionado até TODO aparelho
+   * dele já ter sido analisado. */
+  nfsComPendenciaEtapaAnterior?: string[];
   mensagemVazia?: string;
 }) {
   const router = useRouter();
@@ -180,6 +187,7 @@ export default function PainelValidacaoOrcamentos({
   const [popupRevisao, setPopupRevisao] = useState<"revisao" | "confirmar" | null>(null);
   const [cardAberto, setCardAberto] = useState<CardKey | null>(null);
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
+  const [avisoPendenciaAnterior, setAvisoPendenciaAnterior] = useState(false);
 
   const podeCadastrarPeca = podeImportarBasePecas(perfil);
   const podeConfirmarLote = podeConfirmarAnaliseEmLote(perfil);
@@ -227,6 +235,13 @@ export default function PainelValidacaoOrcamentos({
   const loteTemPecaSemCusto = filtrados.some((a) => a.temPecaSemCusto);
   const loteTemPendenteConfirmacao = filtrados.some((a) => a.quantidadePecas === 0 && !a.validacaoConfirmadoSemPeca);
   const podeConfirmarEnvio = !!loteSelecionado && !loteTemPecaSemCusto && !loteTemPendenteConfirmacao && podeConfirmarLote;
+
+  // trava extra: lote com aparelho ainda parado numa etapa anterior à
+  // análise. Diferente das outras travas acima, essa NÃO entra no
+  // `disabled` nativo do botão — o botão continua clicável (só com
+  // aparência de desabilitado) pra poder abrir o pop-up de aviso
+  // explicando o motivo (ver PopupAviso mais abaixo).
+  const loteTemPendenciaAnterior = !!loteSelecionado && nfsComPendenciaEtapaAnterior.includes(loteSelecionado);
 
   async function confirmarEnvioLote() {
     const res = await fetch("/api/operacional/orcamentos/avancar-validacao-em-massa", {
@@ -406,20 +421,30 @@ export default function PainelValidacaoOrcamentos({
           </button>
           <button
             type="button"
-            onClick={() => setPopupRevisao("confirmar")}
+            onClick={() => {
+              if (loteTemPendenciaAnterior) {
+                setAvisoPendenciaAnterior(true);
+                return;
+              }
+              setPopupRevisao("confirmar");
+            }}
             disabled={!podeConfirmarEnvio}
             title={
               !loteSelecionado
                 ? "Selecione um lote específico pra confirmar o envio."
-                : loteTemPecaSemCusto
-                  ? "Existem peças sem custo na Base Peças nesse lote (Prioridade)."
-                  : loteTemPendenteConfirmacao
-                    ? "Existem aparelhos sem peça que ainda não foram confirmados."
-                    : !podeConfirmarLote
-                      ? "Seu cargo não tem permissão pra confirmar o envio de um lote."
-                      : undefined
+                : loteTemPendenciaAnterior
+                  ? "Existem orçamentos desse lote pendentes em etapa anterior à análise."
+                  : loteTemPecaSemCusto
+                    ? "Existem peças sem custo na Base Peças nesse lote (Prioridade)."
+                    : loteTemPendenteConfirmacao
+                      ? "Existem aparelhos sem peça que ainda não foram confirmados."
+                      : !podeConfirmarLote
+                        ? "Seu cargo não tem permissão pra confirmar o envio de um lote."
+                        : undefined
             }
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition disabled:opacity-50 disabled:cursor-not-allowed${
+              loteTemPendenciaAnterior ? " opacity-50 cursor-not-allowed" : ""
+            }`}
             style={{ background: "var(--accent)" }}
           >
             <PackageCheck size={13} />
@@ -428,12 +453,14 @@ export default function PainelValidacaoOrcamentos({
         </div>
       </div>
 
-      {loteSelecionado && (loteTemPecaSemCusto || loteTemPendenteConfirmacao) && (
+      {loteSelecionado && (loteTemPendenciaAnterior || loteTemPecaSemCusto || loteTemPendenteConfirmacao) && (
         <p className="text-xs flex items-center gap-1.5" style={{ color: "#ef4444" }}>
           <AlertTriangle size={13} />
-          {loteTemPecaSemCusto
-            ? "Esse lote tem peça(s) sem custo na Base Peças (destaque vermelho / Prioridade) — cadastre antes de confirmar o envio."
-            : "Esse lote tem aparelho(s) sem peça que ainda não foram confirmados (destaque amarelo) — abra e confirme antes de enviar."}
+          {loteTemPendenciaAnterior
+            ? "Esse lote ainda tem orçamento(s) pendente(s) em etapa anterior à análise — só é possível confirmar o envio depois que TODOS os aparelhos desse lote já tiverem sido analisados."
+            : loteTemPecaSemCusto
+              ? "Esse lote tem peça(s) sem custo na Base Peças (destaque vermelho / Prioridade) — cadastre antes de confirmar o envio."
+              : "Esse lote tem aparelho(s) sem peça que ainda não foram confirmados (destaque amarelo) — abra e confirme antes de enviar."}
         </p>
       )}
 
@@ -569,6 +596,21 @@ export default function PainelValidacaoOrcamentos({
             setReprovando(null);
             router.refresh();
           }}
+        />
+      )}
+
+      {avisoPendenciaAnterior && (
+        <PopupAviso
+          titulo="Lote pendente em etapa anterior"
+          mensagem={
+            <>
+              O lote {loteSelecionado ? <strong>{loteSelecionado}</strong> : "selecionado"} ainda tem
+              orçamento(s) parado(s) numa etapa anterior à análise (Ag. Abertura, 1 - Ag. Triagem ou
+              2 - Ag. Análise). Só é possível confirmar o envio depois que TODOS os aparelhos desse lote já
+              tiverem sido analisados (estando em Validação de Orçamentos ou já reprovados).
+            </>
+          }
+          onFechar={() => setAvisoPendenciaAnterior(false)}
         />
       )}
 

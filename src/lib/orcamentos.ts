@@ -155,9 +155,21 @@ export function statusPorSlug(slug: string) {
 // valores usados na confirmação de análise (ver
 // api/operacional/orcamentos/[id]/confirmar-analise) — buscados pelo
 // slug, não por índice do array, pra não quebrar se a ordem mudar de novo.
+export const STATUS_AG_ABERTURA = STATUS_OPERACIONAL.find((s) => s.slug === "ag-abertura")!.valor;
+export const STATUS_AG_TRIAGEM = STATUS_OPERACIONAL.find((s) => s.slug === "1-ag-triagem")!.valor;
 export const STATUS_AG_ANALISE = STATUS_OPERACIONAL.find((s) => s.slug === "2-ag-analise")!.valor;
 export const STATUS_VALIDACAO_ORCAMENTOS = STATUS_OPERACIONAL.find((s) => s.slug === "validacao-orcamentos")!.valor;
 export const STATUS_ORCAMENTO_REPROVADO = STATUS_OPERACIONAL.find((s) => s.slug === "8-orcamento-reprovado")!.valor;
+
+// etapas anteriores a "2 - Ag. Análise" (inclusive) — usado pra travar
+// "Confirmar Envio" em Validação de Orçamentos até TODO aparelho do
+// mesmo lote (NF Remessa) já ter passado da análise: ou está em
+// Validação de Orçamentos, ou já virou "8 - Orçamento Reprovado". Um
+// lote pode ter chegado em partes (bipagem individual em Ag. Triagem,
+// por exemplo), então nem todo aparelho de uma NF Remessa chega junto —
+// enviar a resposta de orçamento antes de todo mundo ter sido analisado
+// arriscaria deixar aparelho de fora.
+export const STATUS_ETAPAS_ANTERIORES_A_VALIDACAO = [STATUS_AG_ABERTURA, STATUS_AG_TRIAGEM, STATUS_AG_ANALISE] as const;
 
 // status que contam como "pedido fechado" — qualquer orçamento em
 // qualquer outro status conta como "em aberto" (usado, por exemplo, pra
