@@ -6,6 +6,10 @@
 
 // reaproveita o mesmo grupo de cargos já usado na Base Peças
 export { CARGOS_IMPORTACAO_BASE_PECAS as CARGOS_IMPORTACAO_ORCAMENTOS, podeImportarBasePecas as podeImportarOrcamentos } from "@/lib/pecas";
+// faixa de markup do BID — usada em calcularDetalheValidacao pra apurar o
+// ICMS sobre o valor JÁ com margem, igual ao cálculo do BID (não sobre o
+// custo cru da Base Peças).
+import { calcularValorComMargem, type FaixaMarkup } from "@/lib/bid";
 
 // colunas da planilha original (0-indexed)
 export const COL_REPARADOR_TERCEIRO = 0; // A
@@ -232,7 +236,11 @@ export type PecaDetalheValidacao = {
   /** valor mais recente da Base Peças (pecas_vigentes) pra esse código —
    * null quando o código ainda não tem nenhuma compra importada. */
   custo: number | null;
-  /** custo x ICMS%, direto — sem passar pela faixa de markup do BID. */
+  /** custo já com a margem da faixa de markup do BID aplicada — base
+   * usada pra apurar o imposto. Null quando não há faixa configurada
+   * que cubra esse custo. */
+  valorComMargem: number | null;
+  /** ICMS% sobre o valorComMargem (não sobre o custo cru da Base Peças). */
   imposto: number;
 };
 
@@ -255,14 +263,18 @@ export type DetalheValidacaoOrcamento = {
  * Monta o detalhe de peças de um orçamento pra Validação de Orçamentos:
  * custo de cada peça vem SEMPRE do valor mais recente da Base Peças
  * (pecas_vigentes, por código) — não do custo_peca_N gravado no próprio
- * orçamento nem do preço calculado do BID (que já embute markup). O
- * imposto é ICMS% direto sobre esse custo, sem multiplicador de faixa.
+ * orçamento nem do custo_peca_allied já calculado do BID. O imposto,
+ * porém, segue a mesma regra do BID: primeiro aplica a faixa de markup
+ * sobre o custo (valorComMargem = custo x multiplicador da faixa) e só
+ * depois calcula o ICMS% sobre esse valor com margem — nunca ICMS%
+ * direto sobre o custo cru da Base Peças.
  */
 export function calcularDetalheValidacao(
   campos: CamposPecasOrcamento,
   custosPorCodigo: Map<string, number>,
   icmsPercentual: number,
-  configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca">
+  configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca">,
+  faixasMarkup: FaixaMarkup[]
 ): DetalheValidacaoOrcamento {
   const posicoes = [
     ...Array.from({ length: 10 }, (_, i) => ({
@@ -280,8 +292,9 @@ export function calcularDetalheValidacao(
     .map((p) => {
       const codigo = p.codigo!.trim();
       const custo = custosPorCodigo.get(codigo) ?? null;
-      const imposto = custo != null ? custo * (icmsPercentual / 100) : 0;
-      return { posicao: p.posicao, codigo, custo, imposto };
+      const valorComMargem = custo != null ? calcularValorComMargem(custo, faixasMarkup) : null;
+      const imposto = valorComMargem != null ? valorComMargem * (icmsPercentual / 100) : 0;
+      return { posicao: p.posicao, codigo, custo, valorComMargem, imposto };
     });
 
   const quantidadePecas = pecas.length;

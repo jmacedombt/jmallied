@@ -199,18 +199,33 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       for (const linha of data ?? []) custosPorCodigo.set(linha.codigo, Number(linha.valor_unitario));
     }
 
-    const [{ data: configImposto }, { data: configMaoObraBruta }] = await Promise.all([
+    const [{ data: configImposto }, { data: configMaoObraBruta }, { data: faixasMarkupBrutas }] = await Promise.all([
       supabase.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
       supabase.from("configuracoes_mao_de_obra").select("valor_uma_peca, valor_mais_de_uma_peca").eq("id", 1).single(),
+      supabase.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
     ]);
     const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
     const configMaoDeObra = {
       valor_uma_peca: Number(configMaoObraBruta?.valor_uma_peca ?? 80),
       valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 150),
     };
+    // mesma faixa de markup do BID — o imposto (ICMS) da Validação de
+    // Orçamentos precisa ser apurado sobre o custo JÁ com essa margem,
+    // igual ao cálculo do BID (não sobre o custo cru da Base Peças).
+    const faixasMarkup: FaixaMarkup[] = (faixasMarkupBrutas ?? []).map((f) => ({
+      valor_min: Number(f.valor_min),
+      valor_max: f.valor_max == null ? null : Number(f.valor_max),
+      multiplicador: Number(f.multiplicador),
+    }));
 
     const listaAparelhos: AparelhoValidacao[] = listaBruta.map((a) => {
-      const detalhe = calcularDetalheValidacao(a as CamposPecasOrcamento, custosPorCodigo, icmsPercentual, configMaoDeObra);
+      const detalhe = calcularDetalheValidacao(
+        a as CamposPecasOrcamento,
+        custosPorCodigo,
+        icmsPercentual,
+        configMaoDeObra,
+        faixasMarkup
+      );
       return {
         id: a.id,
         nf_remessa_allied: a.nf_remessa_allied,
