@@ -37,16 +37,28 @@ function textoResumo(base: BaseCalculoLucro): string {
     `Imposto (ICMS): ${formatarReal(base.impostoTotalPecas)}`,
     `Venda de peças: ${formatarReal(base.vendaTotalPecas)}`,
     `Mão de obra: ${formatarReal(base.maoDeObra)}`,
-    `Lucro Total: ${formatarReal(base.lucroTotal)}`,
-    `% Lucro Peças: ${formatarPercentual(base.percLucroPecas)}`,
-    `% Lucro Total: ${formatarPercentual(base.percLucroTotal)}`,
+    "",
+    `Lucro Total = Mão de obra + Venda de Peças − Custo das Peças − Imposto`,
+    `Lucro Total = ${formatarReal(base.lucroTotal)}`,
+    "",
+    `% Lucro Peças = (Venda − Custo) ÷ Venda`,
+    `% Lucro Peças = ${formatarPercentual(base.percLucroPecas)}`,
+    "",
+    `% Lucro Total = ((Venda + Mão de obra) − Custo) ÷ (Venda + Mão de obra)`,
+    `% Lucro Total = ${formatarPercentual(base.percLucroTotal)}`,
   ].join("\n");
 }
 
+const LARGURA_BALAO = 300;
+const ALTURA_ESTIMADA_BALAO = 360;
+
 // Célula da coluna "Lucro Total %": mostra o percentual colorido pela
-// faixa e, ao passar o mouse, um balão com toda a base de cálculo desse
-// registro (só desse, não do lote inteiro). Clicar fixa o balão aberto
-// com um botão de copiar no canto; clicar de novo fecha.
+// faixa e, ao passar o mouse, um balão com o cálculo completo desse
+// registro (só desse, não do lote inteiro) — cada etapa com a fórmula
+// usada, não só o resultado final. Clicar fixa o balão aberto com um
+// botão de copiar no canto; clicar de novo fecha. A posição é calculada
+// toda vez (com base no espaço livre da tela) pra nunca ficar cortado
+// nem sobreposto por outro conteúdo.
 export default function CelulaLucroPercentual({ base }: { base: BaseCalculoLucro }) {
   const [aberto, setAberto] = useState(false);
   const [fixado, setFixado] = useState(false);
@@ -59,7 +71,13 @@ export default function CelulaLucroPercentual({ base }: { base: BaseCalculoLucro
   function calcularPosicao() {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
-    setPos({ left: Math.max(8, rect.right - 300), top: rect.bottom + 6 });
+    const espacoAbaixo = window.innerHeight - rect.bottom;
+    const abrirParaCima = espacoAbaixo < ALTURA_ESTIMADA_BALAO && rect.top > espacoAbaixo;
+    const top = abrirParaCima
+      ? Math.max(8, rect.top - ALTURA_ESTIMADA_BALAO)
+      : Math.min(rect.bottom + 6, window.innerHeight - 8);
+    const left = Math.min(Math.max(8, rect.right - LARGURA_BALAO), window.innerWidth - LARGURA_BALAO - 8);
+    setPos({ left, top });
   }
 
   async function copiar() {
@@ -73,6 +91,30 @@ export default function CelulaLucroPercentual({ base }: { base: BaseCalculoLucro
   }
 
   const mostrar = aberto || fixado;
+
+  function FormulaCalculada({
+    label,
+    formula,
+    valor,
+    corValor,
+  }: {
+    label: string;
+    formula: string;
+    valor: string;
+    corValor?: string;
+  }) {
+    return (
+      <div>
+        <div className="flex justify-between gap-4">
+          <span style={{ color: "var(--ink)" }}>{label}</span>
+          <strong style={{ color: corValor ?? "var(--ink)" }}>{valor}</strong>
+        </div>
+        <p className="text-[10px]" style={{ color: "var(--muted)" }}>
+          {formula}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <span
@@ -103,12 +145,12 @@ export default function CelulaLucroPercentual({ base }: { base: BaseCalculoLucro
 
       {mostrar && pos && (
         <div
-          className="fixed z-[70] rounded-lg border shadow-2xl p-3 text-xs space-y-1.5 min-w-[240px]"
-          style={{ left: pos.left, top: pos.top, background: "var(--surface2)", borderColor: "var(--line)" }}
+          className="fixed z-[80] rounded-lg border shadow-2xl p-3 text-xs space-y-2"
+          style={{ left: pos.left, top: pos.top, width: LARGURA_BALAO, background: "var(--surface2)", borderColor: "var(--line)" }}
           onMouseLeave={() => setAberto(false)}
         >
           {fixado && (
-            <div className="flex items-center justify-end -mt-1 -mr-1 mb-1">
+            <div className="flex items-center justify-end -mt-1 -mr-1">
               <button
                 type="button"
                 onClick={(e) => {
@@ -123,35 +165,43 @@ export default function CelulaLucroPercentual({ base }: { base: BaseCalculoLucro
               </button>
             </div>
           )}
-          <p className="flex justify-between gap-4">
-            <span style={{ color: "var(--muted)" }}>Custo das peças</span>
-            <strong style={{ color: "var(--ink)" }}>{formatarReal(base.custoTotalPecas)}</strong>
-          </p>
-          <p className="flex justify-between gap-4">
-            <span style={{ color: "var(--muted)" }}>Imposto (ICMS)</span>
-            <strong style={{ color: "var(--ink)" }}>{formatarReal(base.impostoTotalPecas)}</strong>
-          </p>
-          <p className="flex justify-between gap-4">
-            <span style={{ color: "var(--muted)" }}>Venda de peças</span>
-            <strong style={{ color: "var(--ink)" }}>{formatarReal(base.vendaTotalPecas)}</strong>
-          </p>
-          <p className="flex justify-between gap-4">
-            <span style={{ color: "var(--muted)" }}>Mão de obra</span>
-            <strong style={{ color: "var(--ink)" }}>{formatarReal(base.maoDeObra)}</strong>
-          </p>
-          <div className="border-t pt-1.5 mt-1.5" style={{ borderColor: "var(--line)" }}>
+
+          <div className="space-y-1">
             <p className="flex justify-between gap-4">
-              <span style={{ color: "var(--muted)" }}>Lucro Total</span>
-              <strong style={{ color: "var(--ink)" }}>{formatarReal(base.lucroTotal)}</strong>
+              <span style={{ color: "var(--muted)" }}>Custo das peças</span>
+              <strong style={{ color: "var(--ink)" }}>{formatarReal(base.custoTotalPecas)}</strong>
             </p>
             <p className="flex justify-between gap-4">
-              <span style={{ color: "var(--muted)" }}>% Lucro Peças</span>
-              <strong style={{ color: "var(--ink)" }}>{formatarPercentual(base.percLucroPecas)}</strong>
+              <span style={{ color: "var(--muted)" }}>Imposto (ICMS)</span>
+              <strong style={{ color: "var(--ink)" }}>{formatarReal(base.impostoTotalPecas)}</strong>
             </p>
             <p className="flex justify-between gap-4">
-              <span style={{ color: "var(--muted)" }}>% Lucro Total</span>
-              <strong style={{ color: cor }}>{formatarPercentual(base.percLucroTotal)}</strong>
+              <span style={{ color: "var(--muted)" }}>Venda de peças</span>
+              <strong style={{ color: "var(--ink)" }}>{formatarReal(base.vendaTotalPecas)}</strong>
             </p>
+            <p className="flex justify-between gap-4">
+              <span style={{ color: "var(--muted)" }}>Mão de obra</span>
+              <strong style={{ color: "var(--ink)" }}>{formatarReal(base.maoDeObra)}</strong>
+            </p>
+          </div>
+
+          <div className="border-t pt-2 space-y-2" style={{ borderColor: "var(--line)" }}>
+            <FormulaCalculada
+              label="Lucro Total"
+              formula="Mão de obra + Venda de Peças − Custo − Imposto"
+              valor={formatarReal(base.lucroTotal)}
+            />
+            <FormulaCalculada
+              label="% Lucro Peças"
+              formula="(Venda − Custo) ÷ Venda"
+              valor={formatarPercentual(base.percLucroPecas)}
+            />
+            <FormulaCalculada
+              label="% Lucro Total"
+              formula="((Venda + Mão de obra) − Custo) ÷ (Venda + Mão de obra)"
+              valor={formatarPercentual(base.percLucroTotal)}
+              corValor={cor}
+            />
           </div>
         </div>
       )}

@@ -6,10 +6,11 @@
 
 // reaproveita o mesmo grupo de cargos já usado na Base Peças
 export { CARGOS_IMPORTACAO_BASE_PECAS as CARGOS_IMPORTACAO_ORCAMENTOS, podeImportarBasePecas as podeImportarOrcamentos } from "@/lib/pecas";
-// faixa de markup do BID — usada em calcularDetalheValidacao pra apurar o
-// ICMS sobre o valor JÁ com margem, igual ao cálculo do BID (não sobre o
-// custo cru da Base Peças).
-import { calcularValorComMargem, type FaixaMarkup } from "@/lib/bid";
+// mesmo cálculo usado no BID — reaproveitado aqui pra apurar o Imposto
+// (ICMS) e a Venda de Peça sobre o valor JÁ com margem, com exatamente
+// as mesmas regras de arredondamento do BID (não sobre o custo cru da
+// Base Peças, e sempre arredondado, nunca "quebrado").
+import { calcularCustoPecaAllied, type FaixaMarkup } from "@/lib/bid";
 
 // colunas da planilha original (0-indexed)
 export const COL_REPARADOR_TERCEIRO = 0; // A
@@ -237,11 +238,17 @@ export type PecaDetalheValidacao = {
    * null quando o código ainda não tem nenhuma compra importada. */
   custo: number | null;
   /** custo já com a margem da faixa de markup do BID aplicada — base
-   * usada pra apurar o imposto. Null quando não há faixa configurada
-   * que cubra esse custo. */
+   * usada pra apurar o imposto (2 casas decimais). Null quando não há
+   * faixa configurada que cubra esse custo. */
   valorComMargem: number | null;
-  /** ICMS% sobre o valorComMargem (não sobre o custo cru da Base Peças). */
+  /** ICMS% sobre o valorComMargem (não sobre o custo cru da Base Peças),
+   * arredondado pra cima com 2 casas — igual ao BID. */
   imposto: number;
+  /** Venda de Peça = valorComMargem + imposto, arredondado pra cima pro
+   * inteiro mais próximo — exatamente a mesma regra do "Custo Peça
+   * (Allied)" do BID, só que aqui representa o que vai ser cobrado do
+   * cliente por essa peça. Null quando não há custo ou faixa aplicável. */
+  vendaPeca: number | null;
 };
 
 export type CamposPecasOrcamento = {
@@ -276,11 +283,14 @@ export type DetalheValidacaoOrcamento = {
  * Monta o detalhe de peças de um orçamento pra Validação de Orçamentos:
  * custo de cada peça vem SEMPRE do valor mais recente da Base Peças
  * (pecas_vigentes, por código) — não do custo_peca_N gravado no próprio
- * orçamento nem do custo_peca_allied já calculado do BID. O imposto,
- * porém, segue a mesma regra do BID: primeiro aplica a faixa de markup
- * sobre o custo (valorComMargem = custo x multiplicador da faixa) e só
- * depois calcula o ICMS% sobre esse valor com margem — nunca ICMS%
- * direto sobre o custo cru da Base Peças.
+ * orçamento nem do custo_peca_allied já calculado do BID. Imposto e
+ * Venda de Peça, porém, seguem EXATAMENTE a mesma conta e o mesmo
+ * arredondamento do BID (calcularCustoPecaAllied): valorComMargem =
+ * teto(custo x multiplicador da faixa, 2 casas); imposto = teto(ICMS%
+ * sobre o valorComMargem, 2 casas); vendaPeca = teto(valorComMargem +
+ * imposto, inteiro) — nunca ICMS% direto sobre o custo cru, e nunca sem
+ * arredondar (evita a soma dos valores "quebrados" bater diferente do
+ * total exibido).
  */
 export function calcularDetalheValidacao(
   campos: CamposPecasOrcamento,
@@ -305,16 +315,21 @@ export function calcularDetalheValidacao(
     .map((p) => {
       const codigo = p.codigo!.trim();
       const custo = custosPorCodigo.get(codigo) ?? null;
-      const valorComMargem = custo != null ? calcularValorComMargem(custo, faixasMarkup) : null;
-      const imposto = valorComMargem != null ? valorComMargem * (icmsPercentual / 100) : 0;
-      return { posicao: p.posicao, codigo, custo, valorComMargem, imposto };
+      const resultado = custo != null ? calcularCustoPecaAllied(custo, faixasMarkup, icmsPercentual) : null;
+      return {
+        posicao: p.posicao,
+        codigo,
+        custo,
+        valorComMargem: resultado?.valorComMargem ?? null,
+        imposto: resultado?.valorImposto ?? 0,
+        vendaPeca: resultado?.custoPecaAllied ?? null,
+      };
     });
 
   const quantidadePecas = pecas.length;
   const custoTotalPecas = pecas.reduce((soma, p) => soma + (p.custo ?? 0), 0);
   const impostoTotalPecas = pecas.reduce((soma, p) => soma + p.imposto, 0);
-  const valorComMargemTotal = pecas.reduce((soma, p) => soma + (p.valorComMargem ?? 0), 0);
-  const vendaTotalPecas = valorComMargemTotal + impostoTotalPecas;
+  const vendaTotalPecas = pecas.reduce((soma, p) => soma + (p.vendaPeca ?? 0), 0);
   const maoDeObra = calcularMaoDeObraValidacao(quantidadePecas, configMaoDeObra);
   const temPecaSemCusto = pecas.some((p) => p.custo == null);
 

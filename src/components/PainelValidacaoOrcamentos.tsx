@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
 import { podeImportarBasePecas } from "@/lib/pecas";
+import { type FaixaMarkup } from "@/lib/bid";
 import PopupPecasValidacao, { type AparelhoValidacaoDetalhe } from "@/components/PopupPecasValidacao";
 import PopupRevisaoValidacao, { type ResumoValidacao } from "@/components/PopupRevisaoValidacao";
 import CelulaLucroPercentual, { corPercentualLucro } from "@/components/CelulaLucroPercentual";
@@ -74,12 +75,19 @@ function CardStat({
 export default function PainelValidacaoOrcamentos({
   aparelhos,
   perfil,
+  faixas,
+  icmsPercentual,
   pendentesLabel,
   topo,
   mensagemVazia = "Nenhum aparelho em Validação de Orçamentos no momento.",
 }: {
   aparelhos: AparelhoValidacao[];
   perfil: { cargo: string; is_master: boolean } | null;
+  /** faixas de markup do BID e o ICMS% configurado — usados só pra
+   * montar o balão de cálculo completo (mesmo formato do BID) ao passar
+   * o mouse na Venda de Peças, dentro do pop-up de peças. */
+  faixas: FaixaMarkup[];
+  icmsPercentual: number;
   /** conteúdo já pronto do balão de pendências dessa etapa (contador ao
    * vivo), pra entrar como o primeiro card da linha — mesmo componente
    * usado nas outras telas de Operacional, só estilizado igual aos
@@ -373,6 +381,8 @@ export default function PainelValidacaoOrcamentos({
       {detalhe && (
         <PopupPecasValidacao
           aparelho={detalhe}
+          faixas={faixas}
+          icmsPercentual={icmsPercentual}
           podeCadastrarPeca={podeCadastrarPeca}
           podeConfirmarSemPeca={podeConfirmarLote}
           onAtualizado={() => router.refresh()}

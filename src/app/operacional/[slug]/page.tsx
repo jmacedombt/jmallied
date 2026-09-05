@@ -245,6 +245,8 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         <PainelValidacaoOrcamentos
           aparelhos={listaAparelhos}
           perfil={perfil}
+          faixas={faixasMarkup}
+          icmsPercentual={icmsPercentual}
           mensagemVazia="Nenhum aparelho em Validação de Orçamentos no momento."
           topo={voltar}
           pendentesLabel={

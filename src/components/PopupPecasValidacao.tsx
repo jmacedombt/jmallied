@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { AlertTriangle, Check, Loader2, PackageSearch, PlusCircle, X } from "lucide-react";
 import { type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import { type FaixaMarkup } from "@/lib/bid";
 import PopupCadastrarPecaBase from "@/components/PopupCadastrarPecaBase";
+import TooltipCalculoBid, { type PecaParaTooltip } from "@/components/TooltipCalculoBid";
 
 export type AparelhoValidacaoDetalhe = DetalheValidacaoOrcamento & {
   id: string;
@@ -23,15 +25,22 @@ function formatarReal(valor: number): string {
 // custo fica em vermelho com botão pra cadastrar na hora; aparelho sem
 // nenhuma peça lançada mostra um botão pra confirmar que vai seguir
 // assim mesmo (só mão de obra) — enquanto não confirmado, bloqueia o
-// avanço do lote inteiro.
+// avanço do lote inteiro. A coluna "Venda de Peças" mostra, ao passar o
+// mouse, o passo a passo completo do cálculo (mesmo balão usado no BID:
+// faixa aplicada, markup usado, valor com margem, imposto e arredonda-
+// mento) — pra não ter dois jeitos diferentes de explicar a mesma conta.
 export default function PopupPecasValidacao({
   aparelho,
+  faixas,
+  icmsPercentual,
   podeCadastrarPeca,
   podeConfirmarSemPeca,
   onAtualizado,
   onFechar,
 }: {
   aparelho: AparelhoValidacaoDetalhe;
+  faixas: FaixaMarkup[];
+  icmsPercentual: number;
   podeCadastrarPeca: boolean;
   podeConfirmarSemPeca: boolean;
   onAtualizado: () => void;
@@ -40,6 +49,7 @@ export default function PopupPecasValidacao({
   const [cadastrando, setCadastrando] = useState<string | null>(null);
   const [confirmandoSemPeca, setConfirmandoSemPeca] = useState(false);
   const [erroConfirmar, setErroConfirmar] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<{ peca: PecaParaTooltip; x: number; y: number } | null>(null);
 
   async function confirmarSemPeca() {
     setConfirmandoSemPeca(true);
@@ -59,10 +69,15 @@ export default function PopupPecasValidacao({
     }
   }
 
+  function mostrarTooltip(e: React.MouseEvent, peca: PecaParaTooltip) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setTooltip({ peca, x: Math.max(8, rect.left - 260), y: rect.top });
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }}>
       <div
-        className="w-full max-w-lg rounded-2xl border shadow-2xl p-6"
+        className="w-full max-w-2xl rounded-2xl border shadow-2xl p-6"
         style={{ background: "var(--surface)", borderColor: "var(--line)" }}
       >
         <div className="flex items-center justify-between mb-1">
@@ -129,49 +144,73 @@ export default function PopupPecasValidacao({
                   <th className="px-3 py-2 font-medium">Código da peça</th>
                   <th className="px-3 py-2 font-medium text-right">Custo (Base Peças)</th>
                   <th className="px-3 py-2 font-medium text-right">Imposto (ICMS)</th>
+                  <th className="px-3 py-2 font-medium text-right">Venda de Peças</th>
                 </tr>
               </thead>
               <tbody>
-                {aparelho.pecas.map((p) => (
-                  <tr
-                    key={p.posicao}
-                    className="border-t"
-                    style={{
-                      borderColor: p.custo == null ? "#ef4444" : "var(--line)",
-                      background: p.custo == null ? "rgba(239, 68, 68, 0.08)" : undefined,
-                    }}
-                  >
-                    <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
-                      {p.posicao}
-                    </td>
-                    <td className="px-3 py-2 font-mono" style={{ color: "var(--ink)" }}>
-                      {p.codigo}
-                    </td>
-                    <td className="px-3 py-2 text-right" style={{ color: p.custo == null ? "#ef4444" : "var(--ink)" }}>
-                      {p.custo == null ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          Sem custo
-                          <button
-                            type="button"
-                            disabled={!podeCadastrarPeca}
-                            onClick={() => setCadastrando(p.codigo)}
-                            className="inline-flex items-center gap-1 text-xs font-medium rounded-md px-2 py-1 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                            style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.12)" }}
-                            title={podeCadastrarPeca ? "Cadastrar valor dessa peça na Base Peças" : "Sem custo na Base Peças"}
+                {aparelho.pecas.map((p) => {
+                  const pecaTooltip: PecaParaTooltip = {
+                    custo_peca_samsung: p.custo,
+                    valor_com_margem: p.valorComMargem,
+                    custo_peca_allied: p.vendaPeca,
+                    valor_imposto: p.imposto,
+                    travado: false,
+                  };
+                  return (
+                    <tr
+                      key={p.posicao}
+                      className="border-t"
+                      style={{
+                        borderColor: p.custo == null ? "#ef4444" : "var(--line)",
+                        background: p.custo == null ? "rgba(239, 68, 68, 0.08)" : undefined,
+                      }}
+                    >
+                      <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
+                        {p.posicao}
+                      </td>
+                      <td className="px-3 py-2 font-mono" style={{ color: "var(--ink)" }}>
+                        {p.codigo}
+                      </td>
+                      <td className="px-3 py-2 text-right" style={{ color: p.custo == null ? "#ef4444" : "var(--ink)" }}>
+                        {p.custo == null ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            Sem custo
+                            <button
+                              type="button"
+                              disabled={!podeCadastrarPeca}
+                              onClick={() => setCadastrando(p.codigo)}
+                              className="inline-flex items-center gap-1 text-xs font-medium rounded-md px-2 py-1 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.12)" }}
+                              title={podeCadastrarPeca ? "Cadastrar valor dessa peça na Base Peças" : "Sem custo na Base Peças"}
+                            >
+                              <PlusCircle size={12} />
+                              Cadastrar
+                            </button>
+                          </span>
+                        ) : (
+                          formatarReal(p.custo)
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
+                        {formatarReal(p.imposto)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {p.vendaPeca == null ? (
+                          <span style={{ color: "var(--muted)" }}>—</span>
+                        ) : (
+                          <span
+                            onMouseEnter={(e) => mostrarTooltip(e, pecaTooltip)}
+                            onMouseLeave={() => setTooltip(null)}
+                            className="inline-block cursor-help border-b border-dashed font-medium"
+                            style={{ color: "var(--ink)", borderColor: "var(--muted)" }}
                           >
-                            <PlusCircle size={12} />
-                            Cadastrar
-                          </button>
-                        </span>
-                      ) : (
-                        formatarReal(p.custo)
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
-                      {formatarReal(p.imposto)}
-                    </td>
-                  </tr>
-                ))}
+                            {formatarReal(p.vendaPeca)}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -207,6 +246,15 @@ export default function PopupPecasValidacao({
           </div>
         </div>
       </div>
+
+      {tooltip && (
+        <div
+          className="fixed z-[70] rounded-lg border shadow-2xl p-3"
+          style={{ background: "var(--surface2)", borderColor: "var(--line)", left: tooltip.x, top: tooltip.y }}
+        >
+          <TooltipCalculoBid peca={tooltip.peca} faixas={faixas} icmsPercentual={icmsPercentual} />
+        </div>
+      )}
 
       {cadastrando && (
         <PopupCadastrarPecaBase
