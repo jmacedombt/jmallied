@@ -1,12 +1,16 @@
 "use client";
 
-import { PackageSearch, X } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Check, Loader2, PackageSearch, PlusCircle, X } from "lucide-react";
 import { type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import PopupCadastrarPecaBase from "@/components/PopupCadastrarPecaBase";
 
 export type AparelhoValidacaoDetalhe = DetalheValidacaoOrcamento & {
+  id: string;
   nf_remessa_allied: string;
   os_reparadora: string | null;
   trade_allied: string;
+  validacaoConfirmadoSemPeca: boolean;
 };
 
 function formatarReal(valor: number): string {
@@ -14,16 +18,47 @@ function formatarReal(valor: number): string {
 }
 
 // Pop-up com o detalhe de um orçamento em Validação de Orçamentos: valor
-// da mão de obra, código de cada peça lançada e o custo/imposto dela
-// (sempre a partir do valor mais recente da Base Peças). Mais campos
-// entram aqui conforme o Rafael for detalhando o que falta.
+// da mão de obra, código de cada peça lançada e o custo/imposto/venda
+// dela (sempre a partir do valor mais recente da Base Peças). Peça sem
+// custo fica em vermelho com botão pra cadastrar na hora; aparelho sem
+// nenhuma peça lançada mostra um botão pra confirmar que vai seguir
+// assim mesmo (só mão de obra) — enquanto não confirmado, bloqueia o
+// avanço do lote inteiro.
 export default function PopupPecasValidacao({
   aparelho,
+  podeCadastrarPeca,
+  podeConfirmarSemPeca,
+  onAtualizado,
   onFechar,
 }: {
   aparelho: AparelhoValidacaoDetalhe;
+  podeCadastrarPeca: boolean;
+  podeConfirmarSemPeca: boolean;
+  onAtualizado: () => void;
   onFechar: () => void;
 }) {
+  const [cadastrando, setCadastrando] = useState<string | null>(null);
+  const [confirmandoSemPeca, setConfirmandoSemPeca] = useState(false);
+  const [erroConfirmar, setErroConfirmar] = useState<string | null>(null);
+
+  async function confirmarSemPeca() {
+    setConfirmandoSemPeca(true);
+    setErroConfirmar(null);
+    try {
+      const res = await fetch(`/api/operacional/orcamentos/${aparelho.id}/confirmar-sem-peca`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErroConfirmar(data?.error || "Não foi possível confirmar.");
+        setConfirmandoSemPeca(false);
+        return;
+      }
+      onAtualizado();
+    } catch {
+      setErroConfirmar("Falha de conexão. Tente novamente.");
+      setConfirmandoSemPeca(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }}>
       <div
@@ -52,9 +87,39 @@ export default function PopupPecasValidacao({
         </p>
 
         {aparelho.pecas.length === 0 ? (
-          <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
-            Nenhuma peça lançada pra esse orçamento ainda.
-          </p>
+          <div
+            className="rounded-xl border p-4 mb-4 space-y-3"
+            style={{ borderColor: "#eab308", background: "rgba(234, 179, 8, 0.08)" }}
+          >
+            <p className="text-sm flex items-center gap-1.5" style={{ color: "#a16207" }}>
+              <AlertTriangle size={14} />
+              Nenhuma peça lançada pra esse orçamento ainda.
+            </p>
+            {aparelho.validacaoConfirmadoSemPeca ? (
+              <p className="text-xs flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
+                <Check size={13} className="text-emerald-500" />
+                Já confirmado — esse aparelho vai seguir sem peça, só com mão de obra.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  Se realmente não tem peça nesse reparo, confirme abaixo pra liberar o avanço do lote.
+                </p>
+                <button
+                  type="button"
+                  onClick={confirmarSemPeca}
+                  disabled={!podeConfirmarSemPeca || confirmandoSemPeca}
+                  className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: "#eab308" }}
+                  title={podeConfirmarSemPeca ? undefined : "Seu cargo não tem permissão pra confirmar isso."}
+                >
+                  {confirmandoSemPeca ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                  Confirmar que segue sem peça
+                </button>
+                {erroConfirmar && <p className="text-xs text-red-500">{erroConfirmar}</p>}
+              </>
+            )}
+          </div>
         ) : (
           <div className="rounded-xl border overflow-hidden mb-4" style={{ borderColor: "var(--line)" }}>
             <table className="w-full text-sm">
@@ -83,7 +148,24 @@ export default function PopupPecasValidacao({
                       {p.codigo}
                     </td>
                     <td className="px-3 py-2 text-right" style={{ color: p.custo == null ? "#ef4444" : "var(--ink)" }}>
-                      {p.custo == null ? "Sem custo na Base Peças" : formatarReal(p.custo)}
+                      {p.custo == null ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          Sem custo
+                          <button
+                            type="button"
+                            disabled={!podeCadastrarPeca}
+                            onClick={() => setCadastrando(p.codigo)}
+                            className="inline-flex items-center gap-1 text-xs font-medium rounded-md px-2 py-1 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.12)" }}
+                            title={podeCadastrarPeca ? "Cadastrar valor dessa peça na Base Peças" : "Sem custo na Base Peças"}
+                          >
+                            <PlusCircle size={12} />
+                            Cadastrar
+                          </button>
+                        </span>
+                      ) : (
+                        formatarReal(p.custo)
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
                       {formatarReal(p.imposto)}
@@ -112,17 +194,30 @@ export default function PopupPecasValidacao({
             <strong style={{ color: "var(--ink)" }}>{formatarReal(aparelho.impostoTotalPecas)}</strong>
           </div>
           <div className="flex items-center justify-between">
+            <span style={{ color: "var(--muted)" }}>Venda de peças</span>
+            <strong style={{ color: "var(--ink)" }}>{formatarReal(aparelho.vendaTotalPecas)}</strong>
+          </div>
+          <div className="flex items-center justify-between">
             <span style={{ color: "var(--muted)" }}>Mão de obra</span>
             <strong style={{ color: "var(--ink)" }}>{formatarReal(aparelho.maoDeObra)}</strong>
           </div>
           <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
-            <span style={{ color: "var(--ink)" }}>Valor total do reparo</span>
-            <strong style={{ color: "var(--accent2)" }}>
-              {formatarReal(aparelho.valorTotalPecas + aparelho.maoDeObra)}
-            </strong>
+            <span style={{ color: "var(--ink)" }}>Lucro Total</span>
+            <strong style={{ color: "var(--accent2)" }}>{formatarReal(aparelho.lucroTotal)}</strong>
           </div>
         </div>
       </div>
+
+      {cadastrando && (
+        <PopupCadastrarPecaBase
+          codigo={cadastrando}
+          onFechar={() => setCadastrando(null)}
+          onSalvo={() => {
+            setCadastrando(null);
+            onAtualizado();
+          }}
+        />
+      )}
     </div>
   );
 }

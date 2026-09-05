@@ -252,10 +252,23 @@ export type CamposPecasOrcamento = {
 
 export type DetalheValidacaoOrcamento = {
   quantidadePecas: number;
+  /** soma do custo cru de cada peça, direto da Base Peças. */
   custoTotalPecas: number;
+  /** soma do ICMS de cada peça (já sobre o valor com margem). */
   impostoTotalPecas: number;
-  valorTotalPecas: number;
+  /** Valor Venda de Peças: soma de (valorComMargem + imposto) de cada
+   * peça — o que efetivamente vai ser cobrado pelas peças do reparo. */
+  vendaTotalPecas: number;
   maoDeObra: number;
+  /** mão de obra + venda de peças − custo das peças − imposto. */
+  lucroTotal: number;
+  /** (venda de peças − custo das peças) / venda de peças, em %. */
+  percLucroPecas: number;
+  /** ((venda de peças + mão de obra) − custo das peças) / (venda de peças + mão de obra), em %. */
+  percLucroTotal: number;
+  /** true quando alguma peça lançada não tem custo na Base Peças —
+   * dispara o destaque "Prioridade" (vermelho) na lista. */
+  temPecaSemCusto: boolean;
   pecas: PecaDetalheValidacao[];
 };
 
@@ -300,8 +313,26 @@ export function calcularDetalheValidacao(
   const quantidadePecas = pecas.length;
   const custoTotalPecas = pecas.reduce((soma, p) => soma + (p.custo ?? 0), 0);
   const impostoTotalPecas = pecas.reduce((soma, p) => soma + p.imposto, 0);
-  const valorTotalPecas = custoTotalPecas + impostoTotalPecas;
+  const valorComMargemTotal = pecas.reduce((soma, p) => soma + (p.valorComMargem ?? 0), 0);
+  const vendaTotalPecas = valorComMargemTotal + impostoTotalPecas;
   const maoDeObra = calcularMaoDeObraValidacao(quantidadePecas, configMaoDeObra);
+  const temPecaSemCusto = pecas.some((p) => p.custo == null);
 
-  return { quantidadePecas, custoTotalPecas, impostoTotalPecas, valorTotalPecas, maoDeObra, pecas };
+  const lucroTotal = maoDeObra + vendaTotalPecas - custoTotalPecas - impostoTotalPecas;
+  const percLucroPecas = vendaTotalPecas > 0 ? ((vendaTotalPecas - custoTotalPecas) / vendaTotalPecas) * 100 : 0;
+  const baseLucroTotal = vendaTotalPecas + maoDeObra;
+  const percLucroTotal = baseLucroTotal > 0 ? ((baseLucroTotal - custoTotalPecas) / baseLucroTotal) * 100 : 0;
+
+  return {
+    quantidadePecas,
+    custoTotalPecas,
+    impostoTotalPecas,
+    vendaTotalPecas,
+    maoDeObra,
+    lucroTotal,
+    percLucroPecas,
+    percLucroTotal,
+    temPecaSemCusto,
+    pecas,
+  };
 }

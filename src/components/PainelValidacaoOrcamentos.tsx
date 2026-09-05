@@ -1,8 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Coins, LayoutList, Percent, Wallet } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  BadgePercent,
+  Coins,
+  Gauge,
+  LayoutList,
+  PackageCheck,
+  Percent,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
+import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
+import { podeImportarBasePecas } from "@/lib/pecas";
 import PopupPecasValidacao, { type AparelhoValidacaoDetalhe } from "@/components/PopupPecasValidacao";
+import PopupRevisaoValidacao, { type ResumoValidacao } from "@/components/PopupRevisaoValidacao";
+import CelulaLucroPercentual, { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 
 export type AparelhoValidacao = AparelhoValidacaoDetalhe & {
   id: string;
@@ -16,24 +31,79 @@ function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-const CARDS_CONFIG = [
-  { chave: "quantidadePecas" as const, label: "Quantidade de Peças", icone: LayoutList, moeda: false },
-  { chave: "custoTotalPecas" as const, label: "Total de Custo de Peças", icone: Coins, moeda: true },
-  { chave: "impostoTotalPecas" as const, label: "Total de Imposto (ICMS)", icone: Percent, moeda: true },
-  { chave: "valorTotalPecas" as const, label: "Valor Total das Peças", icone: Wallet, moeda: true },
-];
+function formatarPercentual(valor: number): string {
+  return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
+// Faixa fininha com degradê no topo de cada card — só um detalhe visual
+// pedido pelo Rafael pra deixar os cards mais "vivos".
+function FaixaDegrade() {
+  return <div className="h-[3px] w-full" style={{ background: "linear-gradient(90deg, var(--accent), var(--accent2))" }} />;
+}
+
+function CardStat({
+  icone: Icone,
+  label,
+  valor,
+  cor,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  icone: React.ComponentType<any>;
+  label: string;
+  valor: React.ReactNode;
+  cor?: string;
+}) {
+  return (
+    <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+      <FaixaDegrade />
+      <div className="flex items-center gap-2 px-3 py-1.5">
+        <Icone size={14} style={{ color: cor ?? "var(--accent2)" }} />
+        <span className="flex flex-col leading-tight">
+          <span className="text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+            {label}
+          </span>
+          <span className="text-xs font-semibold" style={{ color: cor ?? "var(--ink)" }}>
+            {valor}
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function PainelValidacaoOrcamentos({
   aparelhos,
+  perfil,
+  pendentesLabel,
   topo,
   mensagemVazia = "Nenhum aparelho em Validação de Orçamentos no momento.",
 }: {
   aparelhos: AparelhoValidacao[];
+  perfil: { cargo: string; is_master: boolean } | null;
+  /** conteúdo já pronto do balão de pendências dessa etapa (contador ao
+   * vivo), pra entrar como o primeiro card da linha — mesmo componente
+   * usado nas outras telas de Operacional, só estilizado igual aos
+   * outros cards aqui. */
+  pendentesLabel: React.ReactNode;
   topo: React.ReactNode;
   mensagemVazia?: string;
 }) {
+  const router = useRouter();
   const [loteSelecionado, setLoteSelecionado] = useState("");
   const [detalhe, setDetalhe] = useState<AparelhoValidacao | null>(null);
+  const [popupRevisao, setPopupRevisao] = useState<"revisao" | "confirmar" | null>(null);
+
+  const podeCadastrarPeca = podeImportarBasePecas(perfil);
+  const podeConfirmarLote = podeConfirmarAnaliseEmLote(perfil);
+
+  // se o pop-up de um aparelho estiver aberto e a lista atualizar (depois
+  // de cadastrar peça, confirmar sem peça, ou o lote avançar), re-aponta
+  // pro objeto novo — senão o pop-up ficaria travado nos dados antigos.
+  useEffect(() => {
+    if (!detalhe) return;
+    const atualizado = aparelhos.find((a) => a.id === detalhe.id);
+    setDetalhe(atualizado ?? null);
+  }, [aparelhos, detalhe?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // lotes (NF Remessa) disponíveis nessa etapa — sempre com base em
   // TODOS os aparelhos, não só nos já filtrados, pra caixa de seleção
@@ -53,19 +123,57 @@ export default function PainelValidacaoOrcamentos({
 
   // cards sempre somam o que está sendo exibido na tabela agora — todos
   // os lotes juntos quando nenhum está selecionado, ou só o escolhido.
-  const totais = useMemo(
-    () =>
-      filtrados.reduce(
-        (acc, a) => ({
-          quantidadePecas: acc.quantidadePecas + a.quantidadePecas,
-          custoTotalPecas: acc.custoTotalPecas + a.custoTotalPecas,
-          impostoTotalPecas: acc.impostoTotalPecas + a.impostoTotalPecas,
-          valorTotalPecas: acc.valorTotalPecas + a.valorTotalPecas,
-        }),
-        { quantidadePecas: 0, custoTotalPecas: 0, impostoTotalPecas: 0, valorTotalPecas: 0 }
-      ),
-    [filtrados]
-  );
+  // % Lucro Peças/Total são recalculados sobre os totais agregados (não
+  // é a média dos percentuais de cada aparelho, isso distorceria o real).
+  const resumo: ResumoValidacao = useMemo(() => {
+    const base = filtrados.reduce(
+      (acc, a) => ({
+        quantidadePecas: acc.quantidadePecas + a.quantidadePecas,
+        custoTotalPecas: acc.custoTotalPecas + a.custoTotalPecas,
+        impostoTotalPecas: acc.impostoTotalPecas + a.impostoTotalPecas,
+        vendaTotalPecas: acc.vendaTotalPecas + a.vendaTotalPecas,
+        maoDeObraTotal: acc.maoDeObraTotal + a.maoDeObra,
+      }),
+      { quantidadePecas: 0, custoTotalPecas: 0, impostoTotalPecas: 0, vendaTotalPecas: 0, maoDeObraTotal: 0 }
+    );
+    const lucroTotal = base.maoDeObraTotal + base.vendaTotalPecas - base.custoTotalPecas - base.impostoTotalPecas;
+    const percLucroPecas = base.vendaTotalPecas > 0 ? ((base.vendaTotalPecas - base.custoTotalPecas) / base.vendaTotalPecas) * 100 : 0;
+    const baseLucroTotal = base.vendaTotalPecas + base.maoDeObraTotal;
+    const percLucroTotal = baseLucroTotal > 0 ? ((baseLucroTotal - base.custoTotalPecas) / baseLucroTotal) * 100 : 0;
+    return {
+      quantidadeOrcamentos: filtrados.length,
+      quantidadePecas: base.quantidadePecas,
+      custoTotalPecas: base.custoTotalPecas,
+      impostoTotalPecas: base.impostoTotalPecas,
+      maoDeObraTotal: base.maoDeObraTotal,
+      vendaTotalPecas: base.vendaTotalPecas,
+      lucroTotal,
+      percLucroPecas,
+      percLucroTotal,
+    };
+  }, [filtrados]);
+
+  // travas do lote selecionado — mesma checagem que o servidor faz de
+  // novo antes de confirmar (aqui é só pra já avisar e desabilitar o
+  // botão, evitando uma ida e volta desnecessária ao servidor).
+  const loteTemPecaSemCusto = filtrados.some((a) => a.temPecaSemCusto);
+  const loteTemPendenteConfirmacao = filtrados.some((a) => a.quantidadePecas === 0 && !a.validacaoConfirmadoSemPeca);
+  const podeConfirmarEnvio = !!loteSelecionado && !loteTemPecaSemCusto && !loteTemPendenteConfirmacao && podeConfirmarLote;
+
+  async function confirmarEnvioLote() {
+    const res = await fetch("/api/operacional/orcamentos/avancar-validacao-em-massa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nf_remessa_allied: loteSelecionado }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.error || "Não foi possível confirmar o envio.");
+    }
+    setPopupRevisao(null);
+    setLoteSelecionado("");
+    router.refresh();
+  }
 
   return (
     <div className="space-y-4">
@@ -73,48 +181,94 @@ export default function PainelValidacaoOrcamentos({
         <div className="flex items-center flex-wrap [&>*]:!mb-0">{topo}</div>
 
         <div className="flex items-center flex-wrap gap-2">
-          {CARDS_CONFIG.map((c) => {
-            const Icone = c.icone;
-            const valorBruto = totais[c.chave];
-            return (
-              <div
-                key={c.chave}
-                className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5"
-                style={{ borderColor: "var(--line)", background: "var(--surface2)" }}
-              >
-                <Icone size={14} style={{ color: "var(--accent2)" }} />
-                <span className="flex flex-col leading-tight">
-                  <span className="text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-                    {c.label}
-                  </span>
-                  <span className="text-xs font-semibold" style={{ color: "var(--ink)" }}>
-                    {c.moeda ? formatarReal(valorBruto) : valorBruto}
-                  </span>
-                </span>
-              </div>
-            );
-          })}
+          <CardStat icone={Gauge} label="Nessa etapa" valor={pendentesLabel} />
+          <CardStat icone={LayoutList} label="Quantidade de Peças" valor={resumo.quantidadePecas} />
+          <CardStat icone={Coins} label="Total de Custo de Peças" valor={formatarReal(resumo.custoTotalPecas)} />
+          <CardStat icone={Percent} label="Total de Imposto (ICMS)" valor={formatarReal(resumo.impostoTotalPecas)} />
+          <CardStat icone={Wallet} label="Valor Venda de Peças" valor={formatarReal(resumo.vendaTotalPecas)} />
+          <CardStat
+            icone={TrendingUp}
+            label="Lucro Total (R$)"
+            valor={formatarReal(resumo.lucroTotal)}
+            cor={resumo.lucroTotal >= 0 ? "#22c55e" : "#ef4444"}
+          />
+          <CardStat
+            icone={BadgePercent}
+            label="% Lucro Peças"
+            valor={formatarPercentual(resumo.percLucroPecas)}
+            cor={corPercentualLucro(resumo.percLucroPecas)}
+          />
+          <CardStat
+            icone={Gauge}
+            label="% Lucro Total"
+            valor={formatarPercentual(resumo.percLucroTotal)}
+            cor={corPercentualLucro(resumo.percLucroTotal)}
+          />
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <label className="text-xs" style={{ color: "var(--muted)" }}>
-          Lote (NF Remessa):
-        </label>
-        <select
-          value={loteSelecionado}
-          onChange={(e) => setLoteSelecionado(e.target.value)}
-          className="rounded-lg border px-3 py-2 text-sm outline-none focus:border-[var(--accent2)] focus:ring-1 focus:ring-[var(--accent2)] transition"
-          style={{ borderColor: "var(--line)", background: "var(--surface2)", color: "var(--ink)" }}
-        >
-          <option value="">Todos os lotes ({aparelhos.length})</option>
-          {lotes.map((l) => (
-            <option key={l.nf} value={l.nf}>
-              {l.nf} ({l.quantidade})
-            </option>
-          ))}
-        </select>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-xs" style={{ color: "var(--muted)" }}>
+            Lote (NF Remessa):
+          </label>
+          <select
+            value={loteSelecionado}
+            onChange={(e) => setLoteSelecionado(e.target.value)}
+            className="rounded-lg border px-3 py-2 text-sm outline-none focus:border-[var(--accent2)] focus:ring-1 focus:ring-[var(--accent2)] transition"
+            style={{ borderColor: "var(--line)", background: "var(--surface2)", color: "var(--ink)" }}
+          >
+            <option value="">Todos os lotes ({aparelhos.length})</option>
+            {lotes.map((l) => (
+              <option key={l.nf} value={l.nf}>
+                {l.nf} ({l.quantidade})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPopupRevisao("revisao")}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)]"
+            style={{ color: "var(--ink)", border: "1px solid var(--line)" }}
+          >
+            <AlertTriangle size={13} style={{ color: "var(--accent2)" }} />
+            Revisão
+          </button>
+          <button
+            type="button"
+            onClick={() => setPopupRevisao("confirmar")}
+            disabled={!podeConfirmarEnvio}
+            title={
+              !loteSelecionado
+                ? "Selecione um lote específico pra confirmar o envio."
+                : loteTemPecaSemCusto
+                  ? "Existem peças sem custo na Base Peças nesse lote (Prioridade)."
+                  : loteTemPendenteConfirmacao
+                    ? "Existem aparelhos sem peça que ainda não foram confirmados."
+                    : !podeConfirmarLote
+                      ? "Seu cargo não tem permissão pra confirmar o envio de um lote."
+                      : undefined
+            }
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: "var(--accent)" }}
+          >
+            <PackageCheck size={13} />
+            Confirmar Envio
+          </button>
+        </div>
       </div>
+
+      {loteSelecionado && (loteTemPecaSemCusto || loteTemPendenteConfirmacao) && (
+        <p className="text-xs flex items-center gap-1.5" style={{ color: "#ef4444" }}>
+          <AlertTriangle size={13} />
+          {loteTemPecaSemCusto
+            ? "Esse lote tem peça(s) sem custo na Base Peças (destaque vermelho / Prioridade) — cadastre antes de confirmar o envio."
+            : "Esse lote tem aparelho(s) sem peça que ainda não foram confirmados (destaque amarelo) — abra e confirme antes de enviar."}
+        </p>
+      )}
 
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
         <table className="w-full text-sm">
@@ -126,40 +280,76 @@ export default function PainelValidacaoOrcamentos({
               <th className="px-4 py-2.5 font-medium">Modelo comercial</th>
               <th className="px-4 py-2.5 font-medium">SKU</th>
               <th className="px-4 py-2.5 font-medium">Descrição</th>
+              <th className="px-4 py-2.5 font-medium text-right">Lucro Total %</th>
             </tr>
           </thead>
           <tbody>
-            {filtrados.map((a) => (
-              <tr
-                key={a.id}
-                onClick={() => setDetalhe(a)}
-                className="border-t cursor-pointer transition hover:bg-[var(--surface2)]"
-                style={{ borderColor: "var(--line)", background: "var(--surface)" }}
-                title="Clique pra ver mão de obra e peças desse orçamento"
-              >
-                <td className="px-4 py-2.5 font-mono" style={{ color: "var(--muted)" }}>
-                  {a.nf_remessa_allied}
-                </td>
-                <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
-                  {a.os_reparadora || "—"}
-                </td>
-                <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
-                  {a.os_care_allied}
-                </td>
-                <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
-                  {a.modelo_comercial}
-                </td>
-                <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
-                  {a.sku}
-                </td>
-                <td className="px-4 py-2.5" style={{ color: "var(--muted)" }} title={a.descricao_completa ?? ""}>
-                  {(a.descricao_completa ?? "").split(" ")[0]}
-                </td>
-              </tr>
-            ))}
+            {filtrados.map((a) => {
+              const prioridade = a.temPecaSemCusto;
+              const semPecaPendente = a.quantidadePecas === 0 && !a.validacaoConfirmadoSemPeca;
+              return (
+                <tr
+                  key={a.id}
+                  onClick={() => setDetalhe(a)}
+                  className="border-t cursor-pointer transition hover:brightness-110"
+                  style={{
+                    borderColor: prioridade ? "#ef4444" : semPecaPendente ? "#ca8a04" : "var(--line)",
+                    background: prioridade
+                      ? "rgba(239, 68, 68, 0.1)"
+                      : semPecaPendente
+                        ? "rgba(250, 240, 137, 0.12)"
+                        : "var(--surface)",
+                  }}
+                  title="Clique pra ver mão de obra e peças desse orçamento"
+                >
+                  <td className="px-4 py-2.5 font-mono" style={{ color: "var(--muted)" }}>
+                    {a.nf_remessa_allied}
+                  </td>
+                  <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
+                    <span className="inline-flex items-center gap-1.5">
+                      {a.os_reparadora || "—"}
+                      {prioridade && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.15)" }}
+                        >
+                          <AlertTriangle size={10} />
+                          PRIORIDADE
+                        </span>
+                      )}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
+                    {a.os_care_allied}
+                  </td>
+                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
+                    {a.modelo_comercial}
+                  </td>
+                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
+                    {a.sku}
+                  </td>
+                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }} title={a.descricao_completa ?? ""}>
+                    {(a.descricao_completa ?? "").split(" ")[0]}
+                  </td>
+                  <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                    <CelulaLucroPercentual
+                      base={{
+                        custoTotalPecas: a.custoTotalPecas,
+                        impostoTotalPecas: a.impostoTotalPecas,
+                        vendaTotalPecas: a.vendaTotalPecas,
+                        maoDeObra: a.maoDeObra,
+                        lucroTotal: a.lucroTotal,
+                        percLucroPecas: a.percLucroPecas,
+                        percLucroTotal: a.percLucroTotal,
+                      }}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
+                <td colSpan={7} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
                   {aparelhos.length === 0 ? mensagemVazia : "Nenhum aparelho encontrado nesse lote."}
                 </td>
               </tr>
@@ -168,12 +358,37 @@ export default function PainelValidacaoOrcamentos({
         </table>
       </div>
 
-      <p className="text-xs" style={{ color: "var(--muted)" }}>
-        Clique numa linha pra ver a mão de obra e os códigos de peça desse orçamento. O custo de cada peça vem sempre
-        do valor mais recente da Base Peças.
+      <p className="text-xs flex items-center gap-3 flex-wrap" style={{ color: "var(--muted)" }}>
+        <span>Clique numa linha pra ver a mão de obra e os códigos de peça desse orçamento.</span>
+        <span className="inline-flex items-center gap-1">
+          <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "rgba(239, 68, 68, 0.3)", border: "1px solid #ef4444" }} />
+          Prioridade (peça sem custo)
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "rgba(250, 240, 137, 0.4)", border: "1px solid #ca8a04" }} />
+          Sem peça lançada (aguardando confirmação)
+        </span>
       </p>
 
-      {detalhe && <PopupPecasValidacao aparelho={detalhe} onFechar={() => setDetalhe(null)} />}
+      {detalhe && (
+        <PopupPecasValidacao
+          aparelho={detalhe}
+          podeCadastrarPeca={podeCadastrarPeca}
+          podeConfirmarSemPeca={podeConfirmarLote}
+          onAtualizado={() => router.refresh()}
+          onFechar={() => setDetalhe(null)}
+        />
+      )}
+
+      {popupRevisao && (
+        <PopupRevisaoValidacao
+          modo={popupRevisao}
+          loteNf={loteSelecionado || undefined}
+          resumo={resumo}
+          onFechar={() => setPopupRevisao(null)}
+          onConfirmar={popupRevisao === "confirmar" ? confirmarEnvioLote : undefined}
+        />
+      )}
     </div>
   );
 }

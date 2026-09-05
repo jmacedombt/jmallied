@@ -168,7 +168,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhosBrutos } = await supabase
       .from("orcamentos")
       .select(
-        `id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, ${COLUNAS_PECAS_VALIDACAO}`
+        `id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_confirmado_sem_peca, ${COLUNAS_PECAS_VALIDACAO}`
       )
       .eq("status_operacional", status.valor)
       .order("nf_remessa_allied", { ascending: true })
@@ -235,6 +235,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         modelo_comercial: a.modelo_comercial,
         sku: a.sku,
         descricao_completa: a.descricao_completa,
+        validacaoConfirmadoSemPeca: a.validacao_confirmado_sem_peca,
         ...detalhe,
       };
     });
@@ -243,12 +244,14 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelValidacaoOrcamentos
           aparelhos={listaAparelhos}
+          perfil={perfil}
           mensagemVazia="Nenhum aparelho em Validação de Orçamentos no momento."
-          topo={
-            <>
-              {voltar}
-              {badgeContador(listaBruta.length)}
-            </>
+          topo={voltar}
+          pendentesLabel={
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <ContadorAoVivo status={status.valor} contagemInicial={listaBruta.length} /> pendente(s)
+            </span>
           }
         />
       </AppShell>
