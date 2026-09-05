@@ -66,7 +66,11 @@ export default async function BidPage({ searchParams }: { searchParams: { busca?
 
   return (
     <AppShell titulo="Base BID" tituloInfo={tituloInfo} perfil={perfil}>
-      <div className="flex flex-wrap items-center gap-3 mb-4">
+      {/* altura fixa (viewport - cabeçalho do app) — só a tabela rola
+          dentro dela, a página nunca cresce além do viewport, evitando
+          a barra de rolagem dupla (da página + da tabela). */}
+      <div className="flex flex-col" style={{ height: "calc(100vh - 112px)" }}>
+      <div className="flex flex-wrap items-center gap-3 mb-4 shrink-0">
         {podeImportarBid(perfil) && <ImportarBidForm />}
 
         <div className="flex flex-wrap items-center gap-2">
@@ -104,7 +108,7 @@ export default async function BidPage({ searchParams }: { searchParams: { busca?
         </div>
       </div>
 
-      <form method="GET" className="mb-4 max-w-sm">
+      <form method="GET" className="mb-4 max-w-sm shrink-0">
         <div className="relative">
           <Search
             size={15}
@@ -122,10 +126,12 @@ export default async function BidPage({ searchParams }: { searchParams: { busca?
         </div>
       </form>
 
-      <TabelaBidPecas pecas={pecas ?? []} faixas={faixas} icmsPercentual={icmsPercentual} />
+      <div className="flex-1 min-h-0">
+        <TabelaBidPecas pecas={pecas ?? []} faixas={faixas} icmsPercentual={icmsPercentual} />
+      </div>
 
       {totalPaginas > 1 && (
-        <div className="flex items-center gap-2 mt-4 text-sm">
+        <div className="flex items-center gap-2 mt-4 text-sm shrink-0">
           {pagina > 1 && (
             <Link
               href={`/bases/bid?busca=${encodeURIComponent(busca)}&pagina=${pagina - 1}`}
@@ -149,6 +155,7 @@ export default async function BidPage({ searchParams }: { searchParams: { busca?
           )}
         </div>
       )}
+      </div>
     </AppShell>
   );
 }

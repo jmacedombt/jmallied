@@ -128,14 +128,13 @@ export default function TabelaBidPecas({
     );
   }
 
+  // altura vem do container pai (que reserva exatamente o espaço
+  // sobrando na tela via flex) em vez de um "calc(100vh - Npx)" chutado
+  // — isso é o que evita a barra de rolagem dupla (a da página + a da
+  // tabela) quando a tela tem mais ou menos conteúdo acima da tabela.
   return (
-    <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
-      <div
-        ref={scrollRef}
-        onScroll={ocultarTooltip}
-        className="overflow-auto"
-        style={{ maxHeight: "calc(100vh - 260px)" }}
-      >
+    <div className="h-full flex flex-col rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
+      <div ref={scrollRef} onScroll={ocultarTooltip} className="flex-1 min-h-0 overflow-auto">
         <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
           <thead>
             <tr className="text-left">

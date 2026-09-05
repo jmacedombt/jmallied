@@ -1,4 +1,3 @@
-import { Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ConsultaBidPanel from "@/components/ConsultaBidPanel";
@@ -57,24 +56,17 @@ export default async function ConsultaBidPage() {
 
   const podeEditar = podeImportarBid(perfil);
 
+  const tituloInfo =
+    "Busca instantânea na base completa do BID. Combine os filtros de Part Number, Modelo e Peça Solução, e passe o mouse sobre o Custo Peça (Allied) pra ver como o valor foi calculado.";
+
   return (
-    <AppShell titulo="Consulta BID" perfil={perfil}>
-      <div className="flex items-center gap-2 mb-5">
-        <p className="text-sm" style={{ color: "var(--ink)" }}>
-          Busca instantânea na base completa do BID.
-        </p>
-        <div className="group relative inline-flex">
-          <Info size={15} style={{ color: "var(--muted)" }} className="cursor-help" />
-          <div
-            className="pointer-events-none absolute left-0 top-6 z-20 hidden w-80 rounded-lg border p-3 text-xs shadow-2xl group-hover:block"
-            style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
-          >
-            Combine os filtros de Part Number, Modelo e Peça Solução, e passe o mouse sobre o Custo Peça (Allied) pra
-            ver como o valor foi calculado.
-          </div>
-        </div>
+    <AppShell titulo="Consulta BID" tituloInfo={tituloInfo} perfil={perfil}>
+      {/* altura fixa (viewport - cabeçalho do app) pra caber tudo numa
+          tela só: só a tabela dentro do painel rola, a página em si não
+          cresce além do viewport — evita a barra de rolagem dupla. */}
+      <div className="flex flex-col" style={{ height: "calc(100vh - 112px)" }}>
+        <ConsultaBidPanel pecasIniciais={pecas} faixas={faixas} icmsPercentual={icmsPercentual} podeEditar={podeEditar} />
       </div>
-      <ConsultaBidPanel pecasIniciais={pecas} faixas={faixas} icmsPercentual={icmsPercentual} podeEditar={podeEditar} />
     </AppShell>
   );
 }

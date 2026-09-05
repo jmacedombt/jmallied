@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Info } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import TabelaBidPecas, { type PecaBid } from "@/components/TabelaBidPecas";
@@ -11,7 +11,7 @@ const LOTE_BUSCA = 1000;
 export default async function PendenciasBidPage({
   searchParams,
 }: {
-  searchParams: { pagina?: string; partNumber?: string; modelo?: string };
+  searchParams: { pagina?: string; partNumber?: string; modelo?: string; prioridade?: string };
 }) {
   const supabase = createClient();
   const {
@@ -30,6 +30,7 @@ export default async function PendenciasBidPage({
 
   const buscaPartNumber = (searchParams.partNumber ?? "").trim();
   const buscaModelo = (searchParams.modelo ?? "").trim();
+  const somentePrioridade = searchParams.prioridade === "1";
   const pagina = Math.max(1, Number(searchParams.pagina ?? "1") || 1);
 
   // busca todas as pendências (não só a página atual) pra poder ordenar
@@ -80,31 +81,44 @@ export default async function PendenciasBidPage({
     return prioridadeA - prioridadeB;
   });
 
-  const totalPaginas = Math.max(1, Math.ceil(pendentesOrdenadas.length / PAGINA_TAMANHO));
-  const inicioPagina = (pagina - 1) * PAGINA_TAMANHO;
-  const pecasPagina = pendentesOrdenadas.slice(inicioPagina, inicioPagina + PAGINA_TAMANHO);
   const totalPrioritarias = pendentesOrdenadas.filter((p) => partNumbersPrioritarios.has(p.part_number)).length;
 
-  function linkComFiltros(novaPagina: number) {
+  // filtro "só prioridade" entra depois da ordenação e não mexe nos
+  // totais do resumo acima (que sempre mostram o total geral) — só
+  // reduz o que aparece na tabela/paginação abaixo.
+  const pendentesFiltradas = somentePrioridade
+    ? pendentesOrdenadas.filter((p) => partNumbersPrioritarios.has(p.part_number))
+    : pendentesOrdenadas;
+
+  const totalPaginas = Math.max(1, Math.ceil(pendentesFiltradas.length / PAGINA_TAMANHO));
+  const inicioPagina = (pagina - 1) * PAGINA_TAMANHO;
+  const pecasPagina = pendentesFiltradas.slice(inicioPagina, inicioPagina + PAGINA_TAMANHO);
+
+  function linkComFiltros(novaPagina: number, prioridadeOverride: boolean = somentePrioridade) {
     const params = new URLSearchParams();
     if (buscaPartNumber) params.set("partNumber", buscaPartNumber);
     if (buscaModelo) params.set("modelo", buscaModelo);
+    if (prioridadeOverride) params.set("prioridade", "1");
     params.set("pagina", String(novaPagina));
     return `/bases/bid/pendencias?${params.toString()}`;
   }
 
   return (
     <AppShell titulo="Pendências BID" perfil={perfil}>
+      {/* altura fixa (viewport - cabeçalho do app) — só a tabela rola
+          dentro dela, a página nunca cresce além do viewport, evitando
+          a barra de rolagem dupla (da página + da tabela). */}
+      <div className="flex flex-col" style={{ height: "calc(100vh - 112px)" }}>
       <Link
         href="/bases/bid"
-        className="inline-flex items-center gap-1.5 text-xs hover:opacity-80 mb-4"
+        className="inline-flex items-center gap-1.5 text-xs hover:opacity-80 mb-3 shrink-0"
         style={{ color: "var(--muted)" }}
       >
         <ArrowLeft size={14} />
         Voltar para BID
       </Link>
 
-      <div className="flex items-center gap-4 mb-5 flex-wrap">
+      <div className="flex items-center gap-4 mb-3 flex-wrap shrink-0">
         <p className="text-sm" style={{ color: "var(--ink)" }}>
           <strong>{pendentesOrdenadas.length}</strong> peça(s) pendente(s)
           {totalPrioritarias > 0 && (
@@ -131,7 +145,7 @@ export default async function PendenciasBidPage({
         </div>
       </div>
 
-      <form method="GET" className="mb-4 flex gap-3 flex-wrap">
+      <form method="GET" className="mb-4 flex gap-3 flex-wrap items-center shrink-0">
         <input
           type="text"
           name="partNumber"
@@ -148,6 +162,7 @@ export default async function PendenciasBidPage({
           className="w-full max-w-xs rounded-lg border px-3.5 py-2.5 text-sm outline-none focus:border-[var(--accent2)] focus:ring-1 focus:ring-[var(--accent2)] transition bg-[var(--surface2)] border-[var(--line)]"
           style={{ color: "var(--ink)" }}
         />
+        {somentePrioridade && <input type="hidden" name="prioridade" value="1" />}
         <button
           type="submit"
           className="rounded-lg border px-4 py-2.5 text-sm transition hover:border-[var(--accent2)]"
@@ -155,7 +170,22 @@ export default async function PendenciasBidPage({
         >
           Buscar
         </button>
-        {(buscaPartNumber || buscaModelo) && (
+
+        <Link
+          href={linkComFiltros(1, !somentePrioridade)}
+          className="inline-flex items-center gap-1.5 rounded-lg border px-4 py-2.5 text-sm transition"
+          style={
+            somentePrioridade
+              ? { borderColor: "#ef4444", background: "rgba(239, 68, 68, 0.12)", color: "#ef4444" }
+              : { borderColor: "var(--line)", color: "var(--ink)" }
+          }
+          title="Mostrar só as peças com pedido em aberto esperando o cadastro"
+        >
+          <AlertTriangle size={15} />
+          Só prioridade
+        </Link>
+
+        {(buscaPartNumber || buscaModelo || somentePrioridade) && (
           <Link
             href="/bases/bid/pendencias"
             className="inline-flex items-center text-sm px-2"
@@ -166,15 +196,17 @@ export default async function PendenciasBidPage({
         )}
       </form>
 
-      <TabelaBidPecas
-        pecas={pecasPagina}
-        faixas={faixas}
-        icmsPercentual={icmsPercentual}
-        partNumbersPrioritarios={partNumbersPrioritarios}
-      />
+      <div className="flex-1 min-h-0">
+        <TabelaBidPecas
+          pecas={pecasPagina}
+          faixas={faixas}
+          icmsPercentual={icmsPercentual}
+          partNumbersPrioritarios={partNumbersPrioritarios}
+        />
+      </div>
 
       {totalPaginas > 1 && (
-        <div className="flex items-center gap-2 mt-4 text-sm">
+        <div className="flex items-center gap-2 mt-4 text-sm shrink-0">
           {pagina > 1 && (
             <Link
               href={linkComFiltros(pagina - 1)}
@@ -198,6 +230,7 @@ export default async function PendenciasBidPage({
           )}
         </div>
       )}
+      </div>
     </AppShell>
   );
 }

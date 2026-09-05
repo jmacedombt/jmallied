@@ -209,8 +209,8 @@ export default function ConsultaBidPanel({
       : null;
 
   return (
-    <div>
-      <div className="flex flex-wrap items-end gap-3 mb-5">
+    <div className="h-full flex flex-col">
+      <div className="flex flex-wrap items-end gap-3 mb-4 shrink-0">
         <div className="relative flex-1 min-w-[220px] max-w-xs">
           <label className="block text-xs mb-1" style={{ color: "var(--muted)" }}>
             Part Number
@@ -292,7 +292,7 @@ export default function ConsultaBidPanel({
         )}
       </div>
 
-      <div className="flex items-center justify-between mb-2.5">
+      <div className="flex items-center justify-between mb-2.5 shrink-0">
         <p className="text-xs" style={{ color: "var(--muted)" }}>
           <strong style={{ color: "var(--ink)" }}>{pecasFiltradas.length}</strong> de {pecas.length} peça(s)
           {selecionados.size > 0 ? ` · ${selecionados.size} selecionada(s)` : ""}
@@ -322,8 +322,8 @@ export default function ConsultaBidPanel({
         )}
       </div>
 
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
-        <div ref={scrollRef} onScroll={ocultarTooltip} className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 320px)" }}>
+      <div className="rounded-xl border overflow-hidden flex-1 min-h-0 flex flex-col" style={{ borderColor: "var(--line)" }}>
+        <div ref={scrollRef} onScroll={ocultarTooltip} className="flex-1 min-h-0 overflow-y-auto">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
             <thead>
               <tr className="text-left">

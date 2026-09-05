@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCheck, ClipboardCheck, Loader2, Search } from "lucide-react";
+import { AlertTriangle, CheckCheck, ClipboardCheck, Loader2, PackageCheck, Search } from "lucide-react";
 import PopupConfirmar from "@/components/PopupConfirmar";
 import PopupPecasOrcamento, { type AparelhoComPecas } from "@/components/PopupPecasOrcamento";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
@@ -29,6 +29,13 @@ function pecasFaltandoNoBid(aparelho: AparelhoAgAnalise, precosBid: Record<strin
     if (!info || info.custo_peca_allied == null) faltando.push(peca);
   }
   return faltando;
+}
+
+/** true quando o orçamento já tem ao menos uma peça lançada (peca_1..peca_10
+ * preenchida) — indicador visual pra diferenciar, na lista, quem já chegou
+ * em Ag. Análise com peças atreladas de quem ainda está sem nenhuma. */
+function temPecasAtreladas(aparelho: AparelhoAgAnalise): boolean {
+  return POSICOES.some((n) => Boolean(aparelho[`peca_${n}` as keyof AparelhoAgAnalise]));
 }
 
 export default function PainelAgAnalise({
@@ -261,6 +268,7 @@ export default function PainelAgAnalise({
             {filtrados.map((a) => {
               const faltando = faltandoPorAparelho.get(a.id) ?? [];
               const temFaltando = faltando.length > 0;
+              const temPecas = temPecasAtreladas(a);
               return (
                 <tr
                   key={a.id}
@@ -289,6 +297,11 @@ export default function PainelAgAnalise({
                   <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
                     <span className="inline-flex items-center gap-1.5">
                       {temFaltando && <AlertTriangle size={13} style={{ color: "#ef4444" }} />}
+                      {temPecas && (
+                        <span title="Já tem peça(s) lançada(s) nesse orçamento">
+                          <PackageCheck size={13} style={{ color: "#14b8a6" }} />
+                        </span>
+                      )}
                       {a.os_reparadora || "—"}
                     </span>
                   </td>
@@ -342,9 +355,9 @@ export default function PainelAgAnalise({
         </table>
       </div>
 
-      <p className="text-xs" style={{ color: "var(--muted)" }}>
+      <p className="text-xs flex items-center gap-1.5 flex-wrap" style={{ color: "var(--muted)" }}>
         Clique numa linha pra ver as peças lançadas nesse orçamento. Linhas em vermelho têm peça sem custo cadastrado
-        no BID.
+        no BID. <PackageCheck size={12} style={{ color: "#14b8a6" }} className="inline" /> = já tem peça(s) lançada(s).
       </p>
 
       {confirmando && (
