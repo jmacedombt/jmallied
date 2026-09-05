@@ -81,7 +81,10 @@ export default function PainelAgAnalise({
   const [mostrarPopupRecusaLote, setMostrarPopupRecusaLote] = useState(false);
   const [processandoRecusaLote, setProcessandoRecusaLote] = useState(false);
   const [erroRecusaLote, setErroRecusaLote] = useState<string | null>(null);
-  const [emVermelho, setEmVermelho] = useState<Set<string>>(new Set());
+  // destaque de cor na linha logo depois de uma ação (verde = análise
+  // confirmada, vermelho = reprovado) — some sozinho depois de alguns
+  // segundos (ver animarSaidaDaLista).
+  const [destaqueSaida, setDestaqueSaida] = useState<Record<string, "verde" | "vermelho">>({});
   const [saindoAgora, setSaindoAgora] = useState<Set<string>>(new Set());
 
   useEffect(() => setItens(aparelhos), [aparelhos]);
@@ -131,13 +134,47 @@ export default function PainelAgAnalise({
     });
   }
 
+  // depois de uma ação que tira o orçamento dessa lista (confirmar
+  // análise = verde, reprovar = vermelho): a(s) linha(s) ficam com a cor
+  // de destaque por um instante — pra dar tempo da pessoa ver o que
+  // aconteceu — e só depois somem, indo pra próxima etapa por trás.
+  async function animarSaidaDaLista(ids: string[], cor: "verde" | "vermelho") {
+    const idsSet = new Set(ids);
+    setSelecionados((atual) => {
+      const novo = new Set(atual);
+      for (const id of ids) novo.delete(id);
+      return novo;
+    });
+    setDestaqueSaida((atual) => {
+      const novo = { ...atual };
+      for (const id of ids) novo[id] = cor;
+      return novo;
+    });
+    await esperar(1400);
+    setSaindoAgora((atual) => new Set([...atual, ...ids]));
+    await esperar(300);
+    setItens((atual) => atual.filter((a) => !idsSet.has(a.id)));
+    setDestaqueSaida((atual) => {
+      const novo = { ...atual };
+      for (const id of ids) delete novo[id];
+      return novo;
+    });
+    setSaindoAgora((atual) => {
+      const novo = new Set(atual);
+      for (const id of ids) novo.delete(id);
+      return novo;
+    });
+    router.refresh();
+  }
+
   async function confirmarAnalise() {
     if (!confirmando) return;
-    setProcessandoId(confirmando.id);
+    const id = confirmando.id;
+    setProcessandoId(id);
     setErroConfirmar(null);
 
     try {
-      const res = await fetch(`/api/operacional/orcamentos/${confirmando.id}/confirmar-analise`, {
+      const res = await fetch(`/api/operacional/orcamentos/${id}/confirmar-analise`, {
         method: "POST",
       });
       const data = await res.json().catch(() => null);
@@ -148,48 +185,13 @@ export default function PainelAgAnalise({
         return;
       }
 
-      setItens((atual) => atual.filter((a) => a.id !== confirmando.id));
-      setSelecionados((atual) => {
-        const novo = new Set(atual);
-        novo.delete(confirmando.id);
-        return novo;
-      });
       setConfirmando(null);
-      router.refresh();
+      setProcessandoId(null);
+      await animarSaidaDaLista([id], "verde");
     } catch {
       setErroConfirmar("Falha de conexão. Tente novamente.");
+      setProcessandoId(null);
     }
-
-    setProcessandoId(null);
-  }
-
-  // depois de reprovar (individual ou em lote): a(s) linha(s) ficam
-  // vermelhas por um instante — pra dar tempo da pessoa ver o que
-  // aconteceu — e só depois somem da lista (indo pra 8 - Orçamento
-  // Reprovado por trás).
-  async function animarSaidaPorReprovacao(ids: string[]) {
-    const idsSet = new Set(ids);
-    setSelecionados((atual) => {
-      const novo = new Set(atual);
-      for (const id of ids) novo.delete(id);
-      return novo;
-    });
-    setEmVermelho((atual) => new Set([...atual, ...ids]));
-    await esperar(1400);
-    setSaindoAgora((atual) => new Set([...atual, ...ids]));
-    await esperar(300);
-    setItens((atual) => atual.filter((a) => !idsSet.has(a.id)));
-    setEmVermelho((atual) => {
-      const novo = new Set(atual);
-      for (const id of ids) novo.delete(id);
-      return novo;
-    });
-    setSaindoAgora((atual) => {
-      const novo = new Set(atual);
-      for (const id of ids) novo.delete(id);
-      return novo;
-    });
-    router.refresh();
   }
 
   async function recusarSelecionadosEmLote(motivo: string) {
@@ -215,7 +217,7 @@ export default function PainelAgAnalise({
 
       setMostrarPopupRecusaLote(false);
       setProcessandoRecusaLote(false);
-      await animarSaidaPorReprovacao(ids);
+      await animarSaidaDaLista(ids, "vermelho");
     } catch {
       setErroRecusaLote("Falha de conexão. Tente novamente.");
       setProcessandoRecusaLote(false);
@@ -364,30 +366,42 @@ export default function PainelAgAnalise({
               const faltando = faltandoPorAparelho.get(a.id) ?? [];
               const temFaltando = faltando.length > 0;
               const temPecas = temPecasAtreladas(a);
-              const reprovadaAgora = emVermelho.has(a.id);
+              const destaque = destaqueSaida[a.id];
               const saindo = saindoAgora.has(a.id);
               return (
                 <tr
                   key={a.id}
-                  onClick={() => !reprovadaAgora && setDetalhe(a)}
+                  onClick={() => !destaque && setDetalhe(a)}
                   className="border-t cursor-pointer transition-all duration-300 ease-in hover:bg-[var(--surface2)]"
                   style={{
-                    borderColor: reprovadaAgora ? "#ef4444" : temFaltando ? "#ef4444" : "var(--line)",
-                    background: reprovadaAgora
-                      ? "rgba(239, 68, 68, 0.22)"
-                      : temFaltando
-                        ? "rgba(239, 68, 68, 0.07)"
-                        : "var(--surface)",
+                    borderColor:
+                      destaque === "verde"
+                        ? "#22c55e"
+                        : destaque === "vermelho"
+                          ? "#ef4444"
+                          : temFaltando
+                            ? "#ef4444"
+                            : "var(--line)",
+                    background:
+                      destaque === "verde"
+                        ? "rgba(34, 197, 94, 0.22)"
+                        : destaque === "vermelho"
+                          ? "rgba(239, 68, 68, 0.22)"
+                          : temFaltando
+                            ? "rgba(239, 68, 68, 0.07)"
+                            : "var(--surface)",
                     opacity: saindo ? 0 : 1,
                     transform: saindo ? "translateX(12px)" : "translateX(0)",
-                    pointerEvents: reprovadaAgora ? "none" : undefined,
+                    pointerEvents: destaque ? "none" : undefined,
                   }}
                   title={
-                    reprovadaAgora
-                      ? "Reprovado — indo pra 8 - Orçamento Reprovado"
-                      : temFaltando
-                        ? `Peça(s) sem custo no BID: ${faltando.join(", ")} — clique pra ver e cadastrar`
-                        : "Clique pra ver as peças desse orçamento"
+                    destaque === "verde"
+                      ? "Análise confirmada — indo pra Validação de Orçamentos"
+                      : destaque === "vermelho"
+                        ? "Reprovado — indo pra 8 - Orçamento Reprovado"
+                        : temFaltando
+                          ? `Peça(s) sem custo no BID: ${faltando.join(", ")} — clique pra ver e cadastrar`
+                          : "Clique pra ver as peças desse orçamento"
                   }
                 >
                   {podeLote && (
@@ -539,7 +553,7 @@ export default function PainelAgAnalise({
           onReprovado={() => {
             const id = reprovando.id;
             setReprovando(null);
-            animarSaidaPorReprovacao([id]);
+            animarSaidaDaLista([id], "vermelho");
           }}
         />
       )}
