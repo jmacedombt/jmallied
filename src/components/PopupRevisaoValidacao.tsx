@@ -35,7 +35,7 @@ function linhas(resumo: ResumoValidacao) {
     { label: "Lucro Líquido da Peça (R$)", valor: formatarReal(resumo.lucroLiquidoPeca) },
     { label: "Total de Mão de Obra (R$)", valor: formatarReal(resumo.maoDeObraTotal) },
     { label: "Lucro Total (R$)", valor: formatarReal(resumo.lucroTotal), destaque: true },
-    { label: "% Lucro Peças (margem sobre venda)", valor: formatarPercentual(resumo.percLucroPecas) },
+    { label: "% Lucro Peças", valor: formatarPercentual(resumo.percLucroPecas) },
     { label: "% Lucro Total", valor: formatarPercentual(resumo.percLucroTotal), destaque: true },
   ];
 }

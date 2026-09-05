@@ -260,7 +260,7 @@ export default function PopupPecasValidacao({
             Lucro Líquido da Peça + Mão de obra
           </p>
           <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
-            <span style={{ color: "var(--ink)" }}>% Lucro Peças (margem s/ venda)</span>
+            <span style={{ color: "var(--ink)" }}>% Lucro Peças</span>
             <strong style={{ color: corPercentualLucro(aparelho.percLucroPecas) }}>
               {formatarPercentual(aparelho.percLucroPecas)}
             </strong>

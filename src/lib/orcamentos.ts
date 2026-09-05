@@ -277,7 +277,7 @@ export type DetalheValidacaoOrcamento = {
   /** lucroLiquidoPeca + mão de obra — o resultado combinado (peça + mão de
    * obra) do reparo inteiro. */
   lucroTotal: number;
-  /** Margem sobre venda: lucroLiquidoPeca / venda de peças, em %. */
+  /** % Lucro Peças: lucroLiquidoPeca / venda de peças, em %. */
   percLucroPecas: number;
   /** lucroTotal / (venda de peças + mão de obra), em %. */
   percLucroTotal: number;

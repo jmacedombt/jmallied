@@ -270,7 +270,7 @@ export default function PainelValidacaoOrcamentos({
     {
       key: "percLucroPecas",
       icone: BadgePercent,
-      label: "% Lucro Peças (margem s/ venda)",
+      label: "% Lucro Peças",
       formula: "(Venda − Custo − Imposto) ÷ Venda",
       cor: corPercentualLucro(resumo.percLucroPecas),
       formatar: (r) => formatarPercentual(r.percLucroPecas),
