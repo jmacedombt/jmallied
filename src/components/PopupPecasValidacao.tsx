@@ -241,6 +241,13 @@ export default function PopupPecasValidacao({
             <span style={{ color: "var(--muted)" }}>Venda de peças</span>
             <strong style={{ color: "var(--ink)" }}>{formatarReal(aparelho.vendaTotalPecas)}</strong>
           </div>
+          <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
+            <span style={{ color: "var(--ink)" }}>Lucro Bruto da Peça</span>
+            <strong style={{ color: "var(--ink)" }}>{formatarReal(aparelho.lucroBrutoPeca)}</strong>
+          </div>
+          <p className="text-[11px]" style={{ color: "var(--muted)" }}>
+            Venda de peças − Custo das peças − Imposto (sem mão de obra)
+          </p>
           <div className="flex items-center justify-between">
             <span style={{ color: "var(--muted)" }}>Mão de obra</span>
             <strong style={{ color: "var(--ink)" }}>{formatarReal(aparelho.maoDeObra)}</strong>
@@ -250,10 +257,10 @@ export default function PopupPecasValidacao({
             <strong style={{ color: "var(--accent2)" }}>{formatarReal(aparelho.lucroTotal)}</strong>
           </div>
           <p className="text-[11px]" style={{ color: "var(--muted)" }}>
-            Venda de peças + Mão de obra − Custo das peças
+            Lucro Bruto da Peça + Mão de obra
           </p>
           <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
-            <span style={{ color: "var(--ink)" }}>% Lucro Peças</span>
+            <span style={{ color: "var(--ink)" }}>% Lucro Peças (margem s/ venda)</span>
             <strong style={{ color: corPercentualLucro(aparelho.percLucroPecas) }}>
               {formatarPercentual(aparelho.percLucroPecas)}
             </strong>

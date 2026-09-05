@@ -267,14 +267,19 @@ export type DetalheValidacaoOrcamento = {
    * peça — o que efetivamente vai ser cobrado pelas peças do reparo. */
   vendaTotalPecas: number;
   maoDeObra: number;
-  /** venda de peças + mão de obra − custo das peças. Note que o Imposto
-   * não entra separado aqui: ele já está embutido dentro de vendaTotalPecas
-   * (venda de peça = custo x markup + imposto), então subtrair de novo
-   * contaria a mesma coisa duas vezes. */
+  /** Lucro Bruto da Peça: venda de peças − custo das peças − imposto —
+   * só o bloco de peça, sem misturar mão de obra. Mesmo o Imposto já
+   * estando embutido no valor de venda (venda de peça = custo x markup +
+   * imposto), ele é dinheiro que passa pela empresa e vai pro governo —
+   * não fica de lucro — por isso desconta de novo aqui: venda é a
+   * receita bruta faturada, e o imposto é um repasse, não lucro. */
+  lucroBrutoPeca: number;
+  /** lucroBrutoPeca + mão de obra — o resultado combinado (peça + mão de
+   * obra) do reparo inteiro. */
   lucroTotal: number;
-  /** (venda de peças − custo das peças) / venda de peças, em %. */
+  /** Margem sobre venda: lucroBrutoPeca / venda de peças, em %. */
   percLucroPecas: number;
-  /** ((venda de peças + mão de obra) − custo das peças) / (venda de peças + mão de obra), em %. */
+  /** lucroTotal / (venda de peças + mão de obra), em %. */
   percLucroTotal: number;
   /** true quando alguma peça lançada não tem custo na Base Peças —
    * dispara o destaque "Prioridade" (vermelho) na lista. */
@@ -336,10 +341,13 @@ export function calcularDetalheValidacao(
   const maoDeObra = calcularMaoDeObraValidacao(quantidadePecas, configMaoDeObra);
   const temPecaSemCusto = pecas.some((p) => p.custo == null);
 
-  const lucroTotal = vendaTotalPecas + maoDeObra - custoTotalPecas;
-  const percLucroPecas = vendaTotalPecas > 0 ? ((vendaTotalPecas - custoTotalPecas) / vendaTotalPecas) * 100 : 0;
+  // bloco só de peça (venda − custo − imposto), sem misturar mão de
+  // obra — e o combinado (+ mão de obra) por cima dele.
+  const lucroBrutoPeca = vendaTotalPecas - custoTotalPecas - impostoTotalPecas;
+  const lucroTotal = lucroBrutoPeca + maoDeObra;
+  const percLucroPecas = vendaTotalPecas > 0 ? (lucroBrutoPeca / vendaTotalPecas) * 100 : 0;
   const baseLucroTotal = vendaTotalPecas + maoDeObra;
-  const percLucroTotal = baseLucroTotal > 0 ? ((baseLucroTotal - custoTotalPecas) / baseLucroTotal) * 100 : 0;
+  const percLucroTotal = baseLucroTotal > 0 ? (lucroTotal / baseLucroTotal) * 100 : 0;
 
   return {
     quantidadePecas,
@@ -347,6 +355,7 @@ export function calcularDetalheValidacao(
     impostoTotalPecas,
     vendaTotalPecas,
     maoDeObra,
+    lucroBrutoPeca,
     lucroTotal,
     percLucroPecas,
     percLucroTotal,

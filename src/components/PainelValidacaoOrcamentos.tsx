@@ -9,6 +9,7 @@ import {
   Gauge,
   LayoutList,
   PackageCheck,
+  PiggyBank,
   Receipt,
   TrendingUp,
   Wallet,
@@ -36,6 +37,7 @@ type CardKey =
   | "custoTotalPecas"
   | "impostoTotalPecas"
   | "vendaTotalPecas"
+  | "lucroBrutoPeca"
   | "maoDeObraTotal"
   | "lucroTotal"
   | "percLucroPecas"
@@ -64,18 +66,22 @@ function calcularResumoDeLista(lista: AparelhoValidacao[]): ResumoValidacao {
     }),
     { quantidadePecas: 0, custoTotalPecas: 0, impostoTotalPecas: 0, vendaTotalPecas: 0, maoDeObraTotal: 0 }
   );
-  // Venda de Peças já é custo x markup + imposto — o Imposto não entra
-  // separado aqui de novo (senão contaria a mesma coisa duas vezes).
-  const lucroTotal = base.vendaTotalPecas + base.maoDeObraTotal - base.custoTotalPecas;
-  const percLucroPecas = base.vendaTotalPecas > 0 ? ((base.vendaTotalPecas - base.custoTotalPecas) / base.vendaTotalPecas) * 100 : 0;
+  // venda é a receita bruta faturada (já inclui o imposto embutido no
+  // preço), e o imposto é repasse pro governo — não fica de lucro — por
+  // isso desconta de novo aqui. Lucro Bruto da Peça é só o bloco de
+  // peça (sem misturar mão de obra); Lucro Total é o combinado.
+  const lucroBrutoPeca = base.vendaTotalPecas - base.custoTotalPecas - base.impostoTotalPecas;
+  const lucroTotal = lucroBrutoPeca + base.maoDeObraTotal;
+  const percLucroPecas = base.vendaTotalPecas > 0 ? (lucroBrutoPeca / base.vendaTotalPecas) * 100 : 0;
   const baseLucroTotal = base.vendaTotalPecas + base.maoDeObraTotal;
-  const percLucroTotal = baseLucroTotal > 0 ? ((baseLucroTotal - base.custoTotalPecas) / baseLucroTotal) * 100 : 0;
+  const percLucroTotal = baseLucroTotal > 0 ? (lucroTotal / baseLucroTotal) * 100 : 0;
   return {
     quantidadeOrcamentos: lista.length,
     quantidadePecas: base.quantidadePecas,
     custoTotalPecas: base.custoTotalPecas,
     impostoTotalPecas: base.impostoTotalPecas,
     maoDeObraTotal: base.maoDeObraTotal,
+    lucroBrutoPeca,
     vendaTotalPecas: base.vendaTotalPecas,
     lucroTotal,
     percLucroPecas,
@@ -236,20 +242,28 @@ export default function PainelValidacaoOrcamentos({
     { key: "custoTotalPecas", icone: Coins, label: "Total de Custo de Peças", formatar: (r) => formatarReal(r.custoTotalPecas) },
     { key: "impostoTotalPecas", icone: Receipt, label: "Total de Imposto (ICMS)", formatar: (r) => formatarReal(r.impostoTotalPecas) },
     { key: "vendaTotalPecas", icone: Wallet, label: "Valor Venda de Peças", formatar: (r) => formatarReal(r.vendaTotalPecas) },
+    {
+      key: "lucroBrutoPeca",
+      icone: PiggyBank,
+      label: "Lucro Bruto da Peça",
+      formula: "Venda de Peças − Custo das Peças − Imposto (sem mão de obra)",
+      cor: resumo.lucroBrutoPeca >= 0 ? "#22c55e" : "#ef4444",
+      formatar: (r) => formatarReal(r.lucroBrutoPeca),
+    },
     { key: "maoDeObraTotal", icone: Wrench, label: "Mão de Obra", formatar: (r) => formatarReal(r.maoDeObraTotal) },
     {
       key: "lucroTotal",
       icone: TrendingUp,
       label: "Lucro Total (R$)",
-      formula: "Venda de Peças + Mão de obra − Custo das Peças",
+      formula: "Lucro Bruto da Peça + Mão de obra",
       cor: resumo.lucroTotal >= 0 ? "#22c55e" : "#ef4444",
       formatar: (r) => formatarReal(r.lucroTotal),
     },
     {
       key: "percLucroPecas",
       icone: BadgePercent,
-      label: "% Lucro Peças",
-      formula: "(Venda − Custo) ÷ Venda",
+      label: "% Lucro Peças (margem s/ venda)",
+      formula: "(Venda − Custo − Imposto) ÷ Venda",
       cor: corPercentualLucro(resumo.percLucroPecas),
       formatar: (r) => formatarPercentual(r.percLucroPecas),
     },
@@ -257,7 +271,7 @@ export default function PainelValidacaoOrcamentos({
       key: "percLucroTotal",
       icone: Gauge,
       label: "% Lucro Total",
-      formula: "((Venda + Mão de obra) − Custo) ÷ (Venda + Mão de obra)",
+      formula: "Lucro Total ÷ (Venda + Mão de obra)",
       cor: corPercentualLucro(resumo.percLucroTotal),
       formatar: (r) => formatarPercentual(r.percLucroTotal),
     },
@@ -267,7 +281,7 @@ export default function PainelValidacaoOrcamentos({
   // não tem card próprio na linha de cima (decidido pra não competir por
   // espaço); em vez disso ela aparece como contexto dentro do pop-up
   // desses cards, junto com Custo/Imposto/Venda.
-  const CARDS_COM_BASE: CardKey[] = ["lucroTotal", "percLucroPecas", "percLucroTotal"];
+  const CARDS_COM_BASE: CardKey[] = ["lucroBrutoPeca", "lucroTotal", "percLucroPecas", "percLucroTotal"];
 
   const cardDetalhe = cardAberto ? CARDS.find((c) => c.key === cardAberto) : undefined;
   const baseCalculoCard: BaseCalculoResumo | undefined =
