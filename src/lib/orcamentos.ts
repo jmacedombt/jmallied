@@ -207,3 +207,88 @@ export function calcularValoresOrcamento(
 
   return { quantidadePecas, valorTotalPeca, maoDeObra, valorTotalReparo };
 }
+
+/**
+ * Mão de obra usada especificamente na tela Validação de Orçamentos:
+ * 0 ou 1 peça usam o mesmo valor (valor_uma_peca), mais de 1 peça usa
+ * valor_mais_de_uma_peca. Reaproveita os valores configuráveis de
+ * Configurações > Mão de obra, mas agrupa "sem peça" junto com "uma
+ * peça" — diferente de calcularValoresOrcamento (usado na importação),
+ * que trata as três faixas (0 / 1 / mais de 1) separadamente.
+ */
+export function calcularMaoDeObraValidacao(
+  quantidadePecas: number,
+  config: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca">
+): number {
+  return quantidadePecas > 1 ? config.valor_mais_de_uma_peca : config.valor_uma_peca;
+}
+
+// ---- Validação de Orçamentos (por lote / NF Remessa) ----
+
+export type PecaDetalheValidacao = {
+  /** "1".."10" pra peça normal, "Extra 1".."Extra 5" pra peça adicional. */
+  posicao: string;
+  codigo: string;
+  /** valor mais recente da Base Peças (pecas_vigentes) pra esse código —
+   * null quando o código ainda não tem nenhuma compra importada. */
+  custo: number | null;
+  /** custo x ICMS%, direto — sem passar pela faixa de markup do BID. */
+  imposto: number;
+};
+
+export type CamposPecasOrcamento = {
+  peca_1: string | null; peca_2: string | null; peca_3: string | null; peca_4: string | null; peca_5: string | null;
+  peca_6: string | null; peca_7: string | null; peca_8: string | null; peca_9: string | null; peca_10: string | null;
+  peca_add_1: string | null; peca_add_2: string | null; peca_add_3: string | null; peca_add_4: string | null; peca_add_5: string | null;
+};
+
+export type DetalheValidacaoOrcamento = {
+  quantidadePecas: number;
+  custoTotalPecas: number;
+  impostoTotalPecas: number;
+  valorTotalPecas: number;
+  maoDeObra: number;
+  pecas: PecaDetalheValidacao[];
+};
+
+/**
+ * Monta o detalhe de peças de um orçamento pra Validação de Orçamentos:
+ * custo de cada peça vem SEMPRE do valor mais recente da Base Peças
+ * (pecas_vigentes, por código) — não do custo_peca_N gravado no próprio
+ * orçamento nem do preço calculado do BID (que já embute markup). O
+ * imposto é ICMS% direto sobre esse custo, sem multiplicador de faixa.
+ */
+export function calcularDetalheValidacao(
+  campos: CamposPecasOrcamento,
+  custosPorCodigo: Map<string, number>,
+  icmsPercentual: number,
+  configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca">
+): DetalheValidacaoOrcamento {
+  const posicoes = [
+    ...Array.from({ length: 10 }, (_, i) => ({
+      posicao: String(i + 1),
+      codigo: campos[`peca_${i + 1}` as keyof CamposPecasOrcamento],
+    })),
+    ...Array.from({ length: 5 }, (_, i) => ({
+      posicao: `Extra ${i + 1}`,
+      codigo: campos[`peca_add_${i + 1}` as keyof CamposPecasOrcamento],
+    })),
+  ];
+
+  const pecas: PecaDetalheValidacao[] = posicoes
+    .filter((p) => p.codigo && p.codigo.trim())
+    .map((p) => {
+      const codigo = p.codigo!.trim();
+      const custo = custosPorCodigo.get(codigo) ?? null;
+      const imposto = custo != null ? custo * (icmsPercentual / 100) : 0;
+      return { posicao: p.posicao, codigo, custo, imposto };
+    });
+
+  const quantidadePecas = pecas.length;
+  const custoTotalPecas = pecas.reduce((soma, p) => soma + (p.custo ?? 0), 0);
+  const impostoTotalPecas = pecas.reduce((soma, p) => soma + p.imposto, 0);
+  const valorTotalPecas = custoTotalPecas + impostoTotalPecas;
+  const maoDeObra = calcularMaoDeObraValidacao(quantidadePecas, configMaoDeObra);
+
+  return { quantidadePecas, custoTotalPecas, impostoTotalPecas, valorTotalPecas, maoDeObra, pecas };
+}

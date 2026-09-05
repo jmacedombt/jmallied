@@ -3,16 +3,20 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
-import { statusPorSlug } from "@/lib/orcamentos";
+import { statusPorSlug, calcularDetalheValidacao, type CamposPecasOrcamento } from "@/lib/orcamentos";
 import { type AparelhoAgAbertura } from "@/components/TabelaAgAbertura";
 import PainelAgAbertura from "@/components/PainelAgAbertura";
 import PainelAgTriagem from "@/components/PainelAgTriagem";
 import PainelAgAnalise, { type AparelhoAgAnalise } from "@/components/PainelAgAnalise";
+import PainelValidacaoOrcamentos, { type AparelhoValidacao } from "@/components/PainelValidacaoOrcamentos";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
 import { buscarPrecosBidPorPartNumber, type FaixaMarkup } from "@/lib/bid";
 
 const COLUNAS_PECAS =
   "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, custo_peca_1, custo_peca_2, custo_peca_3, custo_peca_4, custo_peca_5, custo_peca_6, custo_peca_7, custo_peca_8, custo_peca_9, custo_peca_10";
+
+const COLUNAS_PECAS_VALIDACAO =
+  "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5";
 
 export default async function StatusOperacionalPage({ params }: { params: { slug: string } }) {
   const statusEncontrado = statusPorSlug(params.slug);
@@ -153,6 +157,82 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
             <>
               {voltar}
               {badgeContador(aparelhos?.length ?? 0)}
+            </>
+          }
+        />
+      </AppShell>
+    );
+  }
+
+  if (status.slug === "validacao-orcamentos") {
+    const { data: aparelhosBrutos } = await supabase
+      .from("orcamentos")
+      .select(
+        `id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, ${COLUNAS_PECAS_VALIDACAO}`
+      )
+      .eq("status_operacional", status.valor)
+      .order("nf_remessa_allied", { ascending: true })
+      .order("updated_at", { ascending: false });
+
+    const listaBruta = aparelhosBrutos ?? [];
+
+    // códigos de peça únicos referenciados (peça normal + peça
+    // adicional) por todo mundo nessa etapa, pra buscar o custo mais
+    // recente de cada um de uma vez só na Base Peças.
+    const codigosUnicos = Array.from(
+      new Set(
+        listaBruta
+          .flatMap((a) => [
+            a.peca_1, a.peca_2, a.peca_3, a.peca_4, a.peca_5, a.peca_6, a.peca_7, a.peca_8, a.peca_9, a.peca_10,
+            a.peca_add_1, a.peca_add_2, a.peca_add_3, a.peca_add_4, a.peca_add_5,
+          ])
+          .map((c) => c?.trim())
+          .filter((c): c is string => !!c)
+      )
+    );
+
+    const custosPorCodigo = new Map<string, number>();
+    const TAMANHO_LOTE_CODIGOS = 400;
+    for (let i = 0; i < codigosUnicos.length; i += TAMANHO_LOTE_CODIGOS) {
+      const lote = codigosUnicos.slice(i, i + TAMANHO_LOTE_CODIGOS);
+      const { data } = await supabase.from("pecas_vigentes").select("codigo, valor_unitario").in("codigo", lote);
+      for (const linha of data ?? []) custosPorCodigo.set(linha.codigo, Number(linha.valor_unitario));
+    }
+
+    const [{ data: configImposto }, { data: configMaoObraBruta }] = await Promise.all([
+      supabase.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+      supabase.from("configuracoes_mao_de_obra").select("valor_uma_peca, valor_mais_de_uma_peca").eq("id", 1).single(),
+    ]);
+    const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
+    const configMaoDeObra = {
+      valor_uma_peca: Number(configMaoObraBruta?.valor_uma_peca ?? 80),
+      valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 150),
+    };
+
+    const listaAparelhos: AparelhoValidacao[] = listaBruta.map((a) => {
+      const detalhe = calcularDetalheValidacao(a as CamposPecasOrcamento, custosPorCodigo, icmsPercentual, configMaoDeObra);
+      return {
+        id: a.id,
+        nf_remessa_allied: a.nf_remessa_allied,
+        os_reparadora: a.os_reparadora,
+        trade_allied: a.trade_allied,
+        os_care_allied: a.os_care_allied,
+        modelo_comercial: a.modelo_comercial,
+        sku: a.sku,
+        descricao_completa: a.descricao_completa,
+        ...detalhe,
+      };
+    });
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <PainelValidacaoOrcamentos
+          aparelhos={listaAparelhos}
+          mensagemVazia="Nenhum aparelho em Validação de Orçamentos no momento."
+          topo={
+            <>
+              {voltar}
+              {badgeContador(listaBruta.length)}
             </>
           }
         />
