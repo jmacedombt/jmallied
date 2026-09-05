@@ -235,6 +235,30 @@ export async function POST(request: Request) {
     }
   }
 
+  // grava o "lote" desse recálculo — é o que permite reabrir depois,
+  // pela tela Base BID, a lista de peças e os valores (o que era e o
+  // que passou a ser) desse clique específico em "Recalcular". Só cria
+  // o lote quando algo de fato mudou, pra não poluir o histórico com um
+  // registro vazio toda vez que alguém clica em "Recalcular" sem que a
+  // Base Peças tenha mudado nada.
+  let recalculoId: string | null = null;
+  if (atualizacoes.length > 0) {
+    const { data: recalculo, error: erroRecalculo } = await admin
+      .from("bid_recalculos")
+      .insert({
+        executado_por: user.id,
+        pecas_verificadas: pecas.length,
+        pecas_alteradas: atualizacoes.length,
+      })
+      .select("id")
+      .single();
+    if (erroRecalculo) {
+      return NextResponse.json({ error: erroRecalculo.message }, { status: 400 });
+    }
+    recalculoId = recalculo.id;
+    for (const linha of historico) linha.recalculo_id = recalculoId;
+  }
+
   for (let i = 0; i < historico.length; i += TAMANHO_LOTE) {
     await admin.from("bid_historico_valores").insert(historico.slice(i, i + TAMANHO_LOTE));
   }
@@ -243,5 +267,6 @@ export async function POST(request: Request) {
     pecasVerificadas: pecas.length,
     pecasAlteradas: atualizacoes.length,
     divergenciasConfirmadas: divergencias.length,
+    recalculoId,
   });
 }

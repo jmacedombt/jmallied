@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ImportarBidForm from "@/components/ImportarBidForm";
 import TabelaBidPecas, { type PecaBid } from "@/components/TabelaBidPecas";
+import HistoricoRecalculosBid from "@/components/HistoricoRecalculosBid";
 import { podeImportarBid, type FaixaMarkup } from "@/lib/bid";
 
 const PAGINA_TAMANHO = 50;
@@ -105,6 +106,8 @@ export default async function BidPage({ searchParams }: { searchParams: { busca?
               Relatório BID
             </Link>
           )}
+
+          {podeImportarBid(perfil) && <HistoricoRecalculosBid />}
         </div>
       </div>
 
