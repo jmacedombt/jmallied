@@ -396,7 +396,9 @@ export default function PainelValidacaoOrcamentos({
           <button
             type="button"
             onClick={() => setPopupRevisao("revisao")}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)]"
+            disabled={!loteSelecionado}
+            title={!loteSelecionado ? "Selecione um lote específico pra ver a revisão." : undefined}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)] disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ color: "var(--ink)", border: "1px solid var(--line)" }}
           >
             <AlertTriangle size={13} style={{ color: "var(--accent2)" }} />
