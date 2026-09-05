@@ -61,6 +61,7 @@ export default function PainelAgAnalise({
   const [precosBid, setPrecosBid] = useState(precosBidIniciais);
   const [buscaOs, setBuscaOs] = useState("");
   const [buscaTrade, setBuscaTrade] = useState("");
+  const [somenteSemPecas, setSomenteSemPecas] = useState(false);
   const [detalhe, setDetalhe] = useState<AparelhoAgAnalise | null>(null);
   const [confirmando, setConfirmando] = useState<AparelhoAgAnalise | null>(null);
   const [processandoId, setProcessandoId] = useState<string | null>(null);
@@ -83,9 +84,10 @@ export default function PainelAgAnalise({
     return itens.filter((a) => {
       if (os && !(a.os_reparadora ?? "").includes(os)) return false;
       if (trade && !a.trade_allied.toLowerCase().includes(trade)) return false;
+      if (somenteSemPecas && temPecasAtreladas(a)) return false;
       return true;
     });
-  }, [itens, buscaOs, buscaTrade]);
+  }, [itens, buscaOs, buscaTrade, somenteSemPecas]);
 
   const faltandoPorAparelho = useMemo(() => {
     const mapa = new Map<string, string[]>();
@@ -218,6 +220,17 @@ export default function PainelAgAnalise({
               style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
             />
           </div>
+          <label
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs cursor-pointer transition hover:border-[var(--accent2)]"
+            style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
+          >
+            <input
+              type="checkbox"
+              checked={somenteSemPecas}
+              onChange={(e) => setSomenteSemPecas(e.target.checked)}
+            />
+            Somente sem peças
+          </label>
         </div>
       </div>
 
