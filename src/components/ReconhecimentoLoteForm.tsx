@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarCheck2 } from "lucide-react";
+import { formatarDataBrasilia } from "@/lib/tempo";
 
 export type LoteReconhecimento = {
   id: string;
@@ -72,7 +73,7 @@ export default function ReconhecimentoLoteForm({ lotes }: { lotes: LoteReconheci
             <option value="">Selecione um lote já importado…</option>
             {lotes.map((lote) => (
               <option key={lote.id} value={lote.id}>
-                {lote.nf_remessa_allied} — {new Date(lote.importado_em).toLocaleDateString("pt-BR")} —{" "}
+                {lote.nf_remessa_allied} — {formatarDataBrasilia(lote.importado_em)} —{" "}
                 {lote.aparelhos_no_arquivo} aparelho(s)
                 {lote.data_reconhecimento ? " (já reconhecido)" : ""}
               </option>

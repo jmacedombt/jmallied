@@ -5,6 +5,7 @@ import AppShell from "@/components/AppShell";
 import BotaoGerarRelatorioBid from "@/components/BotaoGerarRelatorioBid";
 import BotaoMarcarBidEnviado from "@/components/BotaoMarcarBidEnviado";
 import { podeImportarBid } from "@/lib/bid";
+import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
 type LogRelatorio = {
   id: string;
@@ -75,7 +76,7 @@ export default async function RelatorioBidPage() {
             <BotaoMarcarBidEnviado />
             {ultimoEnvio?.valor_enviado_em && (
               <span className="text-xs" style={{ color: "var(--muted)" }}>
-                Último envio: {new Date(ultimoEnvio.valor_enviado_em).toLocaleString("pt-BR")}
+                Último envio: {formatarDataHoraBrasilia(ultimoEnvio.valor_enviado_em)}
               </span>
             )}
             <div className="group relative inline-flex">
@@ -127,7 +128,7 @@ export default async function RelatorioBidPage() {
                           {usuario ? `${usuario.nome} ${usuario.sobrenome}` : "—"}
                         </td>
                         <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
-                          {new Date(log.gerado_em).toLocaleString("pt-BR")}
+                          {formatarDataHoraBrasilia(log.gerado_em)}
                         </td>
                         <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
                           {log.nome_arquivo}

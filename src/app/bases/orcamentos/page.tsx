@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ImportarOrcamentosForm from "@/components/ImportarOrcamentosForm";
 import { podeImportarOrcamentos } from "@/lib/orcamentos";
+import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
 type ResumoOrcamentos = {
   aparelhos: number;
@@ -93,7 +94,7 @@ export default async function OrcamentosPage() {
                     {lote.nf_remessa_allied}
                   </td>
                   <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
-                    {new Date(lote.importado_em).toLocaleString("pt-BR")}
+                    {formatarDataHoraBrasilia(lote.importado_em)}
                   </td>
                   <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
                     {usuario ? `${usuario.nome} ${usuario.sobrenome}` : "—"}

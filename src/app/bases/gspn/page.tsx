@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ImportarGspnForm from "@/components/ImportarGspnForm";
 import { podeImportarGspn } from "@/lib/gspn";
+import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
 export default async function BaseGspnPage() {
   const supabase = createClient();
@@ -64,7 +65,7 @@ export default async function BaseGspnPage() {
         >
           Última importação:{" "}
           <strong style={{ color: "var(--ink)" }}>
-            {ultimaImportacao ? new Date(ultimaImportacao.importado_em).toLocaleString("pt-BR") : "—"}
+            {ultimaImportacao ? formatarDataHoraBrasilia(ultimaImportacao.importado_em) : "—"}
           </strong>{" "}
           {ultimaImportacao && (
             <>

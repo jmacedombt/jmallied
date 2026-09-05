@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Lock, Pencil, Save, Search, Unlock, X } from "lucide-react";
 import { percentualLucro, type FaixaMarkup, type PecaBidConsulta } from "@/lib/bid";
+import { formatarDataBrasilia } from "@/lib/tempo";
 import TooltipCalculoBid from "@/components/TooltipCalculoBid";
 
 function formatarMoeda(valor: number | null) {
@@ -20,7 +21,7 @@ function ordenarSolucoes(peca: PecaBidConsulta) {
 }
 
 function formatarUltimaAlteracao(data: string, direcao: "+" | "-" | null) {
-  const texto = new Date(data).toLocaleDateString("pt-BR");
+  const texto = formatarDataBrasilia(data);
   if (direcao === "+") return { texto, seta: "▲", cor: "#ef4444" };
   if (direcao === "-") return { texto, seta: "▼", cor: "#22c55e" };
   return { texto, seta: null, cor: "var(--muted)" };

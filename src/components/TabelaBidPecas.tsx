@@ -4,6 +4,7 @@ import { Fragment, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Clock, Lock, RefreshCcw } from "lucide-react";
 import { type FaixaMarkup } from "@/lib/bid";
+import { formatarDataBrasilia, formatarDataHoraBrasilia } from "@/lib/tempo";
 import TooltipCalculoBid from "@/components/TooltipCalculoBid";
 
 export type SolucaoBid = { id: string; peca_solucao: string; principal: boolean };
@@ -46,7 +47,7 @@ function ordenarSolucoes(solucoes: SolucaoBid[]) {
 }
 
 function formatarUltimaAlteracao(data: string, direcao: "+" | "-" | null) {
-  const texto = new Date(data).toLocaleDateString("pt-BR");
+  const texto = formatarDataBrasilia(data);
   if (direcao === "+") return { texto, seta: "▲", cor: "#ef4444" };
   if (direcao === "-") return { texto, seta: "▼", cor: "#22c55e" };
   return { texto, seta: null as string | null, cor: "var(--muted)" };
@@ -324,7 +325,7 @@ export default function TabelaBidPecas({
                                     {diminuiu && <span style={{ color: "#22c55e" }}>▼</span>}
                                   </span>
                                   <span style={{ color: "var(--muted)" }}>
-                                    ({new Date(h.criado_em).toLocaleString("pt-BR")}
+                                    ({formatarDataHoraBrasilia(h.criado_em)}
                                     {usuario ? ` · ${usuario.nome} ${usuario.sobrenome}` : ""})
                                   </span>
                                 </div>

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, ScanBarcode, XCircle } from "lucide-react";
 import { processarBipagem, type TipoBipagem } from "@/lib/etiquetas";
+import { formatarHoraBrasilia } from "@/lib/tempo";
 
 type LinhaHistorico = {
   id: number;
@@ -27,7 +28,7 @@ export default function PainelBipagem({ modo }: { modo: TipoBipagem }) {
 
   function registrar(ok: boolean, mensagem: string) {
     setHistorico((atual) => [
-      { id: proximoIdHistorico++, hora: new Date().toLocaleTimeString("pt-BR"), ok, mensagem },
+      { id: proximoIdHistorico++, hora: formatarHoraBrasilia(new Date()), ok, mensagem },
       ...atual,
     ]);
   }

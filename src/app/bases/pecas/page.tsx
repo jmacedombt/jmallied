@@ -3,6 +3,7 @@ import AppShell from "@/components/AppShell";
 import ImportarBasePecasForm from "@/components/ImportarBasePecasForm";
 import GraficoPecasPorPeriodo from "@/components/GraficoPecasPorPeriodo";
 import { formatarDataBr, podeImportarBasePecas } from "@/lib/pecas";
+import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
 export default async function BasePecasPage() {
   const supabase = createClient();
@@ -71,7 +72,7 @@ export default async function BasePecasPage() {
           Atualizada em{" "}
           <strong style={{ color: "var(--ink)" }}>
             {ultimaImportacao
-              ? new Date(ultimaImportacao.importado_em).toLocaleString("pt-BR")
+              ? formatarDataHoraBrasilia(ultimaImportacao.importado_em)
               : "—"}
           </strong>{" "}
           por{" "}
