@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   BadgePercent,
+  Banknote,
   Coins,
   Gauge,
   LayoutList,
@@ -36,9 +37,10 @@ type CardKey =
   | "quantidadePecas"
   | "custoTotalPecas"
   | "impostoTotalPecas"
-  | "vendaTotalPecas"
-  | "lucroLiquidoPeca"
   | "maoDeObraTotal"
+  | "vendaTotalPecas"
+  | "totalVenda"
+  | "lucroLiquidoPeca"
   | "lucroTotal"
   | "percLucroPecas"
   | "percLucroTotal";
@@ -100,6 +102,7 @@ function CardStat({
   label,
   valor,
   cor,
+  explicacao,
   onClick,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -107,15 +110,19 @@ function CardStat({
   label: string;
   valor: React.ReactNode;
   cor?: string;
+  /** balão explicativo ao passar o mouse em cima do card, além do clique
+   * pra abrir o detalhe — usado no card Total Venda pra deixar claro o
+   * que é aquele número sem precisar abrir o pop-up. */
+  explicacao?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="text-left rounded-lg border overflow-hidden transition hover:brightness-110 cursor-pointer"
+      className="group relative text-left rounded-lg border overflow-hidden transition hover:brightness-110 cursor-pointer"
       style={{ borderColor: "var(--line)", background: "var(--surface2)" }}
-      title="Clique pra ver o detalhe desse dado"
+      title={explicacao ? undefined : "Clique pra ver o detalhe desse dado"}
     >
       <FaixaDegrade />
       <div className="flex items-center gap-2 px-3 py-1.5">
@@ -129,6 +136,14 @@ function CardStat({
           </span>
         </span>
       </div>
+      {explicacao && (
+        <div
+          className="pointer-events-none absolute left-0 top-full mt-1 z-30 hidden w-60 rounded-lg border p-2.5 text-left text-[11px] font-normal leading-snug shadow-2xl group-hover:block"
+          style={{ background: "var(--surface)", borderColor: "var(--line)", color: "var(--muted)" }}
+        >
+          {explicacao}
+        </div>
+      )}
     </button>
   );
 }
@@ -236,6 +251,10 @@ export default function PainelValidacaoOrcamentos({
     label: string;
     formula?: string;
     cor?: string;
+    /** balão explicativo direto no card da linha de topo (não só dentro
+     * do pop-up) — usado no Total Venda pra já deixar claro o que é sem
+     * precisar clicar. */
+    explicacao?: string;
     formatar: (r: ResumoValidacao) => string;
     /** conta feita com os números reais (todos os lotes juntos), pra
      * mostrar ao passar o mouse em cima do valor no pop-up de detalhe —
@@ -245,7 +264,18 @@ export default function PainelValidacaoOrcamentos({
     { key: "quantidadePecas", icone: LayoutList, label: "Quantidade de Peças", formatar: (r) => String(r.quantidadePecas) },
     { key: "custoTotalPecas", icone: Coins, label: "Total de Custo de Peças", formatar: (r) => formatarReal(r.custoTotalPecas) },
     { key: "impostoTotalPecas", icone: Receipt, label: "Total de Imposto (ICMS)", formatar: (r) => formatarReal(r.impostoTotalPecas) },
+    { key: "maoDeObraTotal", icone: Wrench, label: "Mão de Obra", formatar: (r) => formatarReal(r.maoDeObraTotal) },
     { key: "vendaTotalPecas", icone: Wallet, label: "Valor Venda de Peças", formatar: (r) => formatarReal(r.vendaTotalPecas) },
+    {
+      key: "totalVenda",
+      icone: Banknote,
+      label: "Total Venda",
+      formula: "Mão de obra + Venda de Peças",
+      explicacao: "Total Venda = Mão de obra + Venda de Peças. É a receita bruta total faturada nesse orçamento (serviço + peça), antes de descontar o custo da peça e o imposto.",
+      formatar: (r) => formatarReal(r.vendaTotalPecas + r.maoDeObraTotal),
+      explicacaoResultado: (r) =>
+        `${formatarReal(r.maoDeObraTotal)} + ${formatarReal(r.vendaTotalPecas)} = ${formatarReal(r.vendaTotalPecas + r.maoDeObraTotal)}`,
+    },
     {
       key: "lucroLiquidoPeca",
       icone: PiggyBank,
@@ -256,16 +286,15 @@ export default function PainelValidacaoOrcamentos({
       explicacaoResultado: (r) =>
         `${formatarReal(r.vendaTotalPecas)} − ${formatarReal(r.custoTotalPecas)} − ${formatarReal(r.impostoTotalPecas)} = ${formatarReal(r.lucroLiquidoPeca)}`,
     },
-    { key: "maoDeObraTotal", icone: Wrench, label: "Mão de Obra", formatar: (r) => formatarReal(r.maoDeObraTotal) },
     {
       key: "lucroTotal",
       icone: TrendingUp,
-      label: "Lucro Total (R$)",
-      formula: "Lucro Líquido da Peça + Mão de obra",
+      label: "Lucro Líquido Total",
+      formula: "Total Venda − (Custo das Peças + Imposto)",
       cor: resumo.lucroTotal >= 0 ? "#22c55e" : "#ef4444",
       formatar: (r) => formatarReal(r.lucroTotal),
       explicacaoResultado: (r) =>
-        `${formatarReal(r.lucroLiquidoPeca)} + ${formatarReal(r.maoDeObraTotal)} = ${formatarReal(r.lucroTotal)}`,
+        `${formatarReal(r.vendaTotalPecas + r.maoDeObraTotal)} − (${formatarReal(r.custoTotalPecas)} + ${formatarReal(r.impostoTotalPecas)}) = ${formatarReal(r.lucroTotal)}`,
     },
     {
       key: "percLucroPecas",
@@ -281,7 +310,7 @@ export default function PainelValidacaoOrcamentos({
       key: "percLucroTotal",
       icone: Gauge,
       label: "% Lucro Total",
-      formula: "Lucro Total ÷ (Venda + Mão de obra)",
+      formula: "Lucro Líquido Total ÷ Total Venda",
       cor: corPercentualLucro(resumo.percLucroTotal),
       formatar: (r) => formatarPercentual(r.percLucroTotal),
       explicacaoResultado: (r) =>
@@ -334,6 +363,7 @@ export default function PainelValidacaoOrcamentos({
             label={c.label}
             valor={c.formatar(resumo)}
             cor={c.cor}
+            explicacao={c.explicacao}
             onClick={() => setCardAberto(c.key)}
           />
         ))}
