@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { useState } from "react";
+import { Check, Copy, Gauge, X } from "lucide-react";
 
 export type BaseCalculoLucro = {
   custoTotalPecas: number;
@@ -49,36 +49,40 @@ function textoResumo(base: BaseCalculoLucro): string {
   ].join("\n");
 }
 
-const LARGURA_BALAO = 300;
-const ALTURA_ESTIMADA_BALAO = 360;
+function FormulaCalculada({
+  label,
+  formula,
+  valor,
+  corValor,
+}: {
+  label: string;
+  formula: string;
+  valor: string;
+  corValor?: string;
+}) {
+  return (
+    <div>
+      <div className="flex justify-between gap-4">
+        <span style={{ color: "var(--ink)" }}>{label}</span>
+        <strong style={{ color: corValor ?? "var(--ink)" }}>{valor}</strong>
+      </div>
+      <p className="text-[11px]" style={{ color: "var(--muted)" }}>
+        {formula}
+      </p>
+    </div>
+  );
+}
 
 // Célula da coluna "Lucro Total %": mostra o percentual colorido pela
-// faixa e, ao passar o mouse, um balão com o cálculo completo desse
-// registro (só desse, não do lote inteiro) — cada etapa com a fórmula
-// usada, não só o resultado final. Clicar fixa o balão aberto com um
-// botão de copiar no canto; clicar de novo fecha. A posição é calculada
-// toda vez (com base no espaço livre da tela) pra nunca ficar cortado
-// nem sobreposto por outro conteúdo.
+// faixa; ao CLICAR (não mais ao passar o mouse — o balão flutuante
+// ficava cortado/sobreposto perto da borda da tela) abre um pop-up
+// central com o cálculo completo e um botão de copiar. Clicar fora do
+// pop-up fecha.
 export default function CelulaLucroPercentual({ base }: { base: BaseCalculoLucro }) {
   const [aberto, setAberto] = useState(false);
-  const [fixado, setFixado] = useState(false);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const [copiado, setCopiado] = useState(false);
-  const ref = useRef<HTMLSpanElement | null>(null);
 
   const cor = corPercentualLucro(base.percLucroTotal);
-
-  function calcularPosicao() {
-    const rect = ref.current?.getBoundingClientRect();
-    if (!rect) return;
-    const espacoAbaixo = window.innerHeight - rect.bottom;
-    const abrirParaCima = espacoAbaixo < ALTURA_ESTIMADA_BALAO && rect.top > espacoAbaixo;
-    const top = abrirParaCima
-      ? Math.max(8, rect.top - ALTURA_ESTIMADA_BALAO)
-      : Math.min(rect.bottom + 6, window.innerHeight - 8);
-    const left = Math.min(Math.max(8, rect.right - LARGURA_BALAO), window.innerWidth - LARGURA_BALAO - 8);
-    setPos({ left, top });
-  }
 
   async function copiar() {
     try {
@@ -90,121 +94,105 @@ export default function CelulaLucroPercentual({ base }: { base: BaseCalculoLucro
     }
   }
 
-  const mostrar = aberto || fixado;
-
-  function FormulaCalculada({
-    label,
-    formula,
-    valor,
-    corValor,
-  }: {
-    label: string;
-    formula: string;
-    valor: string;
-    corValor?: string;
-  }) {
-    return (
-      <div>
-        <div className="flex justify-between gap-4">
-          <span style={{ color: "var(--ink)" }}>{label}</span>
-          <strong style={{ color: corValor ?? "var(--ink)" }}>{valor}</strong>
-        </div>
-        <p className="text-[10px]" style={{ color: "var(--muted)" }}>
-          {formula}
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <span
-      ref={ref}
-      className="relative inline-flex"
-      onMouseEnter={() => {
-        calcularPosicao();
-        setAberto(true);
-      }}
-      onMouseLeave={() => setAberto(false)}
-    >
+    <>
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          setFixado((f) => {
-            const novo = !f;
-            if (novo) calcularPosicao();
-            else setAberto(false); // clicou de novo pra "despregar" — some na hora, mesmo com o mouse ainda em cima
-            return novo;
-          });
+          setAberto(true);
         }}
-        className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold cursor-help"
+        className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold cursor-pointer"
         style={{ color: cor, background: `${cor}1a`, border: `1px solid ${cor}55` }}
       >
         {formatarPercentual(base.percLucroTotal)}
       </button>
 
-      {mostrar && pos && (
+      {aberto && (
         <div
-          className="fixed z-[80] rounded-lg border shadow-2xl p-3 text-xs space-y-2"
-          style={{ left: pos.left, top: pos.top, width: LARGURA_BALAO, background: "var(--surface2)", borderColor: "var(--line)" }}
-          onMouseLeave={() => setAberto(false)}
+          className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.55)" }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setAberto(false);
+          }}
         >
-          {fixado && (
-            <div className="flex items-center justify-end -mt-1 -mr-1">
+          <div
+            className="w-full max-w-sm rounded-2xl border shadow-2xl p-5"
+            style={{ background: "var(--surface)", borderColor: "var(--line)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--ink)" }}>
+                <Gauge size={16} style={{ color: cor }} />
+                Cálculo do Lucro
+              </h3>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  copiar();
-                }}
-                title="Copiar"
-                className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-black/10"
+                onClick={() => setAberto(false)}
+                aria-label="Fechar"
+                className="w-7 h-7 flex items-center justify-center rounded-md transition hover:bg-[var(--surface2)]"
                 style={{ color: "var(--muted)" }}
               >
-                {copiado ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                <X size={16} />
               </button>
             </div>
-          )}
 
-          <div className="space-y-1">
-            <p className="flex justify-between gap-4">
-              <span style={{ color: "var(--muted)" }}>Custo das peças</span>
-              <strong style={{ color: "var(--ink)" }}>{formatarReal(base.custoTotalPecas)}</strong>
-            </p>
-            <p className="flex justify-between gap-4">
-              <span style={{ color: "var(--muted)" }}>Imposto (ICMS)</span>
-              <strong style={{ color: "var(--ink)" }}>{formatarReal(base.impostoTotalPecas)}</strong>
-            </p>
-            <p className="flex justify-between gap-4">
-              <span style={{ color: "var(--muted)" }}>Venda de peças</span>
-              <strong style={{ color: "var(--ink)" }}>{formatarReal(base.vendaTotalPecas)}</strong>
-            </p>
-            <p className="flex justify-between gap-4">
-              <span style={{ color: "var(--muted)" }}>Mão de obra</span>
-              <strong style={{ color: "var(--ink)" }}>{formatarReal(base.maoDeObra)}</strong>
-            </p>
-          </div>
+            <div
+              className="rounded-xl border p-3 text-xs space-y-2"
+              style={{ background: "var(--surface2)", borderColor: "var(--line)" }}
+            >
+              <div className="space-y-1">
+                <p className="flex justify-between gap-4">
+                  <span style={{ color: "var(--muted)" }}>Custo das peças</span>
+                  <strong style={{ color: "var(--ink)" }}>{formatarReal(base.custoTotalPecas)}</strong>
+                </p>
+                <p className="flex justify-between gap-4">
+                  <span style={{ color: "var(--muted)" }}>Imposto (ICMS)</span>
+                  <strong style={{ color: "var(--ink)" }}>{formatarReal(base.impostoTotalPecas)}</strong>
+                </p>
+                <p className="flex justify-between gap-4">
+                  <span style={{ color: "var(--muted)" }}>Venda de peças</span>
+                  <strong style={{ color: "var(--ink)" }}>{formatarReal(base.vendaTotalPecas)}</strong>
+                </p>
+                <p className="flex justify-between gap-4">
+                  <span style={{ color: "var(--muted)" }}>Mão de obra</span>
+                  <strong style={{ color: "var(--ink)" }}>{formatarReal(base.maoDeObra)}</strong>
+                </p>
+              </div>
 
-          <div className="border-t pt-2 space-y-2" style={{ borderColor: "var(--line)" }}>
-            <FormulaCalculada
-              label="Lucro Total"
-              formula="Mão de obra + Venda de Peças − Custo − Imposto"
-              valor={formatarReal(base.lucroTotal)}
-            />
-            <FormulaCalculada
-              label="% Lucro Peças"
-              formula="(Venda − Custo) ÷ Venda"
-              valor={formatarPercentual(base.percLucroPecas)}
-            />
-            <FormulaCalculada
-              label="% Lucro Total"
-              formula="((Venda + Mão de obra) − Custo) ÷ (Venda + Mão de obra)"
-              valor={formatarPercentual(base.percLucroTotal)}
-              corValor={cor}
-            />
+              <div className="border-t pt-2 space-y-2" style={{ borderColor: "var(--line)" }}>
+                <FormulaCalculada
+                  label="Lucro Total"
+                  formula="Mão de obra + Venda de Peças − Custo − Imposto"
+                  valor={formatarReal(base.lucroTotal)}
+                />
+                <FormulaCalculada
+                  label="% Lucro Peças"
+                  formula="(Venda − Custo) ÷ Venda"
+                  valor={formatarPercentual(base.percLucroPecas)}
+                />
+                <FormulaCalculada
+                  label="% Lucro Total"
+                  formula="((Venda + Mão de obra) − Custo) ÷ (Venda + Mão de obra)"
+                  valor={formatarPercentual(base.percLucroTotal)}
+                  corValor={cor}
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={copiar}
+              className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)]"
+              style={{ color: "var(--muted)", border: "1px solid var(--line)" }}
+            >
+              {copiado ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+              Copiar
+            </button>
           </div>
         </div>
       )}
-    </span>
+    </>
   );
 }

@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
+  calcularDetalheValidacao,
   podeConfirmarAnaliseEmLote,
   STATUS_OPERACIONAL,
   STATUS_VALIDACAO_ORCAMENTOS,
+  type CamposPecasOrcamento,
+  type ConfiguracaoMaoDeObra,
 } from "@/lib/orcamentos";
+import { type FaixaMarkup } from "@/lib/bid";
+
+export const maxDuration = 60;
 
 const STATUS_AG_RESPOSTA_ORCAMENTO = STATUS_OPERACIONAL.find((s) => s.slug === "3-ag-resposta-orcamento")!.valor;
 
@@ -12,13 +18,11 @@ const COLUNAS_PECAS =
   "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5";
 
 const TAMANHO_LOTE_CODIGOS = 400;
+const TAMANHO_LOTE_UPDATE_PARALELO = 20;
 
-type LinhaOrcamentoLote = {
+type LinhaOrcamentoLote = CamposPecasOrcamento & {
   id: string;
   validacao_confirmado_sem_peca: boolean;
-  peca_1: string | null; peca_2: string | null; peca_3: string | null; peca_4: string | null; peca_5: string | null;
-  peca_6: string | null; peca_7: string | null; peca_8: string | null; peca_9: string | null; peca_10: string | null;
-  peca_add_1: string | null; peca_add_2: string | null; peca_add_3: string | null; peca_add_4: string | null; peca_add_5: string | null;
 };
 
 // Avança TODOS os aparelhos de um lote (NF Remessa) de "Validação de
@@ -131,23 +135,92 @@ export async function POST(request: Request) {
     );
   }
 
-  const agora = new Date().toISOString();
-  const ids = lista.map((a) => a.id);
-
-  const { data: atualizados, error: erroUpdate } = await admin
-    .from("orcamentos")
-    .update({
-      status_operacional: STATUS_AG_RESPOSTA_ORCAMENTO,
-      validacao_concluida_por: user.id,
-      validacao_concluida_em: agora,
-    })
-    .in("id", ids)
-    .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS)
-    .select("id");
-
-  if (erroUpdate) {
-    return NextResponse.json({ error: erroUpdate.message }, { status: 400 });
+  // 3ª trava: o BID (custo_peca_samsung persistido) precisa refletir o
+  // mesmo valor que a Base Peças tem agora pra cada código usado nesse
+  // lote — senão o valor que vai ser informado ao cliente no BID pode já
+  // estar desatualizado em relação ao que a Validação está calculando
+  // aqui. Ignora peça travada no BID (preço fixado na mão, não segue a
+  // Base Peças de propósito).
+  const pecasDesatualizadas = new Set<string>();
+  for (let i = 0; i < codigosUnicos.length; i += TAMANHO_LOTE_CODIGOS) {
+    const lote = codigosUnicos.slice(i, i + TAMANHO_LOTE_CODIGOS);
+    const { data } = await admin
+      .from("bid_pecas")
+      .select("part_number, custo_peca_samsung, travado")
+      .in("part_number", lote);
+    for (const linha of (data ?? []) as { part_number: string; custo_peca_samsung: number | null; travado: boolean }[]) {
+      if (linha.travado) continue;
+      const valorVivo = custosPorCodigo.get(linha.part_number) ?? null;
+      const diferente =
+        (linha.custo_peca_samsung == null) !== (valorVivo == null) ||
+        (linha.custo_peca_samsung != null && valorVivo != null && Math.abs(linha.custo_peca_samsung - valorVivo) > 0.001);
+      if (diferente) pecasDesatualizadas.add(linha.part_number);
+    }
   }
 
-  return NextResponse.json({ ok: true, quantidade: atualizados?.length ?? 0 });
+  if (pecasDesatualizadas.size > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "A Base Peças mudou desde o último Recalcular BID pra alguma peça desse lote — recalcule o BID (Bases > BID) antes de confirmar o envio, pra garantir que o valor informado ao cliente seja o mesmo que será cobrado.",
+        pecasDesatualizadas: Array.from(pecasDesatualizadas),
+      },
+      { status: 409 }
+    );
+  }
+
+  const [{ data: configImposto }, { data: configMaoObraBruta }, { data: faixasMarkupBrutas }] = await Promise.all([
+    admin.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+    admin.from("configuracoes_mao_de_obra").select("valor_uma_peca, valor_mais_de_uma_peca").eq("id", 1).single(),
+    admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+  ]);
+
+  const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
+  const configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca"> = {
+    valor_uma_peca: Number(configMaoObraBruta?.valor_uma_peca ?? 0),
+    valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 0),
+  };
+  const faixasMarkup: FaixaMarkup[] = (
+    (faixasMarkupBrutas ?? []) as { valor_min: number; valor_max: number | null; multiplicador: number }[]
+  ).map((f) => ({
+    valor_min: Number(f.valor_min),
+    valor_max: f.valor_max == null ? null : Number(f.valor_max),
+    multiplicador: Number(f.multiplicador),
+  }));
+
+  const agora = new Date().toISOString();
+
+  // trava + retrato do cálculo (validacao_snapshot) — congela peça a
+  // peça o custo/imposto/venda desse orçamento no momento da confirmação,
+  // pra mudanças futuras na Base Peças/markup/ICMS não alterarem
+  // retroativamente o valor que já foi informado ao cliente. O snapshot
+  // difere por orçamento, então precisa de um update por linha (em vez
+  // do update em lote usado antes) — roda em paralelo, em grupos
+  // pequenos, pra não estourar o tempo de execução da função.
+  let quantidade = 0;
+  for (let i = 0; i < lista.length; i += TAMANHO_LOTE_UPDATE_PARALELO) {
+    const grupo = lista.slice(i, i + TAMANHO_LOTE_UPDATE_PARALELO);
+    const resultados = await Promise.all(
+      grupo.map(async (a) => {
+        const detalhe = calcularDetalheValidacao(a, custosPorCodigo, icmsPercentual, configMaoDeObra, faixasMarkup);
+        const { error } = await admin
+          .from("orcamentos")
+          .update({
+            status_operacional: STATUS_AG_RESPOSTA_ORCAMENTO,
+            validacao_concluida_por: user.id,
+            validacao_concluida_em: agora,
+            validacao_travado: true,
+            validacao_travado_em: agora,
+            validacao_travado_por: user.id,
+            validacao_snapshot: detalhe,
+          })
+          .eq("id", a.id)
+          .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS);
+        return !error;
+      })
+    );
+    quantidade += resultados.filter(Boolean).length;
+  }
+
+  return NextResponse.json({ ok: true, quantidade });
 }

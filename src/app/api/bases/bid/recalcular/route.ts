@@ -16,6 +16,7 @@ type PecaExistente = {
   valor_atualizado_em: string;
   valor_direcao: "+" | "-" | null;
   travado: boolean;
+  valor_enviado_cliente: number | null;
 };
 
 function valoresDiferentes(a: number | null, b: number | null): boolean {
@@ -28,7 +29,7 @@ function valoresDiferentes(a: number | null, b: number | null): boolean {
 // peças do BID a partir da Base Peças e das faixas de markup atuais —
 // sem precisar reimportar o arquivo. Usado depois de uma Base Peças
 // nova ser importada. Toda mudança de valor entra no histórico.
-export async function POST() {
+export async function POST(request: Request) {
   const supabase = createClient();
   const {
     data: { user },
@@ -45,6 +46,13 @@ export async function POST() {
     return NextResponse.json({ error: "Seu cargo não tem permissão para recalcular o BID." }, { status: 403 });
   }
 
+  const body = await request.json().catch(() => null);
+  // só true quando o usuário já viu a lista de divergências (peças já
+  // enviadas ao cliente cujo valor mudaria) e confirmou explicitamente
+  // que quer mesmo aplicar — sem isso a rota nem chega a mexer em nada,
+  // só devolve a lista pra tela mostrar.
+  const confirmarDivergencias = body?.confirmarDivergencias === true;
+
   // busca TODAS as peças, paginando — sem isso o Supabase corta
   // silenciosamente em 1000 linhas por consulta (limite padrão do
   // PostgREST) e o restante da base nunca chega a ser reprocessado,
@@ -55,7 +63,7 @@ export async function POST() {
     const { data, error } = (await admin
       .from("bid_pecas")
       .select(
-        "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, valor_atualizado_em, valor_direcao, travado"
+        "id, modelo, part_number, custo_peca_samsung, valor_com_margem, custo_peca_allied, valor_imposto, valor_atualizado_em, valor_direcao, travado, valor_enviado_cliente"
       )
       .range(inicio, inicio + LOTE_BUSCA - 1)) as unknown as { data: PecaExistente[] | null; error: { message: string } | null };
     if (error) {
@@ -105,6 +113,17 @@ export async function POST() {
     valor_direcao: "+" | "-" | null;
   }[] = [];
   const historico: Record<string, unknown>[] = [];
+  // peças já enviadas ao cliente (valor_enviado_cliente preenchido) cujo
+  // valor final mudaria com esse recálculo — precisa de confirmação
+  // explícita antes de aplicar qualquer coisa (nem essas, nem as outras).
+  const divergencias: {
+    bidPecaId: string;
+    modelo: string;
+    partNumber: string;
+    valorEnviadoCliente: number | null;
+    valorAtual: number | null;
+    valorNovo: number | null;
+  }[] = [];
 
   for (const peca of pecas) {
     // peça travada na Consulta BID: preço definido manualmente, não
@@ -130,6 +149,20 @@ export async function POST() {
     const mudouValorFinal = valoresDiferentes(peca.custo_peca_allied, custoPecaAllied);
     const valorAtualizadoEm = mudouValorFinal ? new Date().toISOString() : peca.valor_atualizado_em;
     const valorDirecao = mudouValorFinal ? direcaoValor(peca.custo_peca_allied, custoPecaAllied) : peca.valor_direcao;
+
+    // peça já enviada ao cliente e o valor final vai mudar de verdade:
+    // é uma divergência do que já foi informado — junta na lista pra
+    // confirmação em vez de aplicar direto.
+    if (mudouValorFinal && peca.valor_enviado_cliente != null) {
+      divergencias.push({
+        bidPecaId: peca.id,
+        modelo: peca.modelo,
+        partNumber: peca.part_number,
+        valorEnviadoCliente: peca.valor_enviado_cliente,
+        valorAtual: peca.custo_peca_allied,
+        valorNovo: custoPecaAllied,
+      });
+    }
 
     atualizacoes.push({
       id: peca.id,
@@ -157,6 +190,36 @@ export async function POST() {
     });
   }
 
+  // encontrou peça(s) já enviadas ao cliente cujo valor mudaria e ainda
+  // não veio a confirmação explícita: não aplica NADA (nem as outras
+  // peças sem divergência) — devolve a lista pra tela mostrar e o
+  // usuário decidir, e a próxima chamada já vem com
+  // confirmarDivergencias: true pra seguir de fato.
+  if (divergencias.length > 0 && !confirmarDivergencias) {
+    return NextResponse.json(
+      {
+        pendenteConfirmacao: true,
+        divergencias,
+        error: `${divergencias.length} peça(s) já enviada(s) ao cliente teriam o valor alterado por esse recálculo. Confirme antes de aplicar.`,
+      },
+      { status: 409 }
+    );
+  }
+
+  if (divergencias.length > 0) {
+    await admin.from("bid_reconciliacoes").insert(
+      divergencias.map((d) => ({
+        bid_peca_id: d.bidPecaId,
+        part_number: d.partNumber,
+        valor_enviado_cliente: d.valorEnviadoCliente,
+        valor_anterior: d.valorAtual,
+        valor_novo: d.valorNovo,
+        origem: "recalculo",
+        confirmado_por: user.id,
+      }))
+    );
+  }
+
   // upsert em lote (uma única requisição por lote, atualizando só as
   // colunas informadas) em vez de um update por peça — com milhares de
   // peças, um update sequencial por linha estourava o limite de tempo
@@ -176,5 +239,9 @@ export async function POST() {
     await admin.from("bid_historico_valores").insert(historico.slice(i, i + TAMANHO_LOTE));
   }
 
-  return NextResponse.json({ pecasVerificadas: pecas.length, pecasAlteradas: atualizacoes.length });
+  return NextResponse.json({
+    pecasVerificadas: pecas.length,
+    pecasAlteradas: atualizacoes.length,
+    divergenciasConfirmadas: divergencias.length,
+  });
 }

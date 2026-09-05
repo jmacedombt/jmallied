@@ -3,6 +3,7 @@ import { ArrowLeft, FileSpreadsheet, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import BotaoGerarRelatorioBid from "@/components/BotaoGerarRelatorioBid";
+import BotaoMarcarBidEnviado from "@/components/BotaoMarcarBidEnviado";
 import { podeImportarBid } from "@/lib/bid";
 
 type LogRelatorio = {
@@ -40,6 +41,18 @@ export default async function RelatorioBidPage() {
         .returns<LogRelatorio[]>()
     : { data: null };
 
+  // último "Marcar como enviado" — só pra mostrar de quando é o envio
+  // atualmente travado, como contexto ao lado do botão.
+  const { data: ultimoEnvio } = podeAcessar
+    ? await supabase
+        .from("bid_pecas")
+        .select("valor_enviado_em")
+        .not("valor_enviado_em", "is", null)
+        .order("valor_enviado_em", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
+
   return (
     <AppShell titulo="Relatório BID" perfil={perfil}>
       <Link
@@ -57,8 +70,14 @@ export default async function RelatorioBidPage() {
         </p>
       ) : (
         <>
-          <div className="flex items-center gap-2 mb-5 flex-wrap">
+          <div className="flex items-center gap-3 mb-5 flex-wrap">
             <BotaoGerarRelatorioBid />
+            <BotaoMarcarBidEnviado />
+            {ultimoEnvio?.valor_enviado_em && (
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                Último envio: {new Date(ultimoEnvio.valor_enviado_em).toLocaleString("pt-BR")}
+              </span>
+            )}
             <div className="group relative inline-flex">
               <Info size={15} style={{ color: "var(--muted)" }} className="cursor-help" />
               <div

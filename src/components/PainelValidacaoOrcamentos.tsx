@@ -19,6 +19,7 @@ import { type FaixaMarkup } from "@/lib/bid";
 import PopupPecasValidacao, { type AparelhoValidacaoDetalhe } from "@/components/PopupPecasValidacao";
 import PopupRevisaoValidacao, { type ResumoValidacao } from "@/components/PopupRevisaoValidacao";
 import CelulaLucroPercentual, { corPercentualLucro } from "@/components/CelulaLucroPercentual";
+import PopupDetalheCard, { type BaseCalculoResumo, type LinhaDetalheCard } from "@/components/PopupDetalheCard";
 
 export type AparelhoValidacao = AparelhoValidacaoDetalhe & {
   id: string;
@@ -28,12 +29,54 @@ export type AparelhoValidacao = AparelhoValidacaoDetalhe & {
   descricao_completa: string | null;
 };
 
+type CardKey =
+  | "pendentes"
+  | "quantidadePecas"
+  | "custoTotalPecas"
+  | "impostoTotalPecas"
+  | "vendaTotalPecas"
+  | "lucroTotal"
+  | "percLucroPecas"
+  | "percLucroTotal";
+
 function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function formatarPercentual(valor: number): string {
   return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
+// mesma conta de agregação usada pelos cards (soma tudo, recalcula os
+// percentuais sobre os totais agregados — nunca é a média dos
+// percentuais de cada aparelho) — reaproveitada tanto pro total exibido
+// quanto pra quebra por lote de cada card.
+function calcularResumoDeLista(lista: AparelhoValidacao[]): ResumoValidacao {
+  const base = lista.reduce(
+    (acc, a) => ({
+      quantidadePecas: acc.quantidadePecas + a.quantidadePecas,
+      custoTotalPecas: acc.custoTotalPecas + a.custoTotalPecas,
+      impostoTotalPecas: acc.impostoTotalPecas + a.impostoTotalPecas,
+      vendaTotalPecas: acc.vendaTotalPecas + a.vendaTotalPecas,
+      maoDeObraTotal: acc.maoDeObraTotal + a.maoDeObra,
+    }),
+    { quantidadePecas: 0, custoTotalPecas: 0, impostoTotalPecas: 0, vendaTotalPecas: 0, maoDeObraTotal: 0 }
+  );
+  const lucroTotal = base.maoDeObraTotal + base.vendaTotalPecas - base.custoTotalPecas - base.impostoTotalPecas;
+  const percLucroPecas = base.vendaTotalPecas > 0 ? ((base.vendaTotalPecas - base.custoTotalPecas) / base.vendaTotalPecas) * 100 : 0;
+  const baseLucroTotal = base.vendaTotalPecas + base.maoDeObraTotal;
+  const percLucroTotal = baseLucroTotal > 0 ? ((baseLucroTotal - base.custoTotalPecas) / baseLucroTotal) * 100 : 0;
+  return {
+    quantidadeOrcamentos: lista.length,
+    quantidadePecas: base.quantidadePecas,
+    custoTotalPecas: base.custoTotalPecas,
+    impostoTotalPecas: base.impostoTotalPecas,
+    maoDeObraTotal: base.maoDeObraTotal,
+    vendaTotalPecas: base.vendaTotalPecas,
+    lucroTotal,
+    percLucroPecas,
+    percLucroTotal,
+  };
 }
 
 // Faixa fininha com degradê no topo de cada card — só um detalhe visual
@@ -47,15 +90,23 @@ function CardStat({
   label,
   valor,
   cor,
+  onClick,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   icone: React.ComponentType<any>;
   label: string;
   valor: React.ReactNode;
   cor?: string;
+  onClick: () => void;
 }) {
   return (
-    <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-left rounded-lg border overflow-hidden transition hover:brightness-110 cursor-pointer"
+      style={{ borderColor: "var(--line)", background: "var(--surface2)" }}
+      title="Clique pra ver o detalhe desse dado"
+    >
       <FaixaDegrade />
       <div className="flex items-center gap-2 px-3 py-1.5">
         <Icone size={14} style={{ color: cor ?? "var(--accent2)" }} />
@@ -68,7 +119,7 @@ function CardStat({
           </span>
         </span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -100,6 +151,7 @@ export default function PainelValidacaoOrcamentos({
   const [loteSelecionado, setLoteSelecionado] = useState("");
   const [detalhe, setDetalhe] = useState<AparelhoValidacao | null>(null);
   const [popupRevisao, setPopupRevisao] = useState<"revisao" | "confirmar" | null>(null);
+  const [cardAberto, setCardAberto] = useState<CardKey | null>(null);
 
   const podeCadastrarPeca = podeImportarBasePecas(perfil);
   const podeConfirmarLote = podeConfirmarAnaliseEmLote(perfil);
@@ -131,35 +183,15 @@ export default function PainelValidacaoOrcamentos({
 
   // cards sempre somam o que está sendo exibido na tabela agora — todos
   // os lotes juntos quando nenhum está selecionado, ou só o escolhido.
-  // % Lucro Peças/Total são recalculados sobre os totais agregados (não
-  // é a média dos percentuais de cada aparelho, isso distorceria o real).
-  const resumo: ResumoValidacao = useMemo(() => {
-    const base = filtrados.reduce(
-      (acc, a) => ({
-        quantidadePecas: acc.quantidadePecas + a.quantidadePecas,
-        custoTotalPecas: acc.custoTotalPecas + a.custoTotalPecas,
-        impostoTotalPecas: acc.impostoTotalPecas + a.impostoTotalPecas,
-        vendaTotalPecas: acc.vendaTotalPecas + a.vendaTotalPecas,
-        maoDeObraTotal: acc.maoDeObraTotal + a.maoDeObra,
-      }),
-      { quantidadePecas: 0, custoTotalPecas: 0, impostoTotalPecas: 0, vendaTotalPecas: 0, maoDeObraTotal: 0 }
-    );
-    const lucroTotal = base.maoDeObraTotal + base.vendaTotalPecas - base.custoTotalPecas - base.impostoTotalPecas;
-    const percLucroPecas = base.vendaTotalPecas > 0 ? ((base.vendaTotalPecas - base.custoTotalPecas) / base.vendaTotalPecas) * 100 : 0;
-    const baseLucroTotal = base.vendaTotalPecas + base.maoDeObraTotal;
-    const percLucroTotal = baseLucroTotal > 0 ? ((baseLucroTotal - base.custoTotalPecas) / baseLucroTotal) * 100 : 0;
-    return {
-      quantidadeOrcamentos: filtrados.length,
-      quantidadePecas: base.quantidadePecas,
-      custoTotalPecas: base.custoTotalPecas,
-      impostoTotalPecas: base.impostoTotalPecas,
-      maoDeObraTotal: base.maoDeObraTotal,
-      vendaTotalPecas: base.vendaTotalPecas,
-      lucroTotal,
-      percLucroPecas,
-      percLucroTotal,
-    };
-  }, [filtrados]);
+  const resumo = useMemo(() => calcularResumoDeLista(filtrados), [filtrados]);
+
+  // a mesma conta, mas quebrada por lote — usada só pro "resumo
+  // relacionado ao card" quando o usuário clica num card pra entender
+  // como o total ali se formou.
+  const resumosPorLote = useMemo(
+    () => lotes.map((l) => ({ nf: l.nf, resumo: calcularResumoDeLista(aparelhos.filter((a) => a.nf_remessa_allied === l.nf)) })),
+    [lotes, aparelhos]
+  );
 
   // travas do lote selecionado — mesma checagem que o servidor faz de
   // novo antes de confirmar (aqui é só pra já avisar e desabilitar o
@@ -183,36 +215,87 @@ export default function PainelValidacaoOrcamentos({
     router.refresh();
   }
 
+  // config de cada card: ícone/rótulo, valor atual (a partir de
+  // `resumo`), cor, fórmula (só nos calculados) e como ler aquele mesmo
+  // dado dentro de um ResumoValidacao — usado tanto pra renderizar o
+  // card quanto pra montar o pop-up de detalhe (quebra por lote).
+  const CARDS: {
+    key: CardKey;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    icone: React.ComponentType<any>;
+    label: string;
+    formula?: string;
+    cor?: string;
+    formatar: (r: ResumoValidacao) => string;
+  }[] = [
+    { key: "quantidadePecas", icone: LayoutList, label: "Quantidade de Peças", formatar: (r) => String(r.quantidadePecas) },
+    { key: "custoTotalPecas", icone: Coins, label: "Total de Custo de Peças", formatar: (r) => formatarReal(r.custoTotalPecas) },
+    { key: "impostoTotalPecas", icone: Percent, label: "Total de Imposto (ICMS)", formatar: (r) => formatarReal(r.impostoTotalPecas) },
+    { key: "vendaTotalPecas", icone: Wallet, label: "Valor Venda de Peças", formatar: (r) => formatarReal(r.vendaTotalPecas) },
+    {
+      key: "lucroTotal",
+      icone: TrendingUp,
+      label: "Lucro Total (R$)",
+      formula: "Mão de obra + Venda de Peças − Custo das Peças − Imposto",
+      cor: resumo.lucroTotal >= 0 ? "#22c55e" : "#ef4444",
+      formatar: (r) => formatarReal(r.lucroTotal),
+    },
+    {
+      key: "percLucroPecas",
+      icone: BadgePercent,
+      label: "% Lucro Peças",
+      formula: "(Venda − Custo) ÷ Venda",
+      cor: corPercentualLucro(resumo.percLucroPecas),
+      formatar: (r) => formatarPercentual(r.percLucroPecas),
+    },
+    {
+      key: "percLucroTotal",
+      icone: Gauge,
+      label: "% Lucro Total",
+      formula: "((Venda + Mão de obra) − Custo) ÷ (Venda + Mão de obra)",
+      cor: corPercentualLucro(resumo.percLucroTotal),
+      formatar: (r) => formatarPercentual(r.percLucroTotal),
+    },
+  ];
+
+  // esses 3 cards são os únicos cuja conta depende da Mão de obra — que
+  // não tem card próprio na linha de cima (decidido pra não competir por
+  // espaço); em vez disso ela aparece como contexto dentro do pop-up
+  // desses cards, junto com Custo/Imposto/Venda.
+  const CARDS_COM_BASE: CardKey[] = ["lucroTotal", "percLucroPecas", "percLucroTotal"];
+
+  const cardDetalhe = cardAberto ? CARDS.find((c) => c.key === cardAberto) : undefined;
+  const baseCalculoCard: BaseCalculoResumo | undefined =
+    cardAberto && CARDS_COM_BASE.includes(cardAberto)
+      ? {
+          custoTotalPecas: resumo.custoTotalPecas,
+          impostoTotalPecas: resumo.impostoTotalPecas,
+          vendaTotalPecas: resumo.vendaTotalPecas,
+          maoDeObra: resumo.maoDeObraTotal,
+        }
+      : undefined;
+  const linhasDetalheCard: LinhaDetalheCard[] =
+    cardAberto === "pendentes"
+      ? lotes.map((l) => ({ rotulo: l.nf, valor: String(l.quantidade) }))
+      : cardDetalhe
+        ? resumosPorLote.map((rl) => ({ rotulo: rl.nf, valor: cardDetalhe.formatar(rl.resumo) }))
+        : [];
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
-        <div className="flex items-center flex-wrap [&>*]:!mb-0">{topo}</div>
-
-        <div className="flex items-center flex-wrap gap-2">
-          <CardStat icone={Gauge} label="Nessa etapa" valor={pendentesLabel} />
-          <CardStat icone={LayoutList} label="Quantidade de Peças" valor={resumo.quantidadePecas} />
-          <CardStat icone={Coins} label="Total de Custo de Peças" valor={formatarReal(resumo.custoTotalPecas)} />
-          <CardStat icone={Percent} label="Total de Imposto (ICMS)" valor={formatarReal(resumo.impostoTotalPecas)} />
-          <CardStat icone={Wallet} label="Valor Venda de Peças" valor={formatarReal(resumo.vendaTotalPecas)} />
+      <div className="flex items-center flex-wrap gap-2 [&>a]:!mb-0">
+        {topo}
+        <CardStat icone={Gauge} label="Nessa etapa" valor={pendentesLabel} onClick={() => setCardAberto("pendentes")} />
+        {CARDS.map((c) => (
           <CardStat
-            icone={TrendingUp}
-            label="Lucro Total (R$)"
-            valor={formatarReal(resumo.lucroTotal)}
-            cor={resumo.lucroTotal >= 0 ? "#22c55e" : "#ef4444"}
+            key={c.key}
+            icone={c.icone}
+            label={c.label}
+            valor={c.formatar(resumo)}
+            cor={c.cor}
+            onClick={() => setCardAberto(c.key)}
           />
-          <CardStat
-            icone={BadgePercent}
-            label="% Lucro Peças"
-            valor={formatarPercentual(resumo.percLucroPecas)}
-            cor={corPercentualLucro(resumo.percLucroPecas)}
-          />
-          <CardStat
-            icone={Gauge}
-            label="% Lucro Total"
-            valor={formatarPercentual(resumo.percLucroTotal)}
-            cor={corPercentualLucro(resumo.percLucroTotal)}
-          />
-        </div>
+        ))}
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -397,6 +480,19 @@ export default function PainelValidacaoOrcamentos({
           resumo={resumo}
           onFechar={() => setPopupRevisao(null)}
           onConfirmar={popupRevisao === "confirmar" ? confirmarEnvioLote : undefined}
+        />
+      )}
+
+      {cardAberto && (
+        <PopupDetalheCard
+          icone={cardAberto === "pendentes" ? Gauge : cardDetalhe!.icone}
+          label={cardAberto === "pendentes" ? "Nessa etapa" : cardDetalhe!.label}
+          valorAtual={cardAberto === "pendentes" ? String(aparelhos.length) : cardDetalhe!.formatar(resumo)}
+          corValor={cardAberto === "pendentes" ? undefined : cardDetalhe!.cor}
+          formula={cardAberto === "pendentes" ? undefined : cardDetalhe!.formula}
+          baseCalculo={baseCalculoCard}
+          linhas={linhasDetalheCard}
+          onFechar={() => setCardAberto(null)}
         />
       )}
     </div>
