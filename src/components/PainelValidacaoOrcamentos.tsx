@@ -9,9 +9,10 @@ import {
   Gauge,
   LayoutList,
   PackageCheck,
-  Percent,
+  Receipt,
   TrendingUp,
   Wallet,
+  Wrench,
 } from "lucide-react";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
 import { podeImportarBasePecas } from "@/lib/pecas";
@@ -35,6 +36,7 @@ type CardKey =
   | "custoTotalPecas"
   | "impostoTotalPecas"
   | "vendaTotalPecas"
+  | "maoDeObraTotal"
   | "lucroTotal"
   | "percLucroPecas"
   | "percLucroTotal";
@@ -62,7 +64,9 @@ function calcularResumoDeLista(lista: AparelhoValidacao[]): ResumoValidacao {
     }),
     { quantidadePecas: 0, custoTotalPecas: 0, impostoTotalPecas: 0, vendaTotalPecas: 0, maoDeObraTotal: 0 }
   );
-  const lucroTotal = base.maoDeObraTotal + base.vendaTotalPecas - base.custoTotalPecas - base.impostoTotalPecas;
+  // Venda de Peças já é custo x markup + imposto — o Imposto não entra
+  // separado aqui de novo (senão contaria a mesma coisa duas vezes).
+  const lucroTotal = base.vendaTotalPecas + base.maoDeObraTotal - base.custoTotalPecas;
   const percLucroPecas = base.vendaTotalPecas > 0 ? ((base.vendaTotalPecas - base.custoTotalPecas) / base.vendaTotalPecas) * 100 : 0;
   const baseLucroTotal = base.vendaTotalPecas + base.maoDeObraTotal;
   const percLucroTotal = baseLucroTotal > 0 ? ((baseLucroTotal - base.custoTotalPecas) / baseLucroTotal) * 100 : 0;
@@ -230,13 +234,14 @@ export default function PainelValidacaoOrcamentos({
   }[] = [
     { key: "quantidadePecas", icone: LayoutList, label: "Quantidade de Peças", formatar: (r) => String(r.quantidadePecas) },
     { key: "custoTotalPecas", icone: Coins, label: "Total de Custo de Peças", formatar: (r) => formatarReal(r.custoTotalPecas) },
-    { key: "impostoTotalPecas", icone: Percent, label: "Total de Imposto (ICMS)", formatar: (r) => formatarReal(r.impostoTotalPecas) },
+    { key: "impostoTotalPecas", icone: Receipt, label: "Total de Imposto (ICMS)", formatar: (r) => formatarReal(r.impostoTotalPecas) },
     { key: "vendaTotalPecas", icone: Wallet, label: "Valor Venda de Peças", formatar: (r) => formatarReal(r.vendaTotalPecas) },
+    { key: "maoDeObraTotal", icone: Wrench, label: "Mão de Obra", formatar: (r) => formatarReal(r.maoDeObraTotal) },
     {
       key: "lucroTotal",
       icone: TrendingUp,
       label: "Lucro Total (R$)",
-      formula: "Mão de obra + Venda de Peças − Custo das Peças − Imposto",
+      formula: "Venda de Peças + Mão de obra − Custo das Peças",
       cor: resumo.lucroTotal >= 0 ? "#22c55e" : "#ef4444",
       formatar: (r) => formatarReal(r.lucroTotal),
     },
@@ -422,18 +427,8 @@ export default function PainelValidacaoOrcamentos({
                   <td className="px-4 py-2.5" style={{ color: "var(--muted)" }} title={a.descricao_completa ?? ""}>
                     {(a.descricao_completa ?? "").split(" ")[0]}
                   </td>
-                  <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                    <CelulaLucroPercentual
-                      base={{
-                        custoTotalPecas: a.custoTotalPecas,
-                        impostoTotalPecas: a.impostoTotalPecas,
-                        vendaTotalPecas: a.vendaTotalPecas,
-                        maoDeObra: a.maoDeObra,
-                        lucroTotal: a.lucroTotal,
-                        percLucroPecas: a.percLucroPecas,
-                        percLucroTotal: a.percLucroTotal,
-                      }}
-                    />
+                  <td className="px-4 py-2.5 text-right">
+                    <CelulaLucroPercentual percLucroTotal={a.percLucroTotal} />
                   </td>
                 </tr>
               );

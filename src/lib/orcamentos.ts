@@ -267,7 +267,10 @@ export type DetalheValidacaoOrcamento = {
    * peça — o que efetivamente vai ser cobrado pelas peças do reparo. */
   vendaTotalPecas: number;
   maoDeObra: number;
-  /** mão de obra + venda de peças − custo das peças − imposto. */
+  /** venda de peças + mão de obra − custo das peças. Note que o Imposto
+   * não entra separado aqui: ele já está embutido dentro de vendaTotalPecas
+   * (venda de peça = custo x markup + imposto), então subtrair de novo
+   * contaria a mesma coisa duas vezes. */
   lucroTotal: number;
   /** (venda de peças − custo das peças) / venda de peças, em %. */
   percLucroPecas: number;
@@ -333,7 +336,7 @@ export function calcularDetalheValidacao(
   const maoDeObra = calcularMaoDeObraValidacao(quantidadePecas, configMaoDeObra);
   const temPecaSemCusto = pecas.some((p) => p.custo == null);
 
-  const lucroTotal = maoDeObra + vendaTotalPecas - custoTotalPecas - impostoTotalPecas;
+  const lucroTotal = vendaTotalPecas + maoDeObra - custoTotalPecas;
   const percLucroPecas = vendaTotalPecas > 0 ? ((vendaTotalPecas - custoTotalPecas) / vendaTotalPecas) * 100 : 0;
   const baseLucroTotal = vendaTotalPecas + maoDeObra;
   const percLucroTotal = baseLucroTotal > 0 ? ((baseLucroTotal - custoTotalPecas) / baseLucroTotal) * 100 : 0;

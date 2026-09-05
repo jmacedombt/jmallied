@@ -6,6 +6,11 @@ import { type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
 import { type FaixaMarkup } from "@/lib/bid";
 import PopupCadastrarPecaBase from "@/components/PopupCadastrarPecaBase";
 import TooltipCalculoBid, { type PecaParaTooltip } from "@/components/TooltipCalculoBid";
+import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
+
+function formatarPercentual(valor: number): string {
+  return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
 
 export type AparelhoValidacaoDetalhe = DetalheValidacaoOrcamento & {
   id: string;
@@ -243,6 +248,21 @@ export default function PopupPecasValidacao({
           <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
             <span style={{ color: "var(--ink)" }}>Lucro Total</span>
             <strong style={{ color: "var(--accent2)" }}>{formatarReal(aparelho.lucroTotal)}</strong>
+          </div>
+          <p className="text-[11px]" style={{ color: "var(--muted)" }}>
+            Venda de peças + Mão de obra − Custo das peças
+          </p>
+          <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
+            <span style={{ color: "var(--ink)" }}>% Lucro Peças</span>
+            <strong style={{ color: corPercentualLucro(aparelho.percLucroPecas) }}>
+              {formatarPercentual(aparelho.percLucroPecas)}
+            </strong>
+          </div>
+          <div className="flex items-center justify-between">
+            <span style={{ color: "var(--ink)" }}>% Lucro Total</span>
+            <strong style={{ color: corPercentualLucro(aparelho.percLucroTotal) }}>
+              {formatarPercentual(aparelho.percLucroTotal)}
+            </strong>
           </div>
         </div>
       </div>
