@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Lock, Pencil, Unlock } from "lucide-react";
+import { KeyRound, Lock, Mail, Pencil, Unlock } from "lucide-react";
 import PopupEditarUsuario, { type UsuarioEditavel } from "@/components/PopupEditarUsuario";
 import PopupConfirmar from "@/components/PopupConfirmar";
 import PopupNovoUsuario from "@/components/PopupNovoUsuario";
@@ -23,7 +23,8 @@ export type LinhaUsuario = {
 type Confirmacao =
   | { tipo: "bloquear"; alvo: LinhaUsuario }
   | { tipo: "desbloquear"; alvo: LinhaUsuario }
-  | { tipo: "resetar-senha"; alvo: LinhaUsuario };
+  | { tipo: "resetar-senha"; alvo: LinhaUsuario }
+  | { tipo: "reenviar-acesso"; alvo: LinhaUsuario };
 
 export default function TabelaUsuarios({
   usuarios,
@@ -56,7 +57,7 @@ export default function TabelaUsuarios({
     setErroConfirmacao(null);
 
     try {
-      if (confirmacao.tipo === "resetar-senha") {
+      if (confirmacao.tipo === "resetar-senha" || confirmacao.tipo === "reenviar-acesso") {
         const res = await fetch(`/api/usuarios/${confirmacao.alvo.id}/resetar-senha`, { method: "POST" });
         const data = await res.json();
         if (!res.ok) {
@@ -158,6 +159,15 @@ export default function TabelaUsuarios({
                         >
                           <KeyRound size={14} />
                         </button>
+                        <button
+                          type="button"
+                          title="Reenviar acesso (endereço do site, login e senha padrão)"
+                          onClick={() => setConfirmacao({ tipo: "reenviar-acesso", alvo: u })}
+                          className="w-7 h-7 flex items-center justify-center rounded hover:bg-black/10"
+                          style={{ color: "var(--muted)" }}
+                        >
+                          <Mail size={14} />
+                        </button>
                         {u.id !== meuId && (
                           <button
                             type="button"
@@ -215,7 +225,9 @@ export default function TabelaUsuarios({
               ? "Bloquear usuário"
               : confirmacao.tipo === "desbloquear"
                 ? "Desbloquear usuário"
-                : "Resetar senha"
+                : confirmacao.tipo === "reenviar-acesso"
+                  ? "Reenviar acesso"
+                  : "Resetar senha"
           }
           perigo={confirmacao.tipo === "bloquear"}
           carregando={processando}
@@ -236,6 +248,15 @@ export default function TabelaUsuarios({
                 </strong>{" "}
                 vai poder entrar no sistema normalmente de novo.
               </>
+            ) : confirmacao.tipo === "reenviar-acesso" ? (
+              <>
+                Vamos gerar de novo o endereço do site, o login e a senha padrão de{" "}
+                <strong style={{ color: "var(--ink)" }}>
+                  {confirmacao.alvo.nome} {confirmacao.alvo.sobrenome}
+                </strong>{" "}
+                pra você copiar e enviar. A senha atual dela é substituída pela padrão, e a troca vai ser
+                obrigatória no próximo acesso.
+              </>
             ) : (
               <>
                 A senha de{" "}
@@ -247,7 +268,13 @@ export default function TabelaUsuarios({
             )
           }
           rotuloConfirmar={
-            confirmacao.tipo === "bloquear" ? "Bloquear" : confirmacao.tipo === "desbloquear" ? "Desbloquear" : "Resetar"
+            confirmacao.tipo === "bloquear"
+              ? "Bloquear"
+              : confirmacao.tipo === "desbloquear"
+                ? "Desbloquear"
+                : confirmacao.tipo === "reenviar-acesso"
+                  ? "Reenviar"
+                  : "Resetar"
           }
           onConfirmar={executarConfirmacao}
           onFechar={() => {

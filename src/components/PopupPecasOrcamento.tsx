@@ -9,6 +9,10 @@ import PopupCadastrarPecaBid from "@/components/PopupCadastrarPecaBid";
 export type AparelhoComPecas = {
   os_reparadora: string | null;
   trade_allied: string;
+  /** modelo comercial do aparelho (já vem do próprio orçamento) — usado
+   * pra pré-preencher o campo Modelo ao cadastrar uma peça no BID, já que
+   * na imensa maioria dos casos é o mesmo nome que vai na base do BID. */
+  modelo_comercial?: string | null;
   peca_1: string | null;
   peca_2: string | null;
   peca_3: string | null;
@@ -160,7 +164,15 @@ export default function PopupPecasOrcamento({
                       <button
                         type="button"
                         disabled={!podeCadastrar}
-                        onClick={() => setCadastrando({ partNumber: peca, prefillModelo: info?.modelo ?? null })}
+                        onClick={() =>
+                          setCadastrando({
+                            partNumber: peca,
+                            // prioriza o modelo que o BID já tiver pra esse Part Number; na
+                            // falta dele, usa o Modelo comercial do próprio orçamento — assim
+                            // sobra só "Peça Solução" pra pessoa preencher na maioria dos casos.
+                            prefillModelo: info?.modelo ?? aparelho.modelo_comercial ?? null,
+                          })
+                        }
                         className="inline-flex items-center gap-1 text-xs font-medium rounded-md px-2 py-1 transition disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.12)" }}
                         title={podeCadastrar ? "Cadastrar valor dessa peça no BID" : "Sem custo no BID"}
