@@ -9,6 +9,8 @@ import PainelAgAbertura from "@/components/PainelAgAbertura";
 import PainelAgTriagem from "@/components/PainelAgTriagem";
 import PainelAgAnalise, { type AparelhoAgAnalise } from "@/components/PainelAgAnalise";
 import PainelValidacaoOrcamentos, { type AparelhoValidacao } from "@/components/PainelValidacaoOrcamentos";
+import PainelOrcamentoReprovado, { type AparelhoReprovado } from "@/components/PainelOrcamentoReprovado";
+import PainelEtapaSimples, { type AparelhoEtapaSimples } from "@/components/PainelEtapaSimples";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
 import { buscarPrecosBidPorPartNumber, type FaixaMarkup } from "@/lib/bid";
 
@@ -260,9 +262,61 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
+  if (status.slug === "8-orcamento-reprovado") {
+    const { data: aparelhos } = await supabase
+      .from("orcamentos")
+      .select(
+        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, motivo_reprova, reprovado_em, usuarios:reprovado_por (nome, sobrenome), ${COLUNAS_PECAS}`
+      )
+      .eq("status_operacional", status.valor)
+      .order("reprovado_em", { ascending: false, nullsFirst: false });
+
+    const listaAparelhos = (aparelhos ?? []) as unknown as AparelhoReprovado[];
+
+    // mesmo esquema de preço "ao vivo" do BID usado em Ag. Análise, pra
+    // manter o mesmo formato de pop-up de peças ao clicar numa linha.
+    const partNumbersReferenciados = listaAparelhos.flatMap((a) =>
+      Array.from({ length: 10 }, (_, i) => a[`peca_${i + 1}` as keyof AparelhoReprovado] as string | null)
+    );
+
+    const [precosBid, { data: faixasBrutas }, { data: configImposto }] = await Promise.all([
+      buscarPrecosBidPorPartNumber(supabase, partNumbersReferenciados),
+      supabase.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+      supabase.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+    ]);
+
+    const faixas: FaixaMarkup[] = (faixasBrutas ?? []).map((f) => ({
+      valor_min: Number(f.valor_min),
+      valor_max: f.valor_max == null ? null : Number(f.valor_max),
+      multiplicador: Number(f.multiplicador),
+    }));
+    const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <PainelOrcamentoReprovado
+          aparelhos={listaAparelhos}
+          precosBidIniciais={precosBid}
+          faixas={faixas}
+          icmsPercentual={icmsPercentual}
+          mensagemVazia="Nenhum orçamento reprovado no momento."
+          topo={
+            <>
+              {voltar}
+              {badgeContador(aparelhos?.length ?? 0)}
+            </>
+          }
+        />
+      </AppShell>
+    );
+  }
+
+  // etapas ainda sem tela própria (3 a 7, e Produto Entregue) — só a
+  // lista, com o ícone de reprovar em todas menos Produto Entregue (não
+  // faz sentido reprovar um orçamento já entregue).
   const { data: aparelhos } = await supabase
     .from("orcamentos")
-    .select("id, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa")
+    .select("id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa")
     .eq("status_operacional", status.valor)
     .order("updated_at", { ascending: false });
 
@@ -272,39 +326,11 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         {voltar}
         {badgeContador(aparelhos?.length ?? 0)}
       </div>
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
-              <th className="px-4 py-2.5 font-medium">Trade Allied</th>
-              <th className="px-4 py-2.5 font-medium">OS Care Allied</th>
-              <th className="px-4 py-2.5 font-medium">Modelo comercial</th>
-              <th className="px-4 py-2.5 font-medium">SKU</th>
-              <th className="px-4 py-2.5 font-medium">Descrição</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(aparelhos ?? []).map((a) => (
-              <tr key={a.id} className="border-t" style={{ borderColor: "var(--line)", background: "var(--surface)" }}>
-                <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>{a.trade_allied}</td>
-                <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>{a.os_care_allied}</td>
-                <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>{a.modelo_comercial}</td>
-                <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>{a.sku}</td>
-                <td className="px-4 py-2.5" style={{ color: "var(--muted)" }} title={a.descricao_completa ?? ""}>
-                  {(a.descricao_completa ?? "").split(" ")[0]}
-                </td>
-              </tr>
-            ))}
-            {(!aparelhos || aparelhos.length === 0) && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
-                  Nenhum aparelho nessa etapa ainda.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <PainelEtapaSimples
+        aparelhos={(aparelhos ?? []) as AparelhoEtapaSimples[]}
+        permiteReprovar={status.slug !== "produto-entregue"}
+        mensagemVazia="Nenhum aparelho nessa etapa ainda."
+      />
       <p className="text-xs mt-3" style={{ color: "var(--muted)" }}>
         Essa etapa ainda é só consulta — o fluxo de ação dela entra numa próxima rodada.
       </p>

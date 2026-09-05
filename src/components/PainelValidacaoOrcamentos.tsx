@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   BadgePercent,
+  Ban,
   Banknote,
   Coins,
   Gauge,
@@ -23,6 +24,7 @@ import PopupPecasValidacao, { type AparelhoValidacaoDetalhe } from "@/components
 import PopupRevisaoValidacao, { type ResumoValidacao } from "@/components/PopupRevisaoValidacao";
 import CelulaLucroPercentual, { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupDetalheCard, { type BaseCalculoResumo, type LinhaDetalheCard } from "@/components/PopupDetalheCard";
+import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 
 export type AparelhoValidacao = AparelhoValidacaoDetalhe & {
   id: string;
@@ -177,6 +179,7 @@ export default function PainelValidacaoOrcamentos({
   const [detalhe, setDetalhe] = useState<AparelhoValidacao | null>(null);
   const [popupRevisao, setPopupRevisao] = useState<"revisao" | "confirmar" | null>(null);
   const [cardAberto, setCardAberto] = useState<CardKey | null>(null);
+  const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
 
   const podeCadastrarPeca = podeImportarBasePecas(perfil);
   const podeConfirmarLote = podeConfirmarAnaliseEmLote(perfil);
@@ -443,6 +446,7 @@ export default function PainelValidacaoOrcamentos({
               <th className="px-4 py-2.5 font-medium">SKU</th>
               <th className="px-4 py-2.5 font-medium">Descrição</th>
               <th className="px-4 py-2.5 font-medium text-right">Lucro Total %</th>
+              <th className="px-4 py-2.5 font-medium text-right">Ação</th>
             </tr>
           </thead>
           <tbody>
@@ -496,12 +500,23 @@ export default function PainelValidacaoOrcamentos({
                   <td className="px-4 py-2.5 text-right">
                     <CelulaLucroPercentual percLucroTotal={a.percLucroTotal} />
                   </td>
+                  <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
+                      title="Reprovar orçamento"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
+                      style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                    >
+                      <Ban size={15} />
+                    </button>
+                  </td>
                 </tr>
               );
             })}
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
+                <td colSpan={8} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
                   {aparelhos.length === 0 ? mensagemVazia : "Nenhum aparelho encontrado nesse lote."}
                 </td>
               </tr>
@@ -541,6 +556,17 @@ export default function PainelValidacaoOrcamentos({
           resumo={resumo}
           onFechar={() => setPopupRevisao(null)}
           onConfirmar={popupRevisao === "confirmar" ? confirmarEnvioLote : undefined}
+        />
+      )}
+
+      {reprovando && (
+        <PopupReprovarOrcamento
+          aparelho={reprovando}
+          onFechar={() => setReprovando(null)}
+          onReprovado={() => {
+            setReprovando(null);
+            router.refresh();
+          }}
         />
       )}
 

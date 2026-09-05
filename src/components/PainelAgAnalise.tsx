@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCheck, ClipboardCheck, Loader2, PackageCheck, Search } from "lucide-react";
+import { AlertTriangle, Ban, CheckCheck, ClipboardCheck, Loader2, PackageCheck, Search } from "lucide-react";
 import PopupConfirmar from "@/components/PopupConfirmar";
 import PopupPecasOrcamento, { type AparelhoComPecas } from "@/components/PopupPecasOrcamento";
+import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
 import { podeImportarBid, type FaixaMarkup, type InfoBidPeca } from "@/lib/bid";
 
@@ -71,6 +72,7 @@ export default function PainelAgAnalise({
   const [confirmandoLote, setConfirmandoLote] = useState(false);
   const [processandoLote, setProcessandoLote] = useState(false);
   const [erroLote, setErroLote] = useState<string | null>(null);
+  const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
 
   useEffect(() => setItens(aparelhos), [aparelhos]);
   useEffect(() => setPrecosBid(precosBidIniciais), [precosBidIniciais]);
@@ -149,6 +151,17 @@ export default function PainelAgAnalise({
     }
 
     setProcessandoId(null);
+  }
+
+  function aposReprovar(id: string) {
+    setItens((atual) => atual.filter((a) => a.id !== id));
+    setSelecionados((atual) => {
+      const novo = new Set(atual);
+      novo.delete(id);
+      return novo;
+    });
+    setReprovando(null);
+    router.refresh();
   }
 
   async function confirmarAnaliseEmLote() {
@@ -334,21 +347,32 @@ export default function PainelAgAnalise({
                     {(a.descricao_completa ?? "").split(" ")[0]}
                   </td>
                   <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmando(a)}
-                      disabled={processandoId === a.id}
-                      className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[var(--accent2)] disabled:opacity-60"
-                      style={{ borderColor: "var(--line)", color: "var(--ink)" }}
-                      title="Confirmar que a análise foi realizada"
-                    >
-                      {processandoId === a.id ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <ClipboardCheck size={14} style={{ color: "#14b8a6" }} />
-                      )}
-                      Análise realizada
-                    </button>
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmando(a)}
+                        disabled={processandoId === a.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[var(--accent2)] disabled:opacity-60"
+                        style={{ borderColor: "var(--line)", color: "var(--ink)" }}
+                        title="Confirmar que a análise foi realizada"
+                      >
+                        {processandoId === a.id ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <ClipboardCheck size={14} style={{ color: "#14b8a6" }} />
+                        )}
+                        Análise realizada
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
+                        title="Reprovar orçamento"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444] shrink-0"
+                        style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                      >
+                        <Ban size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -425,6 +449,14 @@ export default function PainelAgAnalise({
           podeCadastrar={podeCadastrarBid}
           onPecaAtualizada={(info) => setPrecosBid((atual) => ({ ...atual, [info.part_number]: info }))}
           onFechar={() => setDetalhe(null)}
+        />
+      )}
+
+      {reprovando && (
+        <PopupReprovarOrcamento
+          aparelho={reprovando}
+          onFechar={() => setReprovando(null)}
+          onReprovado={() => aposReprovar(reprovando.id)}
         />
       )}
     </div>

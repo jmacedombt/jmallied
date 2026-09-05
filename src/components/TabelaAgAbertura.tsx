@@ -2,8 +2,9 @@
 
 import { Fragment, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Save, Pencil, Check, RotateCcw, Loader2, X } from "lucide-react";
+import { Ban, Copy, Save, Pencil, Check, RotateCcw, Loader2, X } from "lucide-react";
 import { deriveImeiReparadora, osReparadoraValida } from "@/lib/orcamentos";
+import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 
 export type AparelhoAgAbertura = {
   id: string;
@@ -98,6 +99,7 @@ const TabelaAgAbertura = forwardRef<
   const [saindo, setSaindo] = useState<Record<string, boolean>>({});
   const [removidos, setRemovidos] = useState<Record<string, boolean>>({});
   const [copiado, setCopiado] = useState<string | null>(null);
+  const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // se a lista que vem do servidor mudar (ex: depois do router.refresh()
@@ -264,6 +266,12 @@ const TabelaAgAbertura = forwardRef<
               >
                 Descrição Completa
               </th>
+              <th
+                className="sticky top-0 z-10 px-4 py-2.5 font-medium text-right"
+                style={{ background: "var(--surface2)", color: "var(--muted)" }}
+              >
+                Ação
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -402,11 +410,22 @@ const TabelaAgAbertura = forwardRef<
                       />
                     </span>
                   </td>
+                  <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
+                      title="Reprovar orçamento"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
+                      style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                    >
+                      <Ban size={15} />
+                    </button>
+                  </td>
                 </tr>
 
                 {aberto && (
                   <tr style={{ background: "var(--surface2)" }}>
-                    <td colSpan={selecionavel ? 7 : 6} className="px-4 py-4">
+                    <td colSpan={selecionavel ? 8 : 7} className="px-4 py-4">
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-xs">
                         <div>
                           <p className="uppercase tracking-wide mb-0.5" style={{ color: "var(--muted)" }}>
@@ -460,6 +479,17 @@ const TabelaAgAbertura = forwardRef<
         </tbody>
         </table>
       </div>
+
+      {reprovando && (
+        <PopupReprovarOrcamento
+          aparelho={reprovando}
+          onFechar={() => setReprovando(null)}
+          onReprovado={() => {
+            setReprovando(null);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 });

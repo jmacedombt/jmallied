@@ -157,12 +157,20 @@ export function statusPorSlug(slug: string) {
 // slug, não por índice do array, pra não quebrar se a ordem mudar de novo.
 export const STATUS_AG_ANALISE = STATUS_OPERACIONAL.find((s) => s.slug === "2-ag-analise")!.valor;
 export const STATUS_VALIDACAO_ORCAMENTOS = STATUS_OPERACIONAL.find((s) => s.slug === "validacao-orcamentos")!.valor;
+export const STATUS_ORCAMENTO_REPROVADO = STATUS_OPERACIONAL.find((s) => s.slug === "8-orcamento-reprovado")!.valor;
 
 // status que contam como "pedido fechado" — qualquer orçamento em
 // qualquer outro status conta como "em aberto" (usado, por exemplo, pra
 // saber se uma peça pendente no BID é prioridade de cadastro porque
 // algum pedido em andamento precisa dela).
 export const STATUS_ORCAMENTO_FECHADOS = ["Produto Entregue", "8 - Orçamento Reprovado"] as const;
+
+// texto sugerido por padrão ao reprovar um orçamento manualmente (ícone
+// de cancelamento, disponível em qualquer etapa do Operacional antes de
+// "8 - Orçamento Reprovado"/"Produto Entregue") — cobre o motivo mais
+// comum; a pessoa marca "não é essa a justificativa" pra editar antes de
+// confirmar (ver PopupReprovarOrcamento.tsx).
+export const MOTIVO_REPROVA_PADRAO = "Orçamento recusado - Alto Custo";
 
 // quem pode confirmar "Análise realizada" em lote (seleção múltipla) em
 // 2 - Ag. Análise — cadastro individual continua liberado pra qualquer
