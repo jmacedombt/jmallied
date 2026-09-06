@@ -104,34 +104,43 @@ export default async function BasePecasPage() {
 
   return (
     <AppShell titulo="Base Peças" perfil={perfil}>
-      {podeImportarBasePecas(perfil) && (
-        <div className="mb-6">
-          <ImportarBasePecasForm />
+      {/* Carregar base + os 4 cards de resumo, todos na mesma linha (quebra
+          responsivamente em telas menores) — pedido explícito do Rafael. */}
+      <div className="flex flex-wrap items-start gap-4 mb-6">
+        {podeImportarBasePecas(perfil) && (
+          <div className="flex-[1.4] min-w-[320px]">
+            <ImportarBasePecasForm />
+          </div>
+        )}
+        <div className="flex-1 min-w-[200px]">
+          <CardResumo icone={Package} label="Peças únicas (códigos)" valor={resumo?.pecas_unicas ?? 0} />
         </div>
-      )}
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <CardResumo icone={Package} label="Peças únicas (códigos)" valor={resumo?.pecas_unicas ?? 0} />
-        <CardResumo
-          icone={Boxes}
-          label="Peças registradas (soma da quantidade)"
-          valor={resumo?.pecas_registradas ?? 0}
-        />
-        <CardResumo
-          icone={RefreshCcw}
-          label="Atualizada em"
-          valor={ultimaImportacao ? formatarDataHoraBrasilia(ultimaImportacao.importado_em) : "—"}
-          sub={
-            nomeUsuarioImportacao
-              ? `por ${nomeUsuarioImportacao.nome} ${nomeUsuarioImportacao.sobrenome}`
-              : undefined
-          }
-        />
-        <CardResumo
-          icone={CalendarClock}
-          label="Peça mais recente da base"
-          valor={formatarDataBr(resumo?.data_mais_recente)}
-        />
+        <div className="flex-1 min-w-[200px]">
+          <CardResumo
+            icone={Boxes}
+            label="Peças registradas (soma da quantidade)"
+            valor={resumo?.pecas_registradas ?? 0}
+          />
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <CardResumo
+            icone={RefreshCcw}
+            label="Atualizada em"
+            valor={ultimaImportacao ? formatarDataHoraBrasilia(ultimaImportacao.importado_em) : "—"}
+            sub={
+              nomeUsuarioImportacao
+                ? `por ${nomeUsuarioImportacao.nome} ${nomeUsuarioImportacao.sobrenome}`
+                : undefined
+            }
+          />
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <CardResumo
+            icone={CalendarClock}
+            label="Peça mais recente da base"
+            valor={formatarDataBr(resumo?.data_mais_recente)}
+          />
+        </div>
       </div>
 
       <GraficoPecasPorPeriodo
