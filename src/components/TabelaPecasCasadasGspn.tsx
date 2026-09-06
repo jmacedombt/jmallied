@@ -9,10 +9,15 @@ export default function TabelaPecasCasadasGspn({
   linhas,
   remessas,
   remessaSelecionada,
+  erro,
 }: {
   linhas: PecaCasada[];
   remessas: RemessaCasada[];
   remessaSelecionada: string | null;
+  /** erro ao consultar as funções gspn_pecas_casadas/gspn_remessas_casadas
+   * (ex: migration 0024 ainda não rodada no Supabase) — mostrado em vez do
+   * estado "sem peças casadas" pra não confundir os dois casos. */
+  erro?: string | null;
 }) {
   const maiorPercentual = Math.max(1, ...linhas.map((l) => l.percentual));
 
@@ -31,7 +36,12 @@ export default function TabelaPecasCasadasGspn({
         <FiltroRemessaGspn remessas={remessas} selecionada={remessaSelecionada} />
       </div>
 
-      {linhas.length === 0 ? (
+      {erro ? (
+        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg mx-5 my-4 px-3 py-2.5">
+          Não consegui carregar essa relação: {erro}. Confirme se a migration mais recente (0024) foi executada no
+          editor SQL do Supabase.
+        </p>
+      ) : linhas.length === 0 ? (
         <p className="text-sm py-10 text-center" style={{ color: "var(--muted)" }}>
           Nenhum chamado casado com essa OS Reparadora ainda
           {remessaSelecionada ? " nessa remessa." : "."}

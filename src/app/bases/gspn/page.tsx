@@ -30,22 +30,35 @@ export default async function BaseGspnPage({
 
   const remessaSelecionada = searchParams.remessa?.trim() || null;
 
-  const [{ count: totalChamados }, { data: ultimaImportacao }, { data: pecasCasadasBrutas }, { data: remessasBrutas }] =
-    await Promise.all([
-      supabase.from("gspn_chamados").select("id", { count: "exact", head: true }),
-      supabase
-        .from("gspn_importacoes")
-        .select(
-          "importado_em, chamados_novos, chamados_atualizados, pecas_casadas_orcamento, pecas_nao_casadas_orcamento, usuarios:importado_por (nome, sobrenome)"
-        )
-        .order("importado_em", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase.rpc("gspn_pecas_casadas", { p_nf_remessa: remessaSelecionada }) as unknown as Promise<{
-        data: PecaCasada[] | null;
-      }>,
-      supabase.rpc("gspn_remessas_casadas") as unknown as Promise<{ data: RemessaCasada[] | null }>,
-    ]);
+  const [
+    { count: totalChamados },
+    { data: ultimaImportacao },
+    { data: pecasCasadasBrutas, error: erroPecasCasadas },
+    { data: remessasBrutas, error: erroRemessas },
+  ] = await Promise.all([
+    supabase.from("gspn_chamados").select("id", { count: "exact", head: true }),
+    supabase
+      .from("gspn_importacoes")
+      .select(
+        "importado_em, chamados_novos, chamados_atualizados, pecas_casadas_orcamento, pecas_nao_casadas_orcamento, usuarios:importado_por (nome, sobrenome)"
+      )
+      .order("importado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.rpc("gspn_pecas_casadas", { p_nf_remessa: remessaSelecionada }) as unknown as Promise<{
+      data: PecaCasada[] | null;
+      error: { message: string } | null;
+    }>,
+    supabase.rpc("gspn_remessas_casadas") as unknown as Promise<{
+      data: RemessaCasada[] | null;
+      error: { message: string } | null;
+    }>,
+  ]);
+
+  // se as funções da migration 0024 ainda não foram rodadas no Supabase (ou
+  // qualquer outro erro na consulta), mostra isso explicitamente em vez de
+  // simplesmente aparentar "nenhuma peça casada" — evita confusão.
+  const erroRelacao = erroPecasCasadas?.message || erroRemessas?.message || null;
 
   const usuarioImportacao = ultimaImportacao?.usuarios as
     | { nome: string; sobrenome: string }
@@ -99,6 +112,7 @@ export default async function BaseGspnPage({
         linhas={pecasCasadas}
         remessas={remessasCasadas}
         remessaSelecionada={remessaSelecionada}
+        erro={erroRelacao}
       />
     </AppShell>
   );
