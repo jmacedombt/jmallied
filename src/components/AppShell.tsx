@@ -15,6 +15,7 @@ import {
   Home,
   Info,
   LayoutGrid,
+  LineChart,
   LogOut,
   Menu,
   Percent,
@@ -32,6 +33,7 @@ import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import BotaoTema from "@/components/BotaoTema";
 import ColorPickerSistema from "@/components/ColorPickerSistema";
+import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
 
 type Perfil = {
   nome: string;
@@ -56,7 +58,20 @@ type GrupoMenu = {
 // Estrutura do menu lateral. Por enquanto o grupo "Sistema" só tem
 // "Usuários" — as demais funcionalidades entram aqui conforme forem
 // solicitadas.
-const GRUPOS_MENU: GrupoMenu[] = [
+// grupo "Métricas" só entra na lista pra quem tem permissão (mesmo
+// cargo que já confirma o envio de um lote — ver podeConfirmarAnaliseEmLote)
+// — inserido dinamicamente em GRUPOS_MENU.
+const GRUPO_METRICAS: GrupoMenu = {
+  id: "metricas",
+  label: "Métricas",
+  icone: LineChart,
+  itens: [
+    { href: "/metricas/volumetria", label: "Volumetria", icone: LayoutGrid },
+    { href: "/metricas/rtat", label: "R-TAT", icone: LineChart },
+  ],
+};
+
+const GRUPOS_MENU_BASE: GrupoMenu[] = [
   {
     id: "operacional",
     label: "Operacional",
@@ -143,11 +158,16 @@ export default function AppShell({
   const router = useRouter();
   const supabase = createClient();
 
+  // "Métricas" só aparece pra quem tem permissão — inserido logo depois
+  // de "Impressão", antes de "Configurações".
+  const podeVerMetricas = podeConfirmarAnaliseEmLote(perfil);
+  const grupos = GRUPOS_MENU_BASE.flatMap((g) => (g.id === "impressao" && podeVerMetricas ? [g, GRUPO_METRICAS] : [g]));
+
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>(
     () =>
       Object.fromEntries(
-        GRUPOS_MENU.map((g) => [
+        grupos.map((g) => [
           g.id,
           g.itens.some((item) => pathname?.startsWith(item.href)),
         ])
@@ -224,7 +244,7 @@ export default function AppShell({
             Início
           </Link>
 
-          {GRUPOS_MENU.map((grupo) => {
+          {grupos.map((grupo) => {
             const IconeGrupo = grupo.icone;
             const aberto = gruposAbertos[grupo.id];
             const hrefAtivo = hrefMaisEspecificoAtivo(grupo.itens, pathname);
