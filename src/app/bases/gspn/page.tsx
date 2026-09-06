@@ -3,16 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import CardResumo from "@/components/CardResumo";
 import ImportarGspnForm from "@/components/ImportarGspnForm";
-import TabelaPecasCasadasGspn, { type PecaCasada } from "@/components/TabelaPecasCasadasGspn";
-import { type RemessaCasada } from "@/components/FiltroRemessaGspn";
 import { podeImportarGspn } from "@/lib/gspn";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
-export default async function BaseGspnPage({
-  searchParams,
-}: {
-  searchParams: { remessa?: string };
-}) {
+export default async function BaseGspnPage() {
   const supabase = createClient();
   const {
     data: { user },
@@ -28,14 +22,7 @@ export default async function BaseGspnPage({
     perfil = data;
   }
 
-  const remessaSelecionada = searchParams.remessa?.trim() || null;
-
-  const [
-    { count: totalChamados },
-    { data: ultimaImportacao },
-    { data: pecasCasadasBrutas, error: erroPecasCasadas },
-    { data: remessasBrutas, error: erroRemessas },
-  ] = await Promise.all([
+  const [{ count: totalChamados }, { data: ultimaImportacao }] = await Promise.all([
     supabase.from("gspn_chamados").select("id", { count: "exact", head: true }),
     supabase
       .from("gspn_importacoes")
@@ -45,20 +32,7 @@ export default async function BaseGspnPage({
       .order("importado_em", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase.rpc("gspn_pecas_casadas", { p_nf_remessa: remessaSelecionada }) as unknown as Promise<{
-      data: PecaCasada[] | null;
-      error: { message: string } | null;
-    }>,
-    supabase.rpc("gspn_remessas_casadas") as unknown as Promise<{
-      data: RemessaCasada[] | null;
-      error: { message: string } | null;
-    }>,
   ]);
-
-  // se as funções da migration 0024 ainda não foram rodadas no Supabase (ou
-  // qualquer outro erro na consulta), mostra isso explicitamente em vez de
-  // simplesmente aparentar "nenhuma peça casada" — evita confusão.
-  const erroRelacao = erroPecasCasadas?.message || erroRemessas?.message || null;
 
   const usuarioImportacao = ultimaImportacao?.usuarios as
     | { nome: string; sobrenome: string }
@@ -66,16 +40,6 @@ export default async function BaseGspnPage({
     | null
     | undefined;
   const nomeUsuarioImportacao = Array.isArray(usuarioImportacao) ? usuarioImportacao[0] : usuarioImportacao;
-
-  const pecasCasadas: PecaCasada[] = (pecasCasadasBrutas ?? []).map((p) => ({
-    peca: p.peca,
-    quantidade: Number(p.quantidade),
-    percentual: Number(p.percentual),
-  }));
-  const remessasCasadas: RemessaCasada[] = (remessasBrutas ?? []).map((r) => ({
-    nf_remessa_allied: r.nf_remessa_allied,
-    quantidade_chamados: Number(r.quantidade_chamados),
-  }));
 
   return (
     <AppShell
@@ -107,13 +71,6 @@ export default async function BaseGspnPage({
           />
         </div>
       </div>
-
-      <TabelaPecasCasadasGspn
-        linhas={pecasCasadas}
-        remessas={remessasCasadas}
-        remessaSelecionada={remessaSelecionada}
-        erro={erroRelacao}
-      />
     </AppShell>
   );
 }
