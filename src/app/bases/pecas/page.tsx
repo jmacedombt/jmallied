@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ImportarBasePecasForm from "@/components/ImportarBasePecasForm";
 import GraficoPecasPorPeriodo from "@/components/GraficoPecasPorPeriodo";
+import TabelaVariacaoPrecoPecas, { type VariacaoPreco } from "@/components/TabelaVariacaoPrecoPecas";
 import { formatarDataBr, podeImportarBasePecas } from "@/lib/pecas";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
@@ -24,7 +25,7 @@ export default async function BasePecasPage() {
   type ResumoPecas = { pecas_unicas: number; pecas_registradas: number; data_mais_recente: string | null };
   type PontoPeriodo = { periodo: string; quantidade: number | string };
 
-  const [{ data: resumo }, { data: porMes }, { data: porSemana }, { data: porAno }, { data: ultimaImportacao }] =
+  const [{ data: resumo }, { data: porMes }, { data: porSemana }, { data: porAno }, { data: ultimaImportacao }, { data: variacaoPreco }] =
     await Promise.all([
       supabase.rpc("pecas_metricas_resumo").single() as unknown as Promise<{ data: ResumoPecas | null }>,
       supabase.rpc("pecas_metricas_periodo", { p_agrupamento: "mes" }) as unknown as Promise<{
@@ -42,6 +43,9 @@ export default async function BasePecasPage() {
         .order("importado_em", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase.rpc("pecas_variacao_preco_recente", { p_dias: 60 }) as unknown as Promise<{
+        data: VariacaoPreco[] | null;
+      }>,
     ]);
 
   const normalizar = (linhas: PontoPeriodo[] | null) =>
@@ -64,34 +68,7 @@ export default async function BasePecasPage() {
         </div>
       )}
 
-      <div className="grid sm:grid-cols-2 gap-3 mb-6">
-        <div
-          className="rounded-xl border px-4 py-3 text-sm"
-          style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
-        >
-          Atualizada em{" "}
-          <strong style={{ color: "var(--ink)" }}>
-            {ultimaImportacao
-              ? formatarDataHoraBrasilia(ultimaImportacao.importado_em)
-              : "—"}
-          </strong>{" "}
-          por{" "}
-          <strong style={{ color: "var(--ink)" }}>
-            {nomeUsuarioImportacao
-              ? `${nomeUsuarioImportacao.nome} ${nomeUsuarioImportacao.sobrenome}`
-              : "—"}
-          </strong>
-        </div>
-        <div
-          className="rounded-xl border px-4 py-3 text-sm"
-          style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
-        >
-          Peça mais recente da base:{" "}
-          <strong style={{ color: "var(--ink)" }}>{formatarDataBr(resumo?.data_mais_recente)}</strong>
-        </div>
-      </div>
-
-      <div className="grid sm:grid-cols-2 gap-4 mb-6">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div
           className="rounded-xl border p-5"
           style={{ background: "var(--surface)", borderColor: "var(--line)" }}
@@ -114,6 +91,34 @@ export default async function BasePecasPage() {
             {resumo?.pecas_registradas ?? 0}
           </p>
         </div>
+        <div
+          className="rounded-xl border px-4 py-3 text-sm flex items-center"
+          style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
+        >
+          <span>
+            Atualizada em{" "}
+            <strong style={{ color: "var(--ink)" }}>
+              {ultimaImportacao
+                ? formatarDataHoraBrasilia(ultimaImportacao.importado_em)
+                : "—"}
+            </strong>{" "}
+            por{" "}
+            <strong style={{ color: "var(--ink)" }}>
+              {nomeUsuarioImportacao
+                ? `${nomeUsuarioImportacao.nome} ${nomeUsuarioImportacao.sobrenome}`
+                : "—"}
+            </strong>
+          </span>
+        </div>
+        <div
+          className="rounded-xl border px-4 py-3 text-sm flex items-center"
+          style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
+        >
+          <span>
+            Peça mais recente da base:{" "}
+            <strong style={{ color: "var(--ink)" }}>{formatarDataBr(resumo?.data_mais_recente)}</strong>
+          </span>
+        </div>
       </div>
 
       <GraficoPecasPorPeriodo
@@ -121,6 +126,8 @@ export default async function BasePecasPage() {
         porSemana={normalizar(porSemana)}
         porAno={normalizar(porAno)}
       />
+
+      <TabelaVariacaoPrecoPecas linhas={variacaoPreco ?? []} />
     </AppShell>
   );
 }

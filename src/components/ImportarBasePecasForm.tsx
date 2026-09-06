@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UploadCloud } from "lucide-react";
+import { UploadCloud, Info } from "lucide-react";
 import { formatarDataBr } from "@/lib/pecas";
 import { uploadComProgresso } from "@/lib/uploadComProgresso";
 import BarraProgresso from "@/components/BarraProgresso";
@@ -87,10 +87,16 @@ export default function ImportarBasePecasForm() {
           {carregando ? "Importando..." : "Carregar base"}
         </button>
 
-        <p className="text-xs w-full sm:w-auto" style={{ color: "var(--muted)" }}>
-          A base acumula entre importações — linhas repetidas (mesmo código, data,
-          entrega, quantidade e valor) são ignoradas automaticamente.
-        </p>
+        <span className="group relative inline-flex items-center">
+          <Info size={16} className="cursor-help" style={{ color: "var(--muted)" }} />
+          <div
+            className="pointer-events-none absolute left-0 top-full mt-2 z-30 hidden w-64 rounded-lg border p-2.5 text-left text-[11px] font-normal leading-snug shadow-2xl group-hover:block"
+            style={{ background: "var(--surface)", borderColor: "var(--line)", color: "var(--muted)" }}
+          >
+            A base acumula entre importações — linhas repetidas (mesmo código, data,
+            entrega, quantidade e valor) são ignoradas automaticamente.
+          </div>
+        </span>
       </form>
 
       {carregando && (
