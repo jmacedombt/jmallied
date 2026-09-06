@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import CardResumo from "@/components/CardResumo";
 import ImportarGspnForm from "@/components/ImportarGspnForm";
+import HistoricoImportacoesGspn, { type ImportacaoGspn } from "@/components/HistoricoImportacoesGspn";
 import { podeImportarGspn } from "@/lib/gspn";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
@@ -22,7 +23,20 @@ export default async function BaseGspnPage() {
     perfil = data;
   }
 
-  const [{ count: totalChamados }, { data: ultimaImportacao }] = await Promise.all([
+  type ImportacaoBruta = {
+    id: string;
+    arquivo_nome: string;
+    importado_em: string;
+    linhas_no_arquivo: number;
+    linhas_invalidas: number;
+    chamados_novos: number;
+    chamados_atualizados: number;
+    pecas_casadas_orcamento: number;
+    pecas_nao_casadas_orcamento: number;
+    usuarios: { nome: string; sobrenome: string } | { nome: string; sobrenome: string }[] | null;
+  };
+
+  const [{ count: totalChamados }, { data: ultimaImportacao }, { data: historicoBruto }] = await Promise.all([
     supabase.from("gspn_chamados").select("id", { count: "exact", head: true }),
     supabase
       .from("gspn_importacoes")
@@ -32,6 +46,13 @@ export default async function BaseGspnPage() {
       .order("importado_em", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("gspn_importacoes")
+      .select(
+        "id, arquivo_nome, importado_em, linhas_no_arquivo, linhas_invalidas, chamados_novos, chamados_atualizados, pecas_casadas_orcamento, pecas_nao_casadas_orcamento, usuarios:importado_por (nome, sobrenome)"
+      )
+      .order("importado_em", { ascending: false })
+      .limit(200) as unknown as Promise<{ data: ImportacaoBruta[] | null }>,
   ]);
 
   const usuarioImportacao = ultimaImportacao?.usuarios as
@@ -40,6 +61,22 @@ export default async function BaseGspnPage() {
     | null
     | undefined;
   const nomeUsuarioImportacao = Array.isArray(usuarioImportacao) ? usuarioImportacao[0] : usuarioImportacao;
+
+  const historico: ImportacaoGspn[] = (historicoBruto ?? []).map((h) => {
+    const usuario = Array.isArray(h.usuarios) ? h.usuarios[0] : h.usuarios;
+    return {
+      id: h.id,
+      arquivo_nome: h.arquivo_nome,
+      importado_em: h.importado_em,
+      linhas_no_arquivo: h.linhas_no_arquivo,
+      linhas_invalidas: h.linhas_invalidas,
+      chamados_novos: h.chamados_novos,
+      chamados_atualizados: h.chamados_atualizados,
+      pecas_casadas_orcamento: h.pecas_casadas_orcamento,
+      pecas_nao_casadas_orcamento: h.pecas_nao_casadas_orcamento,
+      usuario: usuario ?? null,
+    };
+  });
 
   return (
     <AppShell
@@ -71,6 +108,8 @@ export default async function BaseGspnPage() {
           />
         </div>
       </div>
+
+      <HistoricoImportacoesGspn historico={historico} />
     </AppShell>
   );
 }
