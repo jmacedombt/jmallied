@@ -1,3 +1,4 @@
+import { Package, Boxes, RefreshCcw, CalendarClock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ImportarBasePecasForm from "@/components/ImportarBasePecasForm";
@@ -5,6 +6,47 @@ import GraficoPecasPorPeriodo from "@/components/GraficoPecasPorPeriodo";
 import TabelaVariacaoPrecoPecas, { type VariacaoPreco } from "@/components/TabelaVariacaoPrecoPecas";
 import { formatarDataBr, podeImportarBasePecas } from "@/lib/pecas";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
+
+// Card de resumo padronizado da linha de cima (ícone destacado + rótulo +
+// valor em destaque) — mesmo visual pros 4 indicadores, incluindo os dois
+// que antes eram só uma frase corrida ("Atualizada em..." / "Peça mais
+// recente..."), pedido pelo Rafael pra ficar num formato mais profissional.
+function CardResumo({
+  icone: Icone,
+  label,
+  valor,
+  sub,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  icone: React.ComponentType<any>;
+  label: string;
+  valor: React.ReactNode;
+  sub?: React.ReactNode;
+}) {
+  return (
+    <div
+      className="rounded-xl border p-5 flex items-start gap-3.5"
+      style={{ background: "var(--surface)", borderColor: "var(--line)" }}
+    >
+      <div className="rounded-lg p-2.5 shrink-0" style={{ background: "var(--accent-glow)" }}>
+        <Icone size={20} style={{ color: "var(--accent2)" }} />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[11px] uppercase tracking-wide font-medium mb-1" style={{ color: "var(--muted)" }}>
+          {label}
+        </p>
+        <p className="text-xl font-semibold leading-tight truncate" style={{ color: "var(--ink)" }}>
+          {valor}
+        </p>
+        {sub && (
+          <p className="text-xs mt-1 truncate" style={{ color: "var(--muted)" }}>
+            {sub}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default async function BasePecasPage() {
   const supabase = createClient();
@@ -69,56 +111,27 @@ export default async function BasePecasPage() {
       )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div
-          className="rounded-xl border p-5"
-          style={{ background: "var(--surface)", borderColor: "var(--line)" }}
-        >
-          <p className="text-xs uppercase tracking-wide mb-1.5" style={{ color: "var(--muted)" }}>
-            Peças únicas (códigos)
-          </p>
-          <p className="text-3xl font-semibold" style={{ color: "var(--ink)" }}>
-            {resumo?.pecas_unicas ?? 0}
-          </p>
-        </div>
-        <div
-          className="rounded-xl border p-5"
-          style={{ background: "var(--surface)", borderColor: "var(--line)" }}
-        >
-          <p className="text-xs uppercase tracking-wide mb-1.5" style={{ color: "var(--muted)" }}>
-            Peças registradas (soma da quantidade)
-          </p>
-          <p className="text-3xl font-semibold" style={{ color: "var(--ink)" }}>
-            {resumo?.pecas_registradas ?? 0}
-          </p>
-        </div>
-        <div
-          className="rounded-xl border px-4 py-3 text-sm flex items-center"
-          style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
-        >
-          <span>
-            Atualizada em{" "}
-            <strong style={{ color: "var(--ink)" }}>
-              {ultimaImportacao
-                ? formatarDataHoraBrasilia(ultimaImportacao.importado_em)
-                : "—"}
-            </strong>{" "}
-            por{" "}
-            <strong style={{ color: "var(--ink)" }}>
-              {nomeUsuarioImportacao
-                ? `${nomeUsuarioImportacao.nome} ${nomeUsuarioImportacao.sobrenome}`
-                : "—"}
-            </strong>
-          </span>
-        </div>
-        <div
-          className="rounded-xl border px-4 py-3 text-sm flex items-center"
-          style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
-        >
-          <span>
-            Peça mais recente da base:{" "}
-            <strong style={{ color: "var(--ink)" }}>{formatarDataBr(resumo?.data_mais_recente)}</strong>
-          </span>
-        </div>
+        <CardResumo icone={Package} label="Peças únicas (códigos)" valor={resumo?.pecas_unicas ?? 0} />
+        <CardResumo
+          icone={Boxes}
+          label="Peças registradas (soma da quantidade)"
+          valor={resumo?.pecas_registradas ?? 0}
+        />
+        <CardResumo
+          icone={RefreshCcw}
+          label="Atualizada em"
+          valor={ultimaImportacao ? formatarDataHoraBrasilia(ultimaImportacao.importado_em) : "—"}
+          sub={
+            nomeUsuarioImportacao
+              ? `por ${nomeUsuarioImportacao.nome} ${nomeUsuarioImportacao.sobrenome}`
+              : undefined
+          }
+        />
+        <CardResumo
+          icone={CalendarClock}
+          label="Peça mais recente da base"
+          valor={formatarDataBr(resumo?.data_mais_recente)}
+        />
       </div>
 
       <GraficoPecasPorPeriodo
