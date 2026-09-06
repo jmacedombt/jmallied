@@ -41,6 +41,7 @@ function curvaSuave(pontos: { x: number; y: number }[]): string {
 // "rotular só o essencial": aqui o valor em cada ponto É o pedido.
 export default function GraficoLinhaGradiente({
   titulo,
+  acoes,
   pontos,
   formatarValor = (v) => String(Math.round(v)),
   corLinha = "var(--accent2)",
@@ -48,6 +49,9 @@ export default function GraficoLinhaGradiente({
   mensagemVazia = "Nenhum dado nesse período.",
 }: {
   titulo?: React.ReactNode;
+  /** conteúdo extra no canto direito do cabeçalho, ao lado do título —
+   * ex: os botões de alternar Mês/Semana/Ano (ver GraficoPecasPorPeriodo.tsx). */
+  acoes?: React.ReactNode;
   pontos: PontoGrafico[];
   formatarValor?: (valor: number) => string;
   corLinha?: string;
@@ -81,10 +85,15 @@ export default function GraficoLinhaGradiente({
 
   return (
     <div className="rounded-xl border p-5" style={{ background: "var(--surface)", borderColor: "var(--line)" }}>
-      {titulo && (
-        <p className="text-sm font-semibold mb-4" style={{ color: "var(--ink)" }}>
-          {titulo}
-        </p>
+      {(titulo || acoes) && (
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+          {titulo && (
+            <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+              {titulo}
+            </p>
+          )}
+          {acoes}
+        </div>
       )}
 
       {pontos.length === 0 ? (
