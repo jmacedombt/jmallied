@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UploadCloud } from "lucide-react";
+import { UploadCloud, HelpCircle } from "lucide-react";
 import { lerLinhaGspn, type LinhaGspnImportada } from "@/lib/gspn";
 import BarraProgresso from "@/components/BarraProgresso";
 
@@ -227,11 +227,17 @@ export default function ImportarGspnForm() {
           {carregando ? "Importando..." : "Carregar base"}
         </button>
 
-        <p className="text-xs w-full sm:w-auto" style={{ color: "var(--muted)" }}>
-          Sempre considera a última versão: atualiza cada chamado pela OS Reparadora (não apaga o que não vier no
-          arquivo) e já propaga as peças pra tabela de orçamentos. Arquivos grandes são enviados em lotes, então o
-          sistema não trava.
-        </p>
+        <span className="group relative inline-flex items-center">
+          <HelpCircle size={16} className="cursor-help" style={{ color: "var(--muted)" }} />
+          <div
+            className="pointer-events-none absolute left-0 top-full mt-2 z-30 hidden w-72 rounded-lg border p-2.5 text-left text-[11px] font-normal leading-snug shadow-2xl group-hover:block"
+            style={{ background: "var(--surface)", borderColor: "var(--line)", color: "var(--muted)" }}
+          >
+            Sempre considera a última versão: atualiza cada chamado pela OS Reparadora (não apaga o que não vier no
+            arquivo) e já propaga as peças pra tabela de orçamentos. Arquivos grandes são enviados em lotes, então o
+            sistema não trava.
+          </div>
+        </span>
       </form>
 
       {carregando && (
