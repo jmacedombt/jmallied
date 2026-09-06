@@ -46,6 +46,7 @@ export default function ConsultaBidPanel({
   const [filtroModelo, setFiltroModelo] = useState("");
   const [filtroSolucao, setFiltroSolucao] = useState("");
   const [somenteTravados, setSomenteTravados] = useState(false);
+  const [somenteCadastradoManual, setSomenteCadastradoManual] = useState(false);
 
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [processandoMassa, setProcessandoMassa] = useState(false);
@@ -76,11 +77,14 @@ export default function ConsultaBidPanel({
       if (filtroModelo && p.modelo !== filtroModelo) return false;
       if (filtroSolucao && !(p.bid_solucoes ?? []).some((s) => s.peca_solucao === filtroSolucao)) return false;
       if (somenteTravados && !p.travado) return false;
+      if (somenteCadastradoManual && !p.cadastrado_manualmente) return false;
       return true;
     });
-  }, [pecas, filtroPartNumber, filtroModelo, filtroSolucao, somenteTravados]);
+  }, [pecas, filtroPartNumber, filtroModelo, filtroSolucao, somenteTravados, somenteCadastradoManual]);
 
-  const filtroAtivo = Boolean(filtroPartNumber.trim() || filtroModelo || filtroSolucao || somenteTravados);
+  const filtroAtivo = Boolean(
+    filtroPartNumber.trim() || filtroModelo || filtroSolucao || somenteTravados || somenteCadastradoManual
+  );
 
   const todosFiltradosSelecionados =
     pecasFiltradas.length > 0 && pecasFiltradas.every((p) => selecionados.has(p.id));
@@ -276,6 +280,17 @@ export default function ConsultaBidPanel({
           Só travados
         </label>
 
+        <label className="flex items-center gap-2 text-sm pb-2.5 cursor-pointer select-none" style={{ color: "var(--ink)" }}>
+          <input
+            type="checkbox"
+            checked={somenteCadastradoManual}
+            onChange={(e) => setSomenteCadastradoManual(e.target.checked)}
+            className="w-4 h-4"
+            style={{ accentColor: "var(--accent2)" }}
+          />
+          Cadastrado Manualmente
+        </label>
+
         {filtroAtivo && (
           <button
             type="button"
@@ -284,6 +299,7 @@ export default function ConsultaBidPanel({
               setFiltroModelo("");
               setFiltroSolucao("");
               setSomenteTravados(false);
+              setSomenteCadastradoManual(false);
             }}
             className="text-xs pb-3 hover:opacity-80 transition"
             style={{ color: "var(--accent2)" }}
@@ -392,7 +408,18 @@ export default function ConsultaBidPanel({
                       {peca.modelo}
                     </td>
                     <td className="px-4 py-2.5 font-mono" style={{ color: "var(--ink)" }}>
-                      {peca.part_number}
+                      <span className="inline-flex items-center gap-1.5">
+                        {peca.part_number}
+                        {peca.cadastrado_manualmente && (
+                          <span
+                            className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-sans font-semibold"
+                            style={{ color: "#b45309", background: "rgba(249, 168, 37, 0.15)" }}
+                            title="Cadastrado manualmente em Ag. Análise por falta de custo no BID"
+                          >
+                            MANUAL
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
                       {principal?.peca_solucao ?? "—"}

@@ -91,6 +91,13 @@ export async function POST(request: Request) {
         mao_de_obra: maoDeObra,
         valor_atualizado_em: valorAtualizadoEm,
         valor_direcao: valorDirecao,
+        // cadastro manual por falta de preço: marca e já trava
+        // automaticamente, pra importação futura do BID nunca
+        // sobrescrever esse valor (ver migration 0025).
+        cadastrado_manualmente: true,
+        travado: true,
+        travado_por: user.id,
+        travado_em: new Date().toISOString(),
       },
       { onConflict: "modelo,part_number" }
     )
@@ -142,7 +149,7 @@ export async function POST(request: Request) {
     custo_peca_allied: resultado.custoPecaAllied,
     valor_imposto: resultado.valorImposto,
     mao_de_obra: maoDeObra,
-    travado: false,
+    travado: true,
   };
 
   return NextResponse.json(infoBid);

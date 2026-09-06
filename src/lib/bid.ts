@@ -230,6 +230,9 @@ export type PecaBidConsulta = {
   mao_de_obra: number | null;
   travado: boolean;
   travado_em: string | null;
+  /** true quando essa peça veio do cadastro manual de Ag. Análise (por
+   * falta de custo no BID) — ver migration 0025. */
+  cadastrado_manualmente: boolean;
   valor_atualizado_em: string;
   valor_direcao: "+" | "-" | null;
   bid_solucoes: SolucaoBidConsulta[];
