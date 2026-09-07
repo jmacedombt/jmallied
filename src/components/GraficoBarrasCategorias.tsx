@@ -1,6 +1,14 @@
 "use client";
 
-export type ItemBarraCategoria = { rotulo: string; valor: number };
+export type ItemBarraCategoria = {
+  rotulo: string;
+  valor: number;
+  /** Texto já formatado pra mostrar no lugar de formatarValor(valor) —
+   * útil quando duas categorias têm o mesmo valor mas precisam de textos
+   * diferentes (ex: "3 de 10" vs "3 de 20"), caso em que formatarValor
+   * sozinho (que só recebe o número) não teria como diferenciar. */
+  valorExibido?: string;
+};
 
 // Barras horizontais tipo "medidor" (trilho + preenchimento), pra
 // comparar uma métrica entre categorias com rótulo longo (ex: os 11
@@ -46,8 +54,8 @@ export default function GraficoBarrasCategorias({
                   style={{ width: `${Math.max(2, (item.valor / max) * 100)}%`, background: cor }}
                 />
               </div>
-              <span className="w-10 shrink-0 text-xs font-semibold" style={{ color: "var(--ink)" }}>
-                {formatarValor(item.valor)}
+              <span className="w-16 shrink-0 text-xs font-semibold text-right" style={{ color: "var(--ink)" }}>
+                {item.valorExibido ?? formatarValor(item.valor)}
               </span>
             </div>
           ))}

@@ -177,3 +177,219 @@ export type ContagemStatus = { status_operacional: string; quantidade: number };
 export function formatarDias(valor: number): string {
   return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}d`;
 }
+
+// ---- Métricas > Orçamentos (resultado: aprovado/reprovado/contra
+// proposta) — ver migration 0029_metricas_orcamentos.sql ----
+
+/** Janela padrão (terminando hoje, Brasília) pra telas de métricas que
+ * não têm granularidade (dia/semana/mês), só um período — diferente de
+ * intervaloPadrao(g), que é pensado pros gráficos de série temporal. */
+export function intervaloPadraoDias(dias: number): { inicio: string; fim: string } {
+  const fim = hojeBrasiliaIso();
+  return { inicio: somarDias(fim, -dias), fim };
+}
+
+export type ResultadoOrcamento =
+  | "aprovado_primeira"
+  | "reprovado_primeira"
+  | "contra_proposta_aceita"
+  | "contra_proposta_recusada";
+
+export const RESULTADOS_ORCAMENTO: { valor: ResultadoOrcamento; label: string; cor: string }[] = [
+  { valor: "aprovado_primeira", label: "Aprovado de primeira", cor: "#22c55e" },
+  { valor: "reprovado_primeira", label: "Reprovado de primeira", cor: "#ef4444" },
+  { valor: "contra_proposta_aceita", label: "Contra proposta aceita", cor: "#0ea5e9" },
+  { valor: "contra_proposta_recusada", label: "Contra proposta recusada", cor: "#f97316" },
+];
+
+export function labelResultado(valor: string): string {
+  return RESULTADOS_ORCAMENTO.find((r) => r.valor === valor)?.label ?? valor;
+}
+
+export function corResultado(valor: string): string {
+  return RESULTADOS_ORCAMENTO.find((r) => r.valor === valor)?.cor ?? "var(--muted)";
+}
+
+/** Um orçamento "aprovado" (de primeira ou por contra proposta aceita) —
+ * usado pra somar as duas categorias positivas em vários lugares da tela
+ * (% de aprovação geral, por lote, por modelo, por peça). */
+export function resultadoEhAprovado(valor: string): boolean {
+  return valor === "aprovado_primeira" || valor === "contra_proposta_aceita";
+}
+
+/** Uma linha por orçamento fechado, exatamente como volta de
+ * metricas_resultado_orcamentos — venda_total_pecas/mao_de_obra/
+ * valor_total_reparo vêm null quando o orçamento foi reprovado antes de
+ * passar por Validação de Orçamentos (nunca teve preço apurado). */
+export type LinhaResultadoOrcamento = {
+  orcamento_id: string;
+  nf_remessa_allied: string | null;
+  modelo_comercial: string | null;
+  resultado: ResultadoOrcamento;
+  fechado_em: string;
+  venda_total_pecas: number | null;
+  mao_de_obra: number | null;
+  valor_total_reparo: number | null;
+};
+
+/** Uma linha por Part Number x resultado, exatamente como volta de
+ * metricas_resultado_pecas (já agregado por quantidade no banco). */
+export type LinhaResultadoPeca = {
+  part_number: string;
+  resultado: ResultadoOrcamento;
+  quantidade: number;
+};
+
+export type ResumoResultados = {
+  total: number;
+  porResultado: Record<ResultadoOrcamento, number>;
+  percentualPorResultado: Record<ResultadoOrcamento, number>;
+  percentualAprovacaoGeral: number;
+  valorMedioPorResultado: Record<ResultadoOrcamento, number | null>;
+};
+
+/** Resumo geral do período: quantidade e % de cada uma das 4 categorias,
+ * a % de aprovação combinada (aprovado de primeira + contra proposta
+ * aceita) e o valor médio (Venda de Peça + Mão de obra) de cada
+ * categoria — ignora as linhas sem valor apurado (reprovado antes de
+ * Validação de Orçamentos) em vez de contar como zero, senão a média cai
+ * artificialmente. */
+export function resumirResultados(linhas: LinhaResultadoOrcamento[]): ResumoResultados {
+  const total = linhas.length;
+  const porResultado = {} as Record<ResultadoOrcamento, number>;
+  const somaValorPorResultado = {} as Record<ResultadoOrcamento, number>;
+  const contagemComValorPorResultado = {} as Record<ResultadoOrcamento, number>;
+
+  for (const r of RESULTADOS_ORCAMENTO) {
+    porResultado[r.valor] = 0;
+    somaValorPorResultado[r.valor] = 0;
+    contagemComValorPorResultado[r.valor] = 0;
+  }
+
+  for (const linha of linhas) {
+    porResultado[linha.resultado] += 1;
+    if (linha.valor_total_reparo != null) {
+      somaValorPorResultado[linha.resultado] += linha.valor_total_reparo;
+      contagemComValorPorResultado[linha.resultado] += 1;
+    }
+  }
+
+  const percentualPorResultado = {} as Record<ResultadoOrcamento, number>;
+  const valorMedioPorResultado = {} as Record<ResultadoOrcamento, number | null>;
+  for (const r of RESULTADOS_ORCAMENTO) {
+    percentualPorResultado[r.valor] = total > 0 ? (porResultado[r.valor] / total) * 100 : 0;
+    valorMedioPorResultado[r.valor] =
+      contagemComValorPorResultado[r.valor] > 0 ? somaValorPorResultado[r.valor] / contagemComValorPorResultado[r.valor] : null;
+  }
+
+  const aprovados = porResultado.aprovado_primeira + porResultado.contra_proposta_aceita;
+  const percentualAprovacaoGeral = total > 0 ? (aprovados / total) * 100 : 0;
+
+  return { total, porResultado, percentualPorResultado, percentualAprovacaoGeral, valorMedioPorResultado };
+}
+
+export type LinhaResultadoPorLote = {
+  nfRemessaAllied: string;
+  total: number;
+  porResultado: Record<ResultadoOrcamento, number>;
+  percentualAprovacao: number;
+};
+
+/** Agrupa por NF Remessa (lote) — quantidade de cada resultado e o % de
+ * aprovação combinado daquele lote específico, ordenado do lote com mais
+ * orçamentos fechados pro com menos. */
+export function agruparResultadoPorLote(linhas: LinhaResultadoOrcamento[]): LinhaResultadoPorLote[] {
+  const porLote = new Map<string, LinhaResultadoOrcamento[]>();
+  for (const linha of linhas) {
+    const chave = linha.nf_remessa_allied ?? "(sem NF Remessa)";
+    if (!porLote.has(chave)) porLote.set(chave, []);
+    porLote.get(chave)!.push(linha);
+  }
+
+  return Array.from(porLote.entries())
+    .map(([nfRemessaAllied, doLote]) => {
+      const resumo = resumirResultados(doLote);
+      return {
+        nfRemessaAllied,
+        total: resumo.total,
+        porResultado: resumo.porResultado,
+        percentualAprovacao: resumo.percentualAprovacaoGeral,
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+}
+
+export type LinhaResultadoPorModelo = {
+  modeloComercial: string;
+  total: number;
+  porResultado: Record<ResultadoOrcamento, number>;
+  percentualAprovacao: number;
+};
+
+/** Agrupa por Modelo Comercial — mesma ideia do agrupamento por lote,
+ * pra achar quais modelos concentram mais reprovação (ou mais aprovação,
+ * pra comparar). Ordenado do modelo com mais orçamentos fechados pro com
+ * menos — a tela decide o corte (top N) e a ordenação por reprovação. */
+export function agruparResultadoPorModelo(linhas: LinhaResultadoOrcamento[]): LinhaResultadoPorModelo[] {
+  const porModelo = new Map<string, LinhaResultadoOrcamento[]>();
+  for (const linha of linhas) {
+    const chave = linha.modelo_comercial ?? "(sem modelo)";
+    if (!porModelo.has(chave)) porModelo.set(chave, []);
+    porModelo.get(chave)!.push(linha);
+  }
+
+  return Array.from(porModelo.entries())
+    .map(([modeloComercial, doModelo]) => {
+      const resumo = resumirResultados(doModelo);
+      return {
+        modeloComercial,
+        total: resumo.total,
+        porResultado: resumo.porResultado,
+        percentualAprovacao: resumo.percentualAprovacaoGeral,
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+}
+
+export type RankingPeca = {
+  partNumber: string;
+  total: number;
+  porResultado: Record<ResultadoOrcamento, number>;
+  percentualReprovacao: number;
+};
+
+/** Ranking de Part Number, considerando TODAS as peças de todo aparelho
+ * do período (não só a peça 1) — percentualReprovacao = (reprovado de
+ * primeira + contra proposta recusada) / total de ocorrências desse
+ * Part Number, pra achar peças que puxam reprovação mesmo aparecendo em
+ * modelos diferentes. */
+export function agruparRankingPecas(linhas: LinhaResultadoPeca[]): RankingPeca[] {
+  const porPeca = new Map<string, LinhaResultadoPeca[]>();
+  for (const linha of linhas) {
+    if (!porPeca.has(linha.part_number)) porPeca.set(linha.part_number, []);
+    porPeca.get(linha.part_number)!.push(linha);
+  }
+
+  return Array.from(porPeca.entries())
+    .map(([partNumber, doPeca]) => {
+      const porResultado = {} as Record<ResultadoOrcamento, number>;
+      for (const r of RESULTADOS_ORCAMENTO) porResultado[r.valor] = 0;
+      let total = 0;
+      for (const linha of doPeca) {
+        porResultado[linha.resultado] += linha.quantidade;
+        total += linha.quantidade;
+      }
+      const reprovados = porResultado.reprovado_primeira + porResultado.contra_proposta_recusada;
+      const percentualReprovacao = total > 0 ? (reprovados / total) * 100 : 0;
+      return { partNumber, total, porResultado, percentualReprovacao };
+    })
+    .sort((a, b) => b.total - a.total);
+}
+
+export function formatarReal(valor: number): string {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+export function formatarPercentual(valor: number): string {
+  return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}

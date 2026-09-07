@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, Gauge } from "lucide-react";
+import { BarChart3, Gauge, PackageCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
@@ -20,6 +20,14 @@ const TILES = [
     icone: Gauge,
     cor: "#7c3aed",
     clara: "#a78bfa",
+  },
+  {
+    href: "/metricas/orcamentos",
+    titulo: "Orçamentos",
+    descricao: "Aprovado x reprovado x contra proposta por lote, modelo e Part Number — e o valor médio de cada resultado.",
+    icone: PackageCheck,
+    cor: "#059669",
+    clara: "#34d399",
   },
 ];
 
