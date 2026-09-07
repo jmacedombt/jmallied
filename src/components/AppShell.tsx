@@ -19,6 +19,7 @@ import {
   LogOut,
   Mail,
   Menu,
+  PackageCheck,
   Percent,
   Printer,
   Search,
@@ -69,6 +70,7 @@ const GRUPO_METRICAS: GrupoMenu = {
   itens: [
     { href: "/metricas/volumetria", label: "Volumetria", icone: LayoutGrid },
     { href: "/metricas/rtat", label: "R-TAT", icone: LineChart },
+    { href: "/metricas/orcamentos", label: "Orçamentos", icone: PackageCheck },
   ],
 };
 
