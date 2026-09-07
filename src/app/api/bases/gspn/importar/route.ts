@@ -100,6 +100,7 @@ export async function POST(request: Request) {
         asc_job_no: l.asc_job_no,
         status: l.status,
         motivo: l.motivo,
+        descricao_reparacao: l.descricao_reparacao,
         ...pecasComoObjeto(l.pecas),
       })),
     });

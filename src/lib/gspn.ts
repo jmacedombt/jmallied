@@ -14,6 +14,10 @@ export const COL_OS_REPARADORA = 1; // B - "SO Nro."
 export const COL_ASC_JOB_NO = 2; // C - "ASC Job No."
 export const COL_STATUS = 12; // M - "Status"
 export const COL_MOTIVO = 14; // O - "Motivo"
+// AT - "Descrição Reparação" — usada como Observação Técnica Reparadora
+// do orçamento (propagada por OS Reparadora, ver gspn_importar_lote) e,
+// por tabela, na coluna OBS do arquivo de envio pra Allied.
+export const COL_DESCRICAO_REPARACAO = 45;
 // "Código da peça 01..10" — BJ, BS, CB, CK, CT, DC, DL, DU, ED, EM
 export const COLS_PECA = [61, 70, 79, 88, 97, 106, 115, 124, 133, 142];
 
@@ -22,6 +26,7 @@ export type LinhaGspnImportada = {
   asc_job_no: string | null;
   status: string | null;
   motivo: string | null;
+  descricao_reparacao: string | null;
   pecas: (string | null)[]; // 10
 };
 
@@ -48,6 +53,7 @@ export function lerLinhaGspn(linha: unknown[]): LinhaGspnImportada | null {
     asc_job_no: textoOuNull(linha[COL_ASC_JOB_NO]),
     status: textoOuNull(linha[COL_STATUS]),
     motivo: textoOuNull(linha[COL_MOTIVO]),
+    descricao_reparacao: textoOuNull(linha[COL_DESCRICAO_REPARACAO]),
     pecas: COLS_PECA.map((col) => textoOuNull(linha[col])),
   };
 }

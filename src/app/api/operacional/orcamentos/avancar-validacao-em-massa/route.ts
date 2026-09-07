@@ -3,13 +3,15 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
   calcularDetalheValidacao,
   podeConfirmarAnaliseEmLote,
-  STATUS_ETAPAS_ANTERIORES_A_VALIDACAO,
   STATUS_OPERACIONAL,
+  STATUS_ETAPAS_ANTERIORES_A_VALIDACAO,
+  STATUS_ORCAMENTO_REPROVADO,
   STATUS_VALIDACAO_ORCAMENTOS,
   type CamposPecasOrcamento,
   type ConfiguracaoMaoDeObra,
 } from "@/lib/orcamentos";
-import { type FaixaMarkup } from "@/lib/bid";
+import { buscarPrecosBidPorPartNumber, type FaixaMarkup } from "@/lib/bid";
+import { formatarDataBrasilia } from "@/lib/tempo";
 import { enviarEmailGmail, montarPlanilhaOrcamentos, preencherModeloEmail, type LinhaPlanilhaOrcamento } from "@/lib/email";
 
 export const maxDuration = 60;
@@ -19,20 +21,68 @@ const STATUS_AG_RESPOSTA_ORCAMENTO = STATUS_OPERACIONAL.find((s) => s.slug === "
 const COLUNAS_PECAS =
   "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5";
 
-const COLUNAS_IDENTIFICACAO = "os_reparadora, os_care_allied, trade_allied, modelo_comercial, sku";
+// campos "estáticos" do orçamento (não mudam com o cálculo de
+// Validação) que o arquivo de envio pra Allied precisa — ver
+// montarLinhaPlanilha, mais abaixo.
+const CAMPOS_DESCRICAO_DEFEITO = Array.from({ length: 10 }, (_, i) => `descricao_defeito_${i + 1}`);
+const CAMPOS_PECA_DEFEITO = Array.from({ length: 10 }, (_, i) => `peca_defeito_${i + 1}`);
+const COLUNAS_ESTATICAS = [
+  "reparador_terceiro",
+  "os_reparadora",
+  "imei_reparadora",
+  "atendimento",
+  "os_care_allied",
+  "trade_allied",
+  "imei_allied",
+  "classificacao_allied",
+  "sku",
+  "descricao_completa",
+  "modelo_comercial",
+  "observacao_tecnica_reparadora",
+  "motivo_reprova",
+  ...CAMPOS_DESCRICAO_DEFEITO,
+  ...CAMPOS_PECA_DEFEITO,
+].join(", ");
 
 const TAMANHO_LOTE_CODIGOS = 400;
 const TAMANHO_LOTE_UPDATE_PARALELO = 20;
 
-type LinhaOrcamentoLote = CamposPecasOrcamento & {
-  id: string;
-  validacao_confirmado_sem_peca: boolean;
+type CamposEstaticosOrcamento = {
+  reparador_terceiro: string | null;
   os_reparadora: string | null;
+  imei_reparadora: string | null;
+  atendimento: string | null;
   os_care_allied: string | null;
   trade_allied: string;
-  modelo_comercial: string | null;
+  imei_allied: string | null;
+  classificacao_allied: string | null;
   sku: string | null;
+  descricao_completa: string | null;
+  modelo_comercial: string | null;
+  observacao_tecnica_reparadora: string | null;
+  motivo_reprova: string | null;
+  descricao_defeito_1: string | null; descricao_defeito_2: string | null; descricao_defeito_3: string | null;
+  descricao_defeito_4: string | null; descricao_defeito_5: string | null; descricao_defeito_6: string | null;
+  descricao_defeito_7: string | null; descricao_defeito_8: string | null; descricao_defeito_9: string | null;
+  descricao_defeito_10: string | null;
+  peca_defeito_1: string | null; peca_defeito_2: string | null; peca_defeito_3: string | null; peca_defeito_4: string | null;
+  peca_defeito_5: string | null; peca_defeito_6: string | null; peca_defeito_7: string | null; peca_defeito_8: string | null;
+  peca_defeito_9: string | null; peca_defeito_10: string | null;
 };
+
+type LinhaOrcamentoLote = CamposPecasOrcamento &
+  CamposEstaticosOrcamento & {
+    id: string;
+    validacao_confirmado_sem_peca: boolean;
+  };
+
+function listaDescricaoDefeito(a: CamposEstaticosOrcamento): (string | null)[] {
+  return Array.from({ length: 10 }, (_, i) => a[`descricao_defeito_${i + 1}` as keyof CamposEstaticosOrcamento] as string | null);
+}
+
+function listaPecaDefeito(a: CamposEstaticosOrcamento): (string | null)[] {
+  return Array.from({ length: 10 }, (_, i) => a[`peca_defeito_${i + 1}` as keyof CamposEstaticosOrcamento] as string | null);
+}
 
 // Avança TODOS os aparelhos de um lote (NF Remessa) de "Validação de
 // Orçamentos" pra "3 - Ag. Resposta de Orçamento" de uma vez (botão
@@ -78,7 +128,7 @@ export async function POST(request: Request) {
 
   const { data: aparelhos, error: erroBusca } = await admin
     .from("orcamentos")
-    .select(`id, validacao_confirmado_sem_peca, ${COLUNAS_IDENTIFICACAO}, ${COLUNAS_PECAS}`)
+    .select(`id, validacao_confirmado_sem_peca, ${COLUNAS_ESTATICAS}, ${COLUNAS_PECAS}`)
     .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS)
     .eq("nf_remessa_allied", nfRemessa);
 
@@ -87,6 +137,23 @@ export async function POST(request: Request) {
   }
 
   const lista = (aparelhos ?? []) as LinhaOrcamentoLote[];
+
+  // aparelhos do MESMO lote já reprovados antes (etapa "8 - Orçamento
+  // Reprovado") — entram no arquivo de envio junto com os que estão
+  // avançando agora (mesmo lote, arquivo único), mas não são alterados
+  // nem contam pras travas abaixo: já estão numa etapa própria, fora de
+  // Validação de Orçamentos.
+  const { data: reprovadosBrutos, error: erroReprovados } = await admin
+    .from("orcamentos")
+    .select(COLUNAS_ESTATICAS)
+    .eq("status_operacional", STATUS_ORCAMENTO_REPROVADO)
+    .eq("nf_remessa_allied", nfRemessa);
+
+  if (erroReprovados) {
+    return NextResponse.json({ error: erroReprovados.message }, { status: 400 });
+  }
+
+  const reprovados = (reprovadosBrutos ?? []) as CamposEstaticosOrcamento[];
   if (lista.length === 0) {
     return NextResponse.json(
       { error: "Não há aparelhos desse lote em Validação de Orçamentos no momento." },
@@ -227,6 +294,44 @@ export async function POST(request: Request) {
   }));
 
   const agora = new Date().toISOString();
+  const dataEnvioFormatada = formatarDataBrasilia(agora);
+
+  // Peça Solução (BID) de cada Part Number usado nesse lote — pra
+  // traduzir o código gravado em peca_1..10 pro nome que a Allied
+  // reconhece no arquivo de envio (ex: "GH81-26447A" -> "BATERIA").
+  // Quando o Part Number tem custo cadastrado mas nenhuma Peça Solução
+  // registrada no BID (cadastros diferentes, pode acontecer), cai pro
+  // próprio código — nunca fica em branco.
+  const precosBid = await buscarPrecosBidPorPartNumber(admin, codigosUnicos);
+  function pecaSolucaoOuCodigo(codigo: string): string {
+    return precosBid[codigo]?.peca_solucao ?? codigo;
+  }
+
+  // Monta as 10 posições de PEÇA / CUSTO PEÇA do arquivo de envio a
+  // partir do detalhe já calculado pra esse orçamento — cada posição
+  // "1".."10" do detalhe.pecas casa com peca_1..10 do próprio aparelho.
+  // PEÇA ADD 1-5 / CUSTO PEÇA ADD 1-5 ficam em branco por enquanto
+  // (formato ainda não definido) — mesmo que essas posições entrem na
+  // conta do valor total peça.
+  function montarPosicoesPeca(
+    a: LinhaOrcamentoLote,
+    detalhe: ReturnType<typeof calcularDetalheValidacao>
+  ): { peca: (string | null)[]; custoPeca: (number | null)[] } {
+    const peca: (string | null)[] = [];
+    const custoPeca: (number | null)[] = [];
+    for (let n = 1; n <= 10; n++) {
+      const codigo = (a[`peca_${n}` as keyof CamposPecasOrcamento] as string | null)?.trim() || null;
+      if (!codigo) {
+        peca.push(null);
+        custoPeca.push(null);
+        continue;
+      }
+      const detalhePeca = detalhe.pecas.find((p) => p.posicao === String(n));
+      peca.push(pecaSolucaoOuCodigo(codigo));
+      custoPeca.push(detalhePeca?.vendaPeca ?? null);
+    }
+    return { peca, custoPeca };
+  }
 
   // trava + retrato do cálculo (validacao_snapshot) — congela peça a
   // peça o custo/imposto/venda desse orçamento no momento da confirmação,
@@ -256,25 +361,74 @@ export async function POST(request: Request) {
           .eq("id", a.id)
           .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS);
         if (!error) {
+          const { peca, custoPeca } = montarPosicoesPeca(a, detalhe);
           linhasPlanilha.push({
-            nfRemessa,
+            reparadorTerceiro: a.reparador_terceiro,
+            nfRemessaAllied: nfRemessa,
+            dataRespostaOrcamento: dataEnvioFormatada,
             osReparadora: a.os_reparadora,
+            imeiReparadora: a.imei_reparadora,
+            atendimento: a.atendimento,
             osCareAllied: a.os_care_allied,
             tradeAllied: a.trade_allied,
-            modeloComercial: a.modelo_comercial,
+            imeiAllied: a.imei_allied,
+            classificacaoAllied: a.classificacao_allied,
             sku: a.sku,
-            quantidadePecas: detalhe.quantidadePecas,
-            custoTotalPecas: detalhe.custoTotalPecas,
-            impostoTotalPecas: detalhe.impostoTotalPecas,
-            vendaTotalPecas: detalhe.vendaTotalPecas,
+            descricaoCompleta: a.descricao_completa,
+            modeloComercial: a.modelo_comercial,
+            descricaoDefeito: listaDescricaoDefeito(a),
+            pecaDefeito: listaPecaDefeito(a),
+            observacaoTecnicaReparadora: a.observacao_tecnica_reparadora,
+            peca,
+            pecaAdd: [null, null, null, null, null],
+            custoPeca,
+            custoPecaAdd: [null, null, null, null, null],
+            valorTotalPeca: detalhe.vendaTotalPecas,
             maoDeObra: detalhe.maoDeObra,
-            lucroTotal: detalhe.lucroTotal,
+            valorTotalReparo: detalhe.vendaTotalPecas + detalhe.maoDeObra,
+            statusOrcamento: "AGUARDANDO",
+            motivoReprova: null,
+            obs: a.observacao_tecnica_reparadora,
           });
         }
         return !error;
       })
     );
     quantidade += resultados.filter(Boolean).length;
+  }
+
+  // aparelhos já reprovados antes, do mesmo lote — entram no arquivo com
+  // os campos de peça/valor todos zerados (nunca chegaram a ser
+  // precificados), igual ao modelo real usado como referência.
+  for (const a of reprovados) {
+    linhasPlanilha.push({
+      reparadorTerceiro: a.reparador_terceiro,
+      nfRemessaAllied: nfRemessa,
+      dataRespostaOrcamento: dataEnvioFormatada,
+      osReparadora: a.os_reparadora,
+      imeiReparadora: a.imei_reparadora,
+      atendimento: a.atendimento,
+      osCareAllied: a.os_care_allied,
+      tradeAllied: a.trade_allied,
+      imeiAllied: a.imei_allied,
+      classificacaoAllied: a.classificacao_allied,
+      sku: a.sku,
+      descricaoCompleta: a.descricao_completa,
+      modeloComercial: a.modelo_comercial,
+      descricaoDefeito: listaDescricaoDefeito(a),
+      pecaDefeito: listaPecaDefeito(a),
+      observacaoTecnicaReparadora: a.observacao_tecnica_reparadora,
+      peca: [null, null, null, null, null, null, null, null, null, null],
+      pecaAdd: [null, null, null, null, null],
+      custoPeca: [null, null, null, null, null, null, null, null, null, null],
+      custoPecaAdd: [null, null, null, null, null],
+      valorTotalPeca: 0,
+      maoDeObra: 0,
+      valorTotalReparo: 0,
+      statusOrcamento: "RECUSADO",
+      motivoReprova: a.motivo_reprova,
+      obs: a.observacao_tecnica_reparadora,
+    });
   }
 
   // envio automático de e-mail (planilha do lote em anexo) — uma falha
