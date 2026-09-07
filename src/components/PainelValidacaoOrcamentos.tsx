@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   BadgePercent,
   Ban,
   Banknote,
+  CheckCircle2,
   Coins,
   Gauge,
   LayoutList,
   PackageCheck,
   PiggyBank,
   Receipt,
+  RefreshCw,
   TrendingUp,
   Wallet,
   Wrench,
@@ -188,6 +190,29 @@ export default function PainelValidacaoOrcamentos({
   const [cardAberto, setCardAberto] = useState<CardKey | null>(null);
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
   const [avisoPendenciaAnterior, setAvisoPendenciaAnterior] = useState(false);
+
+  // "Recalcular": busca de novo os custos da Base Peças pra essa mesma
+  // lista — pega na hora qualquer código cadastrado manualmente (nesse
+  // aparelho ou em outro) sem precisar dar F5. useTransition segura o
+  // spinner até os dados novos chegarem do servidor (router.refresh()
+  // não devolve uma Promise).
+  const [recalculando, iniciarRecalculo] = useTransition();
+  const [mostrarConfirmacaoRecalculo, setMostrarConfirmacaoRecalculo] = useState(false);
+  const recalculandoAnterior = useRef(false);
+
+  useEffect(() => {
+    if (recalculandoAnterior.current && !recalculando) {
+      setMostrarConfirmacaoRecalculo(true);
+      const t = setTimeout(() => setMostrarConfirmacaoRecalculo(false), 2500);
+      return () => clearTimeout(t);
+    }
+    recalculandoAnterior.current = recalculando;
+  }, [recalculando]);
+
+  function recalcular() {
+    setMostrarConfirmacaoRecalculo(false);
+    iniciarRecalculo(() => router.refresh());
+  }
 
   const podeCadastrarPeca = podeImportarBasePecas(perfil);
   const podeConfirmarLote = podeConfirmarAnaliseEmLote(perfil);
@@ -405,6 +430,26 @@ export default function PainelValidacaoOrcamentos({
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={recalcular}
+            disabled={recalculando}
+            title="Busca de novo os custos da Base Peças — pega na hora qualquer código cadastrado manualmente"
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition hover:border-[var(--accent2)] disabled:opacity-60"
+            style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
+          >
+            <RefreshCw size={13} className={recalculando ? "animate-spin" : undefined} />
+            {recalculando ? "Recalculando..." : "Recalcular"}
+          </button>
+          {mostrarConfirmacaoRecalculo && (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
+              style={{ background: "rgba(34, 197, 94, 0.12)", color: "#16a34a" }}
+            >
+              <CheckCircle2 size={13} />
+              Valores atualizados
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

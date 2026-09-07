@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Ban, CheckCheck, ClipboardCheck, Loader2, PackageCheck, Search } from "lucide-react";
+import { AlertTriangle, Ban, CheckCheck, CheckCircle2, ClipboardCheck, Loader2, PackageCheck, RefreshCw, Search } from "lucide-react";
 import PopupConfirmar from "@/components/PopupConfirmar";
 import PopupPecasOrcamento, { type AparelhoComPecas } from "@/components/PopupPecasOrcamento";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
@@ -87,8 +87,31 @@ export default function PainelAgAnalise({
   const [destaqueSaida, setDestaqueSaida] = useState<Record<string, "verde" | "vermelho">>({});
   const [saindoAgora, setSaindoAgora] = useState<Set<string>>(new Set());
 
+  // "Recalcular": busca de novo os preços do BID pra essa mesma lista —
+  // pega na hora qualquer Part Number que foi cadastrado manualmente
+  // (nesse aparelho ou em outro, na Consulta BID ou aqui mesmo) sem
+  // precisar dar F5. useTransition segura o spinner até os dados novos
+  // chegarem do servidor (router.refresh() não devolve uma Promise).
+  const [recalculando, iniciarRecalculo] = useTransition();
+  const [mostrarConfirmacaoRecalculo, setMostrarConfirmacaoRecalculo] = useState(false);
+  const recalculandoAnterior = useRef(false);
+
   useEffect(() => setItens(aparelhos), [aparelhos]);
   useEffect(() => setPrecosBid(precosBidIniciais), [precosBidIniciais]);
+
+  useEffect(() => {
+    if (recalculandoAnterior.current && !recalculando) {
+      setMostrarConfirmacaoRecalculo(true);
+      const t = setTimeout(() => setMostrarConfirmacaoRecalculo(false), 2500);
+      return () => clearTimeout(t);
+    }
+    recalculandoAnterior.current = recalculando;
+  }, [recalculando]);
+
+  function recalcular() {
+    setMostrarConfirmacaoRecalculo(false);
+    iniciarRecalculo(() => router.refresh());
+  }
 
   const podeLote = podeConfirmarAnaliseEmLote(perfil);
   const podeCadastrarBid = podeImportarBid(perfil);
@@ -224,6 +247,42 @@ export default function PainelAgAnalise({
     }
   }
 
+  // depois que o lote inteiro já foi confirmado no servidor (uma
+  // chamada só, pro lote inteiro — evita N idas ao servidor num lote
+  // grande), a apresentação vai "enviando" aparelho por aparelho: cada
+  // linha fica verde em sequência (pequeno atraso entre uma e outra) e
+  // desaparece pouco depois, dando a sensação de que estão indo pra
+  // próxima fase uma de cada vez em vez de sumirem tudo de uma vez só.
+  const ATRASO_ONDA_MS = 160;
+  const DURACAO_VERDE_MS = 700;
+  const DURACAO_SAIDA_MS = 300;
+
+  async function animarConfirmacaoEmOnda(ids: string[]) {
+    setSelecionados(new Set());
+    for (const id of ids) {
+      setDestaqueSaida((atual) => ({ ...atual, [id]: "verde" }));
+      (async () => {
+        await esperar(DURACAO_VERDE_MS);
+        setSaindoAgora((atual) => new Set([...atual, id]));
+        await esperar(DURACAO_SAIDA_MS);
+        setItens((atual) => atual.filter((a) => a.id !== id));
+        setDestaqueSaida((atual) => {
+          const novo = { ...atual };
+          delete novo[id];
+          return novo;
+        });
+        setSaindoAgora((atual) => {
+          const novo = new Set(atual);
+          novo.delete(id);
+          return novo;
+        });
+      })();
+      await esperar(ATRASO_ONDA_MS);
+    }
+    await esperar(DURACAO_VERDE_MS + DURACAO_SAIDA_MS);
+    router.refresh();
+  }
+
   async function confirmarAnaliseEmLote() {
     const ids = Array.from(selecionados);
     if (ids.length === 0) return;
@@ -245,16 +304,13 @@ export default function PainelAgAnalise({
         return;
       }
 
-      const idsSet = new Set(ids);
-      setItens((atual) => atual.filter((a) => !idsSet.has(a.id)));
-      setSelecionados(new Set());
       setConfirmandoLote(false);
-      router.refresh();
+      setProcessandoLote(false);
+      await animarConfirmacaoEmOnda(ids);
     } catch {
       setErroLote("Falha de conexão. Tente novamente.");
+      setProcessandoLote(false);
     }
-
-    setProcessandoLote(false);
   }
 
   return (
@@ -304,6 +360,26 @@ export default function PainelAgAnalise({
             />
             Somente sem peças
           </label>
+          <button
+            type="button"
+            onClick={recalcular}
+            disabled={recalculando}
+            title="Busca de novo os preços do BID — pega na hora qualquer Part Number cadastrado manualmente"
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[var(--accent2)] disabled:opacity-60"
+            style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
+          >
+            <RefreshCw size={13} className={recalculando ? "animate-spin" : undefined} />
+            {recalculando ? "Recalculando..." : "Recalcular"}
+          </button>
+          {mostrarConfirmacaoRecalculo && (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
+              style={{ background: "rgba(34, 197, 94, 0.12)", color: "#16a34a" }}
+            >
+              <CheckCircle2 size={13} />
+              Valores atualizados
+            </span>
+          )}
         </div>
       </div>
 
