@@ -269,6 +269,31 @@ export default function PainelValidacaoOrcamentos({
   // explicando o motivo (ver PopupAviso mais abaixo).
   const loteTemPendenciaAnterior = !!loteSelecionado && nfsComPendenciaEtapaAnterior.includes(loteSelecionado);
 
+  // "Preview (Excel)" do pop-up de confirmação — baixa o arquivo
+  // exatamente como ele sairia se confirmado agora (mesma rota/cálculo
+  // do avanço de verdade), sem gravar nem enviar nada. Erro de rede/HTTP
+  // é lançado pro pop-up mostrar (ver PopupRevisaoValidacao).
+  async function baixarPreviewLote() {
+    const res = await fetch("/api/operacional/orcamentos/avancar-validacao-em-massa/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nf_remessa_allied: loteSelecionado }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.error || "Não foi possível gerar o preview do arquivo.");
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `preview-orcamentos-${loteSelecionado}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function confirmarEnvioLote() {
     const res = await fetch("/api/operacional/orcamentos/avancar-validacao-em-massa", {
       method: "POST",
@@ -651,6 +676,7 @@ export default function PainelValidacaoOrcamentos({
           resumo={resumo}
           onFechar={() => setPopupRevisao(null)}
           onConfirmar={popupRevisao === "confirmar" ? confirmarEnvioLote : undefined}
+          onPreview={popupRevisao === "confirmar" ? baixarPreviewLote : undefined}
         />
       )}
 

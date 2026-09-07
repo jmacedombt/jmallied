@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ClipboardList, Copy, Loader2, PackageCheck, X } from "lucide-react";
+import { Check, ClipboardList, Copy, Download, Loader2, PackageCheck, X } from "lucide-react";
 
 export type ResumoValidacao = {
   quantidadeOrcamentos: number;
@@ -56,15 +56,21 @@ export default function PopupRevisaoValidacao({
   resumo,
   onFechar,
   onConfirmar,
+  onPreview,
 }: {
   modo: "revisao" | "confirmar";
   loteNf?: string;
   resumo: ResumoValidacao;
   onFechar: () => void;
   onConfirmar?: () => Promise<void> | void;
+  /** Gera e baixa o Excel exatamente como ele sairia se confirmado agora
+   * (mesmo cálculo, nada é gravado) — só pra conferência antes de
+   * confirmar de verdade. Só existe no modo "confirmar". */
+  onPreview?: () => Promise<void> | void;
 }) {
   const [copiado, setCopiado] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
+  const [gerandoPreview, setGerandoPreview] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   async function copiar() {
@@ -86,6 +92,19 @@ export default function PopupRevisaoValidacao({
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível confirmar o envio.");
       setConfirmando(false);
+    }
+  }
+
+  async function baixarPreview() {
+    if (!onPreview) return;
+    setGerandoPreview(true);
+    setErro(null);
+    try {
+      await onPreview();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível gerar o preview do arquivo.");
+    } finally {
+      setGerandoPreview(false);
     }
   }
 
@@ -119,7 +138,8 @@ export default function PopupRevisaoValidacao({
         {modo === "confirmar" && (
           <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
             Lote (NF Remessa) <strong style={{ color: "var(--ink)" }}>{loteNf}</strong> — ao confirmar, todos os
-            aparelhos desse lote avançam de Validação de Orçamentos pra 3 - Ag. Resposta de Orçamento.
+            aparelhos desse lote avançam de Validação de Orçamentos pra 3 - Ag. Resposta de Orçamento e o Excel é
+            enviado por e-mail. Use o preview abaixo pra conferir o arquivo antes de confirmar.
           </p>
         )}
         {modo === "revisao" && (
@@ -148,15 +168,30 @@ export default function PopupRevisaoValidacao({
         )}
 
         <div className="flex items-center justify-between gap-2 mt-5">
-          <button
-            type="button"
-            onClick={copiar}
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)]"
-            style={{ color: "var(--muted)", border: "1px solid var(--line)" }}
-          >
-            {copiado ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
-            Copiar
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={copiar}
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)]"
+              style={{ color: "var(--muted)", border: "1px solid var(--line)" }}
+            >
+              {copiado ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+              Copiar
+            </button>
+            {modo === "confirmar" && onPreview && (
+              <button
+                type="button"
+                onClick={baixarPreview}
+                disabled={gerandoPreview || confirmando}
+                title="Gera o Excel exatamente como ele sairia se você confirmar agora — não grava nem envia nada."
+                className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)] disabled:opacity-60"
+                style={{ color: "var(--muted)", border: "1px solid var(--line)" }}
+              >
+                {gerandoPreview ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                {gerandoPreview ? "Gerando..." : "Preview (Excel)"}
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             <button

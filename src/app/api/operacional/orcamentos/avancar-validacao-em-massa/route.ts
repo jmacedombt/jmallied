@@ -1,104 +1,23 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import {
-  calcularDetalheValidacao,
-  podeConfirmarAnaliseEmLote,
-  STATUS_OPERACIONAL,
-  STATUS_ETAPAS_ANTERIORES_A_VALIDACAO,
-  STATUS_ORCAMENTO_REPROVADO,
-  STATUS_VALIDACAO_ORCAMENTOS,
-  type CamposPecasOrcamento,
-  type ConfiguracaoMaoDeObra,
-} from "@/lib/orcamentos";
-import { buscarPrecosBidPorPartNumber, type FaixaMarkup } from "@/lib/bid";
-import { formatarDataBrasilia } from "@/lib/tempo";
+import { podeConfirmarAnaliseEmLote, STATUS_OPERACIONAL, STATUS_VALIDACAO_ORCAMENTOS } from "@/lib/orcamentos";
 import { enviarEmailGmail, montarPlanilhaOrcamentos, preencherModeloEmail, type LinhaPlanilhaOrcamento } from "@/lib/email";
+import { prepararEnvioLote } from "@/lib/validacaoEnvioAllied";
 
 export const maxDuration = 60;
 
 const STATUS_AG_RESPOSTA_ORCAMENTO = STATUS_OPERACIONAL.find((s) => s.slug === "3-ag-resposta-orcamento")!.valor;
 
-const COLUNAS_PECAS =
-  "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5";
-
-// campos "estáticos" do orçamento (não mudam com o cálculo de
-// Validação) que o arquivo de envio pra Allied precisa — ver
-// montarLinhaPlanilha, mais abaixo.
-const CAMPOS_DESCRICAO_DEFEITO = Array.from({ length: 10 }, (_, i) => `descricao_defeito_${i + 1}`);
-const CAMPOS_PECA_DEFEITO = Array.from({ length: 10 }, (_, i) => `peca_defeito_${i + 1}`);
-const COLUNAS_ESTATICAS = [
-  "reparador_terceiro",
-  "os_reparadora",
-  "imei_reparadora",
-  "atendimento",
-  "os_care_allied",
-  "trade_allied",
-  "imei_allied",
-  "classificacao_allied",
-  "sku",
-  "descricao_completa",
-  "modelo_comercial",
-  "observacao_tecnica_reparadora",
-  "motivo_reprova",
-  ...CAMPOS_DESCRICAO_DEFEITO,
-  ...CAMPOS_PECA_DEFEITO,
-].join(", ");
-
-const TAMANHO_LOTE_CODIGOS = 400;
 const TAMANHO_LOTE_UPDATE_PARALELO = 20;
-
-type CamposEstaticosOrcamento = {
-  reparador_terceiro: string | null;
-  os_reparadora: string | null;
-  imei_reparadora: string | null;
-  atendimento: string | null;
-  os_care_allied: string | null;
-  trade_allied: string;
-  imei_allied: string | null;
-  classificacao_allied: string | null;
-  sku: string | null;
-  descricao_completa: string | null;
-  modelo_comercial: string | null;
-  observacao_tecnica_reparadora: string | null;
-  motivo_reprova: string | null;
-  descricao_defeito_1: string | null; descricao_defeito_2: string | null; descricao_defeito_3: string | null;
-  descricao_defeito_4: string | null; descricao_defeito_5: string | null; descricao_defeito_6: string | null;
-  descricao_defeito_7: string | null; descricao_defeito_8: string | null; descricao_defeito_9: string | null;
-  descricao_defeito_10: string | null;
-  peca_defeito_1: string | null; peca_defeito_2: string | null; peca_defeito_3: string | null; peca_defeito_4: string | null;
-  peca_defeito_5: string | null; peca_defeito_6: string | null; peca_defeito_7: string | null; peca_defeito_8: string | null;
-  peca_defeito_9: string | null; peca_defeito_10: string | null;
-};
-
-type LinhaOrcamentoLote = CamposPecasOrcamento &
-  CamposEstaticosOrcamento & {
-    id: string;
-    validacao_confirmado_sem_peca: boolean;
-  };
-
-function listaDescricaoDefeito(a: CamposEstaticosOrcamento): (string | null)[] {
-  return Array.from({ length: 10 }, (_, i) => a[`descricao_defeito_${i + 1}` as keyof CamposEstaticosOrcamento] as string | null);
-}
-
-function listaPecaDefeito(a: CamposEstaticosOrcamento): (string | null)[] {
-  return Array.from({ length: 10 }, (_, i) => a[`peca_defeito_${i + 1}` as keyof CamposEstaticosOrcamento] as string | null);
-}
 
 // Avança TODOS os aparelhos de um lote (NF Remessa) de "Validação de
 // Orçamentos" pra "3 - Ag. Resposta de Orçamento" de uma vez (botão
-// "Confirmar Envio") — sempre por lote, nunca lotes misturados, porque a
-// validação é sempre feita por NF Remessa. Revalida as travas no servidor
-// (nunca confia só na checagem que a tela já fez):
-//   0) nenhum aparelho do MESMO lote (mesma NF Remessa) pode ainda estar
-//      parado numa etapa anterior à análise (Ag. Abertura, 1 - Ag.
-//      Triagem ou 2 - Ag. Análise) — um lote pode chegar em partes, e só
-//      dá pra confirmar o envio depois que TODO aparelho dele já tiver
-//      sido analisado (estando em Validação de Orçamentos ou já
-//      reprovado em "8 - Orçamento Reprovado");
-//   1) nenhum aparelho do lote pode ter peça lançada sem custo na Base
-//      Peças (peça "prioridade", destaque vermelho);
-//   2) todo aparelho sem nenhuma peça lançada (destaque amarelo) precisa
-//      já ter sido confirmado individualmente (validacao_confirmado_sem_peca).
+// "Confirmar Envio" > "Confirmar" no pop-up de resumo) — sempre por
+// lote, nunca lotes misturados. Toda a validação de travas + o cálculo
+// congelado de cada aparelho + a montagem do arquivo de envio moram em
+// prepararEnvioLote (lib/validacaoEnvioAllied.ts), compartilhado com a
+// rota de preview — garante que o que a pessoa viu no preview é
+// exatamente o que é gravado/enviado aqui.
 export async function POST(request: Request) {
   const supabase = createClient();
   const {
@@ -126,227 +45,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Selecione um lote (NF Remessa)." }, { status: 400 });
   }
 
-  const { data: aparelhos, error: erroBusca } = await admin
-    .from("orcamentos")
-    .select(`id, validacao_confirmado_sem_peca, ${COLUNAS_ESTATICAS}, ${COLUNAS_PECAS}`)
-    .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS)
-    .eq("nf_remessa_allied", nfRemessa);
-
-  if (erroBusca) {
-    return NextResponse.json({ error: erroBusca.message }, { status: 400 });
+  const preparo = await prepararEnvioLote(admin, nfRemessa);
+  if (!preparo.ok) {
+    return NextResponse.json({ error: preparo.erro, pecasDesatualizadas: preparo.pecasDesatualizadas }, { status: preparo.status });
   }
-
-  const lista = (aparelhos ?? []) as LinhaOrcamentoLote[];
-
-  // aparelhos do MESMO lote já reprovados antes (etapa "8 - Orçamento
-  // Reprovado") — entram no arquivo de envio junto com os que estão
-  // avançando agora (mesmo lote, arquivo único), mas não são alterados
-  // nem contam pras travas abaixo: já estão numa etapa própria, fora de
-  // Validação de Orçamentos.
-  const { data: reprovadosBrutos, error: erroReprovados } = await admin
-    .from("orcamentos")
-    .select(COLUNAS_ESTATICAS)
-    .eq("status_operacional", STATUS_ORCAMENTO_REPROVADO)
-    .eq("nf_remessa_allied", nfRemessa);
-
-  if (erroReprovados) {
-    return NextResponse.json({ error: erroReprovados.message }, { status: 400 });
-  }
-
-  const reprovados = (reprovadosBrutos ?? []) as CamposEstaticosOrcamento[];
-  if (lista.length === 0) {
-    return NextResponse.json(
-      { error: "Não há aparelhos desse lote em Validação de Orçamentos no momento." },
-      { status: 409 }
-    );
-  }
-
-  // 0ª trava: mesmo lote (NF Remessa) não pode ter aparelho ainda parado
-  // numa etapa anterior à análise — senão a resposta de orçamento sairia
-  // sem esperar todo mundo do lote ser analisado.
-  const { data: pendentesEtapaAnterior, error: erroPendencia } = await admin
-    .from("orcamentos")
-    .select("id")
-    .eq("nf_remessa_allied", nfRemessa)
-    .in("status_operacional", STATUS_ETAPAS_ANTERIORES_A_VALIDACAO as unknown as string[])
-    .limit(1);
-
-  if (erroPendencia) {
-    return NextResponse.json({ error: erroPendencia.message }, { status: 400 });
-  }
-  if ((pendentesEtapaAnterior ?? []).length > 0) {
-    return NextResponse.json(
-      {
-        error:
-          "Esse lote ainda tem orçamento(s) pendente(s) em etapa anterior à análise (Ag. Abertura, 1 - Ag. Triagem ou 2 - Ag. Análise). Só é possível confirmar o envio depois que TODOS os aparelhos desse lote já tiverem sido analisados.",
-      },
-      { status: 409 }
-    );
-  }
-
-  const codigosUnicos = Array.from(
-    new Set(
-      lista
-        .flatMap((a) => [
-          a.peca_1, a.peca_2, a.peca_3, a.peca_4, a.peca_5, a.peca_6, a.peca_7, a.peca_8, a.peca_9, a.peca_10,
-          a.peca_add_1, a.peca_add_2, a.peca_add_3, a.peca_add_4, a.peca_add_5,
-        ])
-        .map((c) => (typeof c === "string" ? c.trim() : c))
-        .filter((c): c is string => !!c)
-    )
-  );
-
-  const custosPorCodigo = new Map<string, number>();
-  for (let i = 0; i < codigosUnicos.length; i += TAMANHO_LOTE_CODIGOS) {
-    const lote = codigosUnicos.slice(i, i + TAMANHO_LOTE_CODIGOS);
-    const { data } = await admin.from("pecas_vigentes").select("codigo, valor_unitario").in("codigo", lote);
-    for (const linha of data ?? []) custosPorCodigo.set(linha.codigo, Number(linha.valor_unitario));
-  }
-
-  let temPecaSemCusto = false;
-  let temAparelhoNaoConfirmado = false;
-
-  for (const a of lista) {
-    const codigos = [
-      a.peca_1, a.peca_2, a.peca_3, a.peca_4, a.peca_5, a.peca_6, a.peca_7, a.peca_8, a.peca_9, a.peca_10,
-      a.peca_add_1, a.peca_add_2, a.peca_add_3, a.peca_add_4, a.peca_add_5,
-    ]
-      .map((c) => (typeof c === "string" ? c.trim() : c))
-      .filter((c): c is string => !!c);
-
-    if (codigos.length === 0) {
-      if (!a.validacao_confirmado_sem_peca) temAparelhoNaoConfirmado = true;
-    } else if (codigos.some((c) => !custosPorCodigo.has(c))) {
-      temPecaSemCusto = true;
-    }
-  }
-
-  if (temPecaSemCusto) {
-    return NextResponse.json(
-      {
-        error:
-          "Existem peças sem custo na Base Peças nesse lote (destaque em vermelho / Prioridade). Cadastre o valor delas antes de confirmar o envio.",
-      },
-      { status: 409 }
-    );
-  }
-  if (temAparelhoNaoConfirmado) {
-    return NextResponse.json(
-      {
-        error:
-          "Existem aparelhos sem nenhuma peça lançada (destaque em amarelo) que ainda não foram confirmados. Abra cada um e confirme antes de enviar o lote.",
-      },
-      { status: 409 }
-    );
-  }
-
-  // 3ª trava: o BID (custo_peca_samsung persistido) precisa refletir o
-  // mesmo valor que a Base Peças tem agora pra cada código usado nesse
-  // lote — senão o valor que vai ser informado ao cliente no BID pode já
-  // estar desatualizado em relação ao que a Validação está calculando
-  // aqui. Ignora peça travada no BID (preço fixado na mão, não segue a
-  // Base Peças de propósito).
-  const pecasDesatualizadas = new Set<string>();
-  for (let i = 0; i < codigosUnicos.length; i += TAMANHO_LOTE_CODIGOS) {
-    const lote = codigosUnicos.slice(i, i + TAMANHO_LOTE_CODIGOS);
-    const { data } = await admin
-      .from("bid_pecas")
-      .select("part_number, custo_peca_samsung, travado")
-      .in("part_number", lote);
-    for (const linha of (data ?? []) as { part_number: string; custo_peca_samsung: number | null; travado: boolean }[]) {
-      if (linha.travado) continue;
-      const valorVivo = custosPorCodigo.get(linha.part_number) ?? null;
-      const diferente =
-        (linha.custo_peca_samsung == null) !== (valorVivo == null) ||
-        (linha.custo_peca_samsung != null && valorVivo != null && Math.abs(linha.custo_peca_samsung - valorVivo) > 0.001);
-      if (diferente) pecasDesatualizadas.add(linha.part_number);
-    }
-  }
-
-  if (pecasDesatualizadas.size > 0) {
-    return NextResponse.json(
-      {
-        error:
-          "A Base Peças mudou desde o último Recalcular BID pra alguma peça desse lote — recalcule o BID (Bases > BID) antes de confirmar o envio, pra garantir que o valor informado ao cliente seja o mesmo que será cobrado.",
-        pecasDesatualizadas: Array.from(pecasDesatualizadas),
-      },
-      { status: 409 }
-    );
-  }
-
-  const [{ data: configImposto }, { data: configMaoObraBruta }, { data: faixasMarkupBrutas }] = await Promise.all([
-    admin.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
-    admin.from("configuracoes_mao_de_obra").select("valor_uma_peca, valor_mais_de_uma_peca").eq("id", 1).single(),
-    admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
-  ]);
-
-  const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
-  const configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca"> = {
-    valor_uma_peca: Number(configMaoObraBruta?.valor_uma_peca ?? 0),
-    valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 0),
-  };
-  const faixasMarkup: FaixaMarkup[] = (
-    (faixasMarkupBrutas ?? []) as { valor_min: number; valor_max: number | null; multiplicador: number }[]
-  ).map((f) => ({
-    valor_min: Number(f.valor_min),
-    valor_max: f.valor_max == null ? null : Number(f.valor_max),
-    multiplicador: Number(f.multiplicador),
-  }));
 
   const agora = new Date().toISOString();
-  const dataEnvioFormatada = formatarDataBrasilia(agora);
-
-  // Peça Solução (BID) de cada Part Number usado nesse lote — pra
-  // traduzir o código gravado em peca_1..10 pro nome que a Allied
-  // reconhece no arquivo de envio (ex: "GH81-26447A" -> "BATERIA").
-  // Quando o Part Number tem custo cadastrado mas nenhuma Peça Solução
-  // registrada no BID (cadastros diferentes, pode acontecer), cai pro
-  // próprio código — nunca fica em branco.
-  const precosBid = await buscarPrecosBidPorPartNumber(admin, codigosUnicos);
-  function pecaSolucaoOuCodigo(codigo: string): string {
-    return precosBid[codigo]?.peca_solucao ?? codigo;
-  }
-
-  // Monta as 10 posições de PEÇA / CUSTO PEÇA do arquivo de envio a
-  // partir do detalhe já calculado pra esse orçamento — cada posição
-  // "1".."10" do detalhe.pecas casa com peca_1..10 do próprio aparelho.
-  // PEÇA ADD 1-5 / CUSTO PEÇA ADD 1-5 ficam em branco por enquanto
-  // (formato ainda não definido) — mesmo que essas posições entrem na
-  // conta do valor total peça.
-  function montarPosicoesPeca(
-    a: LinhaOrcamentoLote,
-    detalhe: ReturnType<typeof calcularDetalheValidacao>
-  ): { peca: (string | null)[]; custoPeca: (number | null)[] } {
-    const peca: (string | null)[] = [];
-    const custoPeca: (number | null)[] = [];
-    for (let n = 1; n <= 10; n++) {
-      const codigo = (a[`peca_${n}` as keyof CamposPecasOrcamento] as string | null)?.trim() || null;
-      if (!codigo) {
-        peca.push(null);
-        custoPeca.push(null);
-        continue;
-      }
-      const detalhePeca = detalhe.pecas.find((p) => p.posicao === String(n));
-      peca.push(pecaSolucaoOuCodigo(codigo));
-      custoPeca.push(detalhePeca?.vendaPeca ?? null);
-    }
-    return { peca, custoPeca };
-  }
 
   // trava + retrato do cálculo (validacao_snapshot) — congela peça a
   // peça o custo/imposto/venda desse orçamento no momento da confirmação,
   // pra mudanças futuras na Base Peças/markup/ICMS não alterarem
-  // retroativamente o valor que já foi informado ao cliente. O snapshot
-  // difere por orçamento, então precisa de um update por linha (em vez
-  // do update em lote usado antes) — roda em paralelo, em grupos
-  // pequenos, pra não estourar o tempo de execução da função.
+  // retroativamente o valor que já foi informado ao cliente. Roda em
+  // paralelo, em grupos pequenos, pra não estourar o tempo de execução.
   let quantidade = 0;
-  const linhasPlanilha: LinhaPlanilhaOrcamento[] = [];
-  for (let i = 0; i < lista.length; i += TAMANHO_LOTE_UPDATE_PARALELO) {
-    const grupo = lista.slice(i, i + TAMANHO_LOTE_UPDATE_PARALELO);
+  const linhasConfirmadas: LinhaPlanilhaOrcamento[] = [];
+  for (let i = 0; i < preparo.itensConfirmaveis.length; i += TAMANHO_LOTE_UPDATE_PARALELO) {
+    const grupo = preparo.itensConfirmaveis.slice(i, i + TAMANHO_LOTE_UPDATE_PARALELO);
     const resultados = await Promise.all(
-      grupo.map(async (a) => {
-        const detalhe = calcularDetalheValidacao(a, custosPorCodigo, icmsPercentual, configMaoDeObra, faixasMarkup);
+      grupo.map(async (item) => {
         const { error } = await admin
           .from("orcamentos")
           .update({
@@ -356,80 +72,18 @@ export async function POST(request: Request) {
             validacao_travado: true,
             validacao_travado_em: agora,
             validacao_travado_por: user.id,
-            validacao_snapshot: detalhe,
+            validacao_snapshot: item.detalhe,
           })
-          .eq("id", a.id)
+          .eq("id", item.id)
           .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS);
-        if (!error) {
-          const { peca, custoPeca } = montarPosicoesPeca(a, detalhe);
-          linhasPlanilha.push({
-            reparadorTerceiro: a.reparador_terceiro,
-            nfRemessaAllied: nfRemessa,
-            dataRespostaOrcamento: dataEnvioFormatada,
-            osReparadora: a.os_reparadora,
-            imeiReparadora: a.imei_reparadora,
-            atendimento: a.atendimento,
-            osCareAllied: a.os_care_allied,
-            tradeAllied: a.trade_allied,
-            imeiAllied: a.imei_allied,
-            classificacaoAllied: a.classificacao_allied,
-            sku: a.sku,
-            descricaoCompleta: a.descricao_completa,
-            modeloComercial: a.modelo_comercial,
-            descricaoDefeito: listaDescricaoDefeito(a),
-            pecaDefeito: listaPecaDefeito(a),
-            observacaoTecnicaReparadora: a.observacao_tecnica_reparadora,
-            peca,
-            pecaAdd: [null, null, null, null, null],
-            custoPeca,
-            custoPecaAdd: [null, null, null, null, null],
-            valorTotalPeca: detalhe.vendaTotalPecas,
-            maoDeObra: detalhe.maoDeObra,
-            valorTotalReparo: detalhe.vendaTotalPecas + detalhe.maoDeObra,
-            statusOrcamento: "AGUARDANDO",
-            motivoReprova: null,
-            obs: a.observacao_tecnica_reparadora,
-          });
-        }
+        if (!error) linhasConfirmadas.push(item.linha);
         return !error;
       })
     );
     quantidade += resultados.filter(Boolean).length;
   }
 
-  // aparelhos já reprovados antes, do mesmo lote — entram no arquivo com
-  // os campos de peça/valor todos zerados (nunca chegaram a ser
-  // precificados), igual ao modelo real usado como referência.
-  for (const a of reprovados) {
-    linhasPlanilha.push({
-      reparadorTerceiro: a.reparador_terceiro,
-      nfRemessaAllied: nfRemessa,
-      dataRespostaOrcamento: dataEnvioFormatada,
-      osReparadora: a.os_reparadora,
-      imeiReparadora: a.imei_reparadora,
-      atendimento: a.atendimento,
-      osCareAllied: a.os_care_allied,
-      tradeAllied: a.trade_allied,
-      imeiAllied: a.imei_allied,
-      classificacaoAllied: a.classificacao_allied,
-      sku: a.sku,
-      descricaoCompleta: a.descricao_completa,
-      modeloComercial: a.modelo_comercial,
-      descricaoDefeito: listaDescricaoDefeito(a),
-      pecaDefeito: listaPecaDefeito(a),
-      observacaoTecnicaReparadora: a.observacao_tecnica_reparadora,
-      peca: [null, null, null, null, null, null, null, null, null, null],
-      pecaAdd: [null, null, null, null, null],
-      custoPeca: [null, null, null, null, null, null, null, null, null, null],
-      custoPecaAdd: [null, null, null, null, null],
-      valorTotalPeca: 0,
-      maoDeObra: 0,
-      valorTotalReparo: 0,
-      statusOrcamento: "RECUSADO",
-      motivoReprova: a.motivo_reprova,
-      obs: a.observacao_tecnica_reparadora,
-    });
-  }
+  const linhasPlanilha = [...linhasConfirmadas, ...preparo.linhasReprovados];
 
   // envio automático de e-mail (planilha do lote em anexo) — uma falha
   // aqui NUNCA desfaz nem impede o avanço de etapa que já aconteceu
@@ -471,12 +125,14 @@ async function enviarEmailDoLote({
 
   const destinatarios = (destinatariosBrutos ?? []).map((d: { email: string }) => d.email);
 
-  // sem conta do Gmail configurada, ou sem nenhum destinatário ativo:
-  // não é erro de verdade (a funcionalidade pode simplesmente ainda não
-  // ter sido configurada) — só não envia, e nem registra no log pra não
-  // poluir com "erro" todo avanço de lote de quem ainda não configurou nada.
+  // sem conta do Gmail configurada, ou sem nenhum destinatário ativo: o
+  // lote avança de etapa normalmente, mas a pessoa precisa ficar sabendo
+  // que ninguém recebeu o arquivo por e-mail — não fica só em silêncio.
   if (!gmailUser || !gmailSenhaApp || destinatarios.length === 0) {
-    return { enviado: false };
+    return {
+      enviado: false,
+      erro: "o envio automático de e-mail ainda não está configurado (Configurações > E-mail).",
+    };
   }
 
   const dadosModelo = { nf_remessa: nfRemessa, quantidade };
