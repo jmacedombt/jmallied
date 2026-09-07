@@ -29,3 +29,10 @@ export function formatarDataBrasilia(valor: string | number | Date): string {
 export function formatarHoraBrasilia(valor: string | number | Date): string {
   return new Date(valor).toLocaleTimeString("pt-BR", { timeZone: FUSO_BRASILIA });
 }
+
+/** Data de hoje (aaaa-mm-dd) no fuso de Brasília — formato que colunas
+ * `date` do Postgres esperam (ex: data_compra da Base Peças). "en-CA"
+ * formata direto como AAAA-MM-DD. */
+export function dataDeHojeSaoPaulo(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_BRASILIA }).format(new Date());
+}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { calcularCustoPecaAllied, direcaoValor, podeImportarBid, type FaixaMarkup, type InfoBidPeca } from "@/lib/bid";
+import { dataDeHojeSaoPaulo } from "@/lib/tempo";
 
 // Cadastro manual de uma peça do BID que ainda não tem custo calculado —
 // aberto a partir do popup de peças em Ag. Análise quando um Part
@@ -138,6 +139,32 @@ export async function POST(request: Request) {
     origem: "edicao_manual",
     alterado_por: user.id,
   });
+
+  // o Custo Peça Samsung digitado aqui É o custo cru da Base Peças (a
+  // dica do campo já deixa isso explícito) — se esse Part Number ainda
+  // não tiver nenhuma compra vigente na Base Peças, grava esse valor lá
+  // também, pra Validação de Orçamentos (e qualquer outro orçamento com
+  // essa mesma peça) já enxergar o custo sem precisar cadastrar de novo.
+  // Não mexe se já existir uma compra vigente pra esse código — não é
+  // papel desse cadastro (feito pra resolver falta de preço no BID)
+  // sobrescrever um custo de compra já existente na Base Peças.
+  const { data: vigente } = await admin.from("pecas_vigentes").select("codigo").eq("codigo", partNumber).maybeSingle();
+  if (!vigente) {
+    const { error: erroPecasCompras } = await admin.from("pecas_compras").insert({
+      codigo: partNumber,
+      descricao: pecaSolucao,
+      data_compra: dataDeHojeSaoPaulo(),
+      quantidade: 1,
+      valor_total: custoSamsung,
+      delivery: "CADASTRO MANUAL (BID)",
+    });
+    // colisão com uma linha idêntica já cadastrada hoje não é erro de
+    // verdade; qualquer outro erro não derruba o cadastro do BID (que já
+    // foi salvo com sucesso) — só fica sem espelhar na Base Peças dessa vez.
+    if (erroPecasCompras && erroPecasCompras.code !== "23505") {
+      console.error("Cadastro manual do BID: falha ao espelhar na Base Peças:", erroPecasCompras.message);
+    }
+  }
 
   const infoBid: InfoBidPeca = {
     id: pecaSalva.id,
