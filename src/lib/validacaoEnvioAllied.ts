@@ -80,6 +80,15 @@ type LinhaOrcamentoLote = CamposPecasOrcamento &
     validacao_confirmado_sem_peca: boolean;
   };
 
+// aparelho já reprovado (etapa "8 - Orçamento Reprovado") do mesmo lote —
+// além dos campos estáticos e das peças, precisa do validacao_snapshot
+// pra saber se ele chegou a ser precificado antes de reprovar (ver
+// montagem de linhasReprovados mais abaixo).
+type LinhaOrcamentoReprovado = CamposPecasOrcamento &
+  CamposEstaticosOrcamento & {
+    validacao_snapshot: DetalheValidacaoOrcamento | null;
+  };
+
 function listaDescricaoDefeito(a: CamposEstaticosOrcamento): (string | null)[] {
   return Array.from({ length: 10 }, (_, i) => a[`descricao_defeito_${i + 1}` as keyof CamposEstaticosOrcamento] as string | null);
 }
@@ -128,10 +137,14 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
   // aparelhos do MESMO lote já reprovados antes (etapa "8 - Orçamento
   // Reprovado") — entram no arquivo de envio junto com os que estão
   // avançando agora (mesmo lote, arquivo único), mas não são alterados
-  // nem contam pras travas abaixo.
+  // nem contam pras travas abaixo. Também traz as peças e o
+  // validacao_snapshot: um reprovado pode já ter sido precificado antes
+  // de ser recusado (reprovação manual depois de Validação de
+  // Orçamentos), e nesse caso peça/valor têm que aparecer no arquivo —
+  // só fica em branco quem nunca chegou a ter preço apurado.
   const { data: reprovadosBrutos, error: erroReprovados } = await admin
     .from("orcamentos")
-    .select(COLUNAS_ESTATICAS)
+    .select(`${COLUNAS_ESTATICAS}, ${COLUNAS_PECAS}, validacao_snapshot`)
     .eq("status_operacional", STATUS_ORCAMENTO_REPROVADO)
     .eq("nf_remessa_allied", nfRemessa);
 
@@ -139,7 +152,7 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
     return { ok: false, status: 400, erro: erroReprovados.message };
   }
 
-  const reprovados = (reprovadosBrutos ?? []) as CamposEstaticosOrcamento[];
+  const reprovados = (reprovadosBrutos ?? []) as LinhaOrcamentoReprovado[];
 
   if (lista.length === 0) {
     return { ok: false, status: 409, erro: "Não há aparelhos desse lote em Validação de Orçamentos no momento." };
@@ -166,21 +179,27 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
     };
   }
 
-  const codigosUnicos = Array.from(
-    new Set(
-      lista
-        .flatMap((a) => [
-          a.peca_1, a.peca_2, a.peca_3, a.peca_4, a.peca_5, a.peca_6, a.peca_7, a.peca_8, a.peca_9, a.peca_10,
-          a.peca_add_1, a.peca_add_2, a.peca_add_3, a.peca_add_4, a.peca_add_5,
-        ])
-        .map((c) => (typeof c === "string" ? c.trim() : c))
-        .filter((c): c is string => !!c)
-    )
-  );
+  function codigosDoAparelho(a: CamposPecasOrcamento): string[] {
+    return [
+      a.peca_1, a.peca_2, a.peca_3, a.peca_4, a.peca_5, a.peca_6, a.peca_7, a.peca_8, a.peca_9, a.peca_10,
+      a.peca_add_1, a.peca_add_2, a.peca_add_3, a.peca_add_4, a.peca_add_5,
+    ]
+      .map((c) => (typeof c === "string" ? c.trim() : c))
+      .filter((c): c is string => !!c);
+  }
+
+  // codigosUnicos (só de `lista`) alimenta as travas 1 e 3 abaixo — um
+  // reprovado antigo com peça desatualizada no BID não pode travar o
+  // envio de quem está sendo decidido agora. codigosUnicosTodos (lista +
+  // reprovados) é usado só pra buscar custo/Peça Solução, pra também
+  // conseguir montar a linha de um reprovado que já tinha sido
+  // precificado antes de ser recusado.
+  const codigosUnicos = Array.from(new Set(lista.flatMap(codigosDoAparelho)));
+  const codigosUnicosTodos = Array.from(new Set([...codigosUnicos, ...reprovados.flatMap(codigosDoAparelho)]));
 
   const custosPorCodigo = new Map<string, number>();
-  for (let i = 0; i < codigosUnicos.length; i += TAMANHO_LOTE_CODIGOS) {
-    const lote = codigosUnicos.slice(i, i + TAMANHO_LOTE_CODIGOS);
+  for (let i = 0; i < codigosUnicosTodos.length; i += TAMANHO_LOTE_CODIGOS) {
+    const lote = codigosUnicosTodos.slice(i, i + TAMANHO_LOTE_CODIGOS);
     const { data } = await admin.from("pecas_vigentes").select("codigo, valor_unitario").in("codigo", lote);
     for (const linha of data ?? []) custosPorCodigo.set(linha.codigo, Number(linha.valor_unitario));
   }
@@ -189,12 +208,7 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
   let temAparelhoNaoConfirmado = false;
 
   for (const a of lista) {
-    const codigos = [
-      a.peca_1, a.peca_2, a.peca_3, a.peca_4, a.peca_5, a.peca_6, a.peca_7, a.peca_8, a.peca_9, a.peca_10,
-      a.peca_add_1, a.peca_add_2, a.peca_add_3, a.peca_add_4, a.peca_add_5,
-    ]
-      .map((c) => (typeof c === "string" ? c.trim() : c))
-      .filter((c): c is string => !!c);
+    const codigos = codigosDoAparelho(a);
 
     if (codigos.length === 0) {
       if (!a.validacao_confirmado_sem_peca) temAparelhoNaoConfirmado = true;
@@ -275,13 +289,13 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
   // código gravado em peca_1..10 pro nome que a Allied reconhece (ex:
   // "GH81-26447A" -> "BATERIA"). Cai pro próprio código quando o Part
   // Number tem custo cadastrado mas nenhuma Peça Solução registrada.
-  const precosBid = await buscarPrecosBidPorPartNumber(admin, codigosUnicos);
+  const precosBid = await buscarPrecosBidPorPartNumber(admin, codigosUnicosTodos);
   function pecaSolucaoOuCodigo(codigo: string): string {
     return precosBid[codigo]?.peca_solucao ?? codigo;
   }
 
   function montarPosicoesPeca(
-    a: LinhaOrcamentoLote,
+    a: CamposPecasOrcamento,
     detalhe: DetalheValidacaoOrcamento
   ): { peca: (string | null)[]; custoPeca: (number | null)[] } {
     const peca: (string | null)[] = [];
@@ -334,37 +348,50 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
     return { id: a.id, detalhe, linha };
   });
 
-  // aparelhos já reprovados antes, do mesmo lote — entram no arquivo com
-  // os campos de peça/valor todos zerados (nunca chegaram a ser
-  // precificados), igual ao modelo real usado como referência.
-  const linhasReprovados: LinhaPlanilhaOrcamento[] = reprovados.map((a) => ({
-    reparadorTerceiro: a.reparador_terceiro,
-    nfRemessaAllied: nfRemessa,
-    dataRespostaOrcamento: dataEnvioFormatada,
-    osReparadora: a.os_reparadora,
-    imeiReparadora: a.imei_reparadora,
-    atendimento: a.atendimento,
-    osCareAllied: a.os_care_allied,
-    tradeAllied: a.trade_allied,
-    imeiAllied: a.imei_allied,
-    classificacaoAllied: a.classificacao_allied,
-    sku: a.sku,
-    descricaoCompleta: a.descricao_completa,
-    modeloComercial: a.modelo_comercial,
-    descricaoDefeito: listaDescricaoDefeito(a),
-    pecaDefeito: listaPecaDefeito(a),
-    observacaoTecnicaReparadora: a.observacao_tecnica_reparadora,
-    peca: [null, null, null, null, null, null, null, null, null, null],
-    pecaAdd: [null, null, null, null, null],
-    custoPeca: [null, null, null, null, null, null, null, null, null, null],
-    custoPecaAdd: [null, null, null, null, null],
-    valorTotalPeca: 0,
-    maoDeObra: 0,
-    valorTotalReparo: 0,
-    statusOrcamento: "RECUSADO",
-    motivoReprova: a.motivo_reprova,
-    obs: a.observacao_tecnica_reparadora,
-  }));
+  // aparelhos já reprovados antes, do mesmo lote — a peça e o valor só
+  // ficam em branco quando o aparelho nunca chegou a ser precificado
+  // (reprovado direto em "2 - Ag. Análise", antes de passar por
+  // Validação de Orçamentos). Quando ele JÁ tinha peça/valor apurado —
+  // reprovado manualmente depois (ver [id]/reprovar), inclusive um que já
+  // tinha sido enviado antes e foi recusado agora — usa o
+  // validacao_snapshot CONGELADO no momento em que foi precificado/
+  // enviado, nunca recalcula na hora (senão uma peça que mudou de preço
+  // na Base Peças depois mudaria retroativamente o valor já informado).
+  // Só recalcula ao vivo (calcularDetalheValidacao) quando não existe
+  // snapshot nenhum — aparelho que tem peça lançada mas nunca passou
+  // pela precificação de Validação de Orçamentos.
+  const linhasReprovados: LinhaPlanilhaOrcamento[] = reprovados.map((a) => {
+    const detalhe = a.validacao_snapshot ?? calcularDetalheValidacao(a, custosPorCodigo, icmsPercentual, configMaoDeObra, faixasMarkup);
+    const { peca, custoPeca } = montarPosicoesPeca(a, detalhe);
+    return {
+      reparadorTerceiro: a.reparador_terceiro,
+      nfRemessaAllied: nfRemessa,
+      dataRespostaOrcamento: dataEnvioFormatada,
+      osReparadora: a.os_reparadora,
+      imeiReparadora: a.imei_reparadora,
+      atendimento: a.atendimento,
+      osCareAllied: a.os_care_allied,
+      tradeAllied: a.trade_allied,
+      imeiAllied: a.imei_allied,
+      classificacaoAllied: a.classificacao_allied,
+      sku: a.sku,
+      descricaoCompleta: a.descricao_completa,
+      modeloComercial: a.modelo_comercial,
+      descricaoDefeito: listaDescricaoDefeito(a),
+      pecaDefeito: listaPecaDefeito(a),
+      observacaoTecnicaReparadora: a.observacao_tecnica_reparadora,
+      peca,
+      pecaAdd: [null, null, null, null, null],
+      custoPeca,
+      custoPecaAdd: [null, null, null, null, null],
+      valorTotalPeca: detalhe.vendaTotalPecas,
+      maoDeObra: detalhe.maoDeObra,
+      valorTotalReparo: detalhe.vendaTotalPecas + detalhe.maoDeObra,
+      statusOrcamento: "RECUSADO",
+      motivoReprova: a.motivo_reprova,
+      obs: a.observacao_tecnica_reparadora,
+    };
+  });
 
   return { ok: true, itensConfirmaveis, linhasReprovados };
 }
