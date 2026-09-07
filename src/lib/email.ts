@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import nodemailer from "nodemailer";
 
 // mesmo grupo de cargos que já mexe nas outras telas de Configurações
 // (Mão de obra, Faixas de Markup, Imposto) — Estoque, Supervisor,
@@ -129,4 +130,54 @@ export async function enviarEmailResend(params: {
     throw new Error(dados?.message || `Falha ao enviar e-mail (HTTP ${resposta.status}).`);
   }
   return { id: dados?.id ?? "" };
+}
+
+/**
+ * Envia um e-mail com anexo pela conta do Gmail da empresa, via SMTP
+ * (smtp.gmail.com) — usado enquanto o domínio próprio não está
+ * verificado no Resend (ver enviarEmailResend acima, que continua aqui
+ * pronta pra voltar a ser usada assim que o domínio verificar, bastando
+ * trocar a chamada em avancar-validacao-em-massa).
+ *
+ * Exige uma "senha de app" do Gmail (não é a senha normal da conta) —
+ * só existe depois de ativar a verificação em duas etapas na conta
+ * Google. O endereço que efetivamente envia é sempre o da conta
+ * autenticada (gmailUser); o Gmail ignora/rejeita um "from" diferente
+ * disso, então o nome de exibição configurável em Configurações > E-mail
+ * entra como nome, nunca como endereço.
+ */
+export async function enviarEmailGmail(params: {
+  gmailUser: string;
+  gmailSenhaApp: string;
+  remetenteNome: string;
+  destinatarios: string[];
+  assunto: string;
+  corpoHtml: string;
+  anexoNomeArquivo: string;
+  anexoBuffer: Buffer;
+}): Promise<{ id: string }> {
+  const transportador = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+      user: params.gmailUser,
+      pass: params.gmailSenhaApp,
+    },
+  });
+
+  const info = await transportador.sendMail({
+    from: `"${params.remetenteNome}" <${params.gmailUser}>`,
+    to: params.destinatarios,
+    subject: params.assunto,
+    html: params.corpoHtml,
+    attachments: [
+      {
+        filename: params.anexoNomeArquivo,
+        content: params.anexoBuffer,
+      },
+    ],
+  });
+
+  return { id: info.messageId ?? "" };
 }

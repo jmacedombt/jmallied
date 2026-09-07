@@ -10,7 +10,7 @@ import {
   type ConfiguracaoMaoDeObra,
 } from "@/lib/orcamentos";
 import { type FaixaMarkup } from "@/lib/bid";
-import { enviarEmailResend, montarPlanilhaOrcamentos, preencherModeloEmail, type LinhaPlanilhaOrcamento } from "@/lib/email";
+import { enviarEmailGmail, montarPlanilhaOrcamentos, preencherModeloEmail, type LinhaPlanilhaOrcamento } from "@/lib/email";
 
 export const maxDuration = 60;
 
@@ -303,7 +303,12 @@ async function enviarEmailDoLote({
   linhasPlanilha: LinhaPlanilhaOrcamento[];
   userId: string;
 }): Promise<{ enviado: boolean; erro?: string }> {
-  const apiKey = process.env.RESEND_API_KEY;
+  // envio via conta do Gmail da empresa (GMAIL_USER + GMAIL_APP_PASSWORD
+  // na Vercel) enquanto o domínio próprio não está verificado no Resend —
+  // ver enviarEmailResend em lib/email.ts, que fica pronta pra retomar
+  // assim que o domínio verificar (só troca a chamada abaixo de volta).
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailSenhaApp = process.env.GMAIL_APP_PASSWORD;
 
   const [{ data: config }, { data: destinatariosBrutos }] = await Promise.all([
     admin.from("configuracoes_email").select("remetente_nome, remetente_email, assunto_padrao, corpo_padrao").eq("id", 1).single(),
@@ -312,18 +317,20 @@ async function enviarEmailDoLote({
 
   const destinatarios = (destinatariosBrutos ?? []).map((d: { email: string }) => d.email);
 
-  // sem chave de API, sem remetente configurado, ou sem nenhum
-  // destinatário ativo: não é erro de verdade (a funcionalidade pode
-  // simplesmente ainda não ter sido configurada) — só não envia, e nem
-  // registra no log pra não poluir com "erro" todo avanço de lote de
-  // quem ainda não configurou nada.
-  if (!apiKey || !config?.remetente_email || destinatarios.length === 0) {
+  // sem conta do Gmail configurada, ou sem nenhum destinatário ativo:
+  // não é erro de verdade (a funcionalidade pode simplesmente ainda não
+  // ter sido configurada) — só não envia, e nem registra no log pra não
+  // poluir com "erro" todo avanço de lote de quem ainda não configurou nada.
+  if (!gmailUser || !gmailSenhaApp || destinatarios.length === 0) {
     return { enviado: false };
   }
 
   const dadosModelo = { nf_remessa: nfRemessa, quantidade };
-  const assunto = preencherModeloEmail(config.assunto_padrao, dadosModelo);
-  const corpoTexto = preencherModeloEmail(config.corpo_padrao, dadosModelo);
+  const assunto = preencherModeloEmail(config?.assunto_padrao ?? "Orçamento(s) - NF Remessa {{nf_remessa}}", dadosModelo);
+  const corpoTexto = preencherModeloEmail(
+    config?.corpo_padrao ?? "Segue em anexo a planilha com o(s) orçamento(s) referente(s) à NF Remessa {{nf_remessa}}.",
+    dadosModelo
+  );
   const corpoHtml = corpoTexto
     .split("\n")
     .map((linha) => `<p>${linha}</p>`)
@@ -331,9 +338,10 @@ async function enviarEmailDoLote({
 
   try {
     const planilha = montarPlanilhaOrcamentos(linhasPlanilha);
-    const resultado = await enviarEmailResend({
-      apiKey,
-      remetente: `${config.remetente_nome} <${config.remetente_email}>`,
+    const resultado = await enviarEmailGmail({
+      gmailUser,
+      gmailSenhaApp,
+      remetenteNome: config?.remetente_nome ?? "Sistema Allied - Grupo J.Macedo",
       destinatarios,
       assunto,
       corpoHtml,
@@ -346,6 +354,8 @@ async function enviarEmailDoLote({
       destinatarios,
       assunto,
       status: "enviado",
+      // coluna criada pensando no Resend — guarda o messageId do Gmail
+      // por enquanto, mesma ideia (id pra rastrear esse envio específico).
       resend_id: resultado.id,
       enviado_por: userId,
     });

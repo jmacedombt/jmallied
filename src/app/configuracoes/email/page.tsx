@@ -49,7 +49,11 @@ export default async function ConfiguracoesEmailPage() {
         Disparado ao confirmar o envio de um lote em Validação de Orçamentos — manda a planilha do lote em anexo pros
         destinatários abaixo.
       </p>
-      <ConfiguracoesEmailForm configInicial={configInicial} destinatariosIniciais={destinatarios ?? []} />
+      <ConfiguracoesEmailForm
+        configInicial={configInicial}
+        destinatariosIniciais={destinatarios ?? []}
+        contaGmailAtual={process.env.GMAIL_USER ?? null}
+      />
     </AppShell>
   );
 }

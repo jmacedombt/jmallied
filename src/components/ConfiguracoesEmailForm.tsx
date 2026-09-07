@@ -25,9 +25,14 @@ const CAMPO_ESTILO = { borderColor: "var(--line)", background: "var(--surface2)"
 export default function ConfiguracoesEmailForm({
   configInicial,
   destinatariosIniciais,
+  contaGmailAtual,
 }: {
   configInicial: ConfiguracaoEmailInicial;
   destinatariosIniciais: DestinatarioLinha[];
+  /** conta do Gmail configurada via GMAIL_USER na Vercel — é ela que
+   * efetivamente envia (o Gmail não aceita um "de" diferente da conta
+   * autenticada); null quando a variável ainda não foi configurada. */
+  contaGmailAtual: string | null;
 }) {
   const router = useRouter();
 
@@ -147,16 +152,41 @@ export default function ConfiguracoesEmailForm({
           Remetente e texto padrão
         </h2>
 
+        <div
+          className="rounded-lg px-3.5 py-2.5 text-xs mb-3.5"
+          style={
+            contaGmailAtual
+              ? { background: "rgba(34, 197, 94, 0.1)", color: "#16a34a" }
+              : { background: "rgba(249, 168, 37, 0.15)", color: "#b45309" }
+          }
+        >
+          {contaGmailAtual ? (
+            <>
+              O envio está saindo pela conta <strong>{contaGmailAtual}</strong> (Gmail — configurada na Vercel via
+              GMAIL_USER). O campo "E-mail do remetente" abaixo é só um registro, não muda de onde o e-mail sai —
+              pra trocar a conta que envia, é preciso alterar GMAIL_USER/GMAIL_APP_PASSWORD na Vercel.
+            </>
+          ) : (
+            <>
+              Nenhuma conta de envio configurada ainda — falta definir GMAIL_USER e GMAIL_APP_PASSWORD nas variáveis
+              de ambiente da Vercel. Até lá, o lote avança normalmente, mas o e-mail não é enviado.
+            </>
+          )}
+        </div>
+
         <div className="grid grid-cols-2 gap-3.5 mb-3.5">
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
               Nome do remetente
             </label>
             <input value={remetenteNome} onChange={(e) => setRemetenteNome(e.target.value)} className={CAMPO_CLASSES} style={CAMPO_ESTILO} />
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              Como o nome aparece pro destinatário (ex: "Sistema Allied - Grupo J.Macedo").
+            </p>
           </div>
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-              E-mail do remetente
+              E-mail do remetente (registro)
             </label>
             <input
               value={remetenteEmail}
@@ -165,6 +195,9 @@ export default function ConfiguracoesEmailForm({
               className={CAMPO_CLASSES}
               style={CAMPO_ESTILO}
             />
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              Não usado no envio pelo Gmail — fica só de referência pra quando trocar pro domínio próprio.
+            </p>
           </div>
         </div>
 
