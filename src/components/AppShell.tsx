@@ -17,6 +17,7 @@ import {
   LayoutGrid,
   LineChart,
   LogOut,
+  Mail,
   Menu,
   Percent,
   Printer,
@@ -109,6 +110,7 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
       { href: "/configuracoes/mao-de-obra", label: "Mão de obra", icone: SlidersHorizontal },
       { href: "/configuracoes/bid-markup", label: "Faixas de Markup (BID)", icone: TrendingUp },
       { href: "/configuracoes/impostos", label: "Imposto (ICMS)", icone: Percent },
+      { href: "/configuracoes/email", label: "E-mail", icone: Mail },
     ],
   },
   {

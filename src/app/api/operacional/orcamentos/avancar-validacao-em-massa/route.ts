@@ -10,6 +10,7 @@ import {
   type ConfiguracaoMaoDeObra,
 } from "@/lib/orcamentos";
 import { type FaixaMarkup } from "@/lib/bid";
+import { enviarEmailResend, montarPlanilhaOrcamentos, preencherModeloEmail, type LinhaPlanilhaOrcamento } from "@/lib/email";
 
 export const maxDuration = 60;
 
@@ -18,12 +19,19 @@ const STATUS_AG_RESPOSTA_ORCAMENTO = STATUS_OPERACIONAL.find((s) => s.slug === "
 const COLUNAS_PECAS =
   "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5";
 
+const COLUNAS_IDENTIFICACAO = "os_reparadora, os_care_allied, trade_allied, modelo_comercial, sku";
+
 const TAMANHO_LOTE_CODIGOS = 400;
 const TAMANHO_LOTE_UPDATE_PARALELO = 20;
 
 type LinhaOrcamentoLote = CamposPecasOrcamento & {
   id: string;
   validacao_confirmado_sem_peca: boolean;
+  os_reparadora: string | null;
+  os_care_allied: string | null;
+  trade_allied: string;
+  modelo_comercial: string | null;
+  sku: string | null;
 };
 
 // Avança TODOS os aparelhos de um lote (NF Remessa) de "Validação de
@@ -70,7 +78,7 @@ export async function POST(request: Request) {
 
   const { data: aparelhos, error: erroBusca } = await admin
     .from("orcamentos")
-    .select(`id, validacao_confirmado_sem_peca, ${COLUNAS_PECAS}`)
+    .select(`id, validacao_confirmado_sem_peca, ${COLUNAS_IDENTIFICACAO}, ${COLUNAS_PECAS}`)
     .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS)
     .eq("nf_remessa_allied", nfRemessa);
 
@@ -228,6 +236,7 @@ export async function POST(request: Request) {
   // do update em lote usado antes) — roda em paralelo, em grupos
   // pequenos, pra não estourar o tempo de execução da função.
   let quantidade = 0;
+  const linhasPlanilha: LinhaPlanilhaOrcamento[] = [];
   for (let i = 0; i < lista.length; i += TAMANHO_LOTE_UPDATE_PARALELO) {
     const grupo = lista.slice(i, i + TAMANHO_LOTE_UPDATE_PARALELO);
     const resultados = await Promise.all(
@@ -246,11 +255,112 @@ export async function POST(request: Request) {
           })
           .eq("id", a.id)
           .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS);
+        if (!error) {
+          linhasPlanilha.push({
+            nfRemessa,
+            osReparadora: a.os_reparadora,
+            osCareAllied: a.os_care_allied,
+            tradeAllied: a.trade_allied,
+            modeloComercial: a.modelo_comercial,
+            sku: a.sku,
+            quantidadePecas: detalhe.quantidadePecas,
+            custoTotalPecas: detalhe.custoTotalPecas,
+            impostoTotalPecas: detalhe.impostoTotalPecas,
+            vendaTotalPecas: detalhe.vendaTotalPecas,
+            maoDeObra: detalhe.maoDeObra,
+            lucroTotal: detalhe.lucroTotal,
+          });
+        }
         return !error;
       })
     );
     quantidade += resultados.filter(Boolean).length;
   }
 
-  return NextResponse.json({ ok: true, quantidade });
+  // envio automático de e-mail (planilha do lote em anexo) — uma falha
+  // aqui NUNCA desfaz nem impede o avanço de etapa que já aconteceu
+  // acima; só fica registrada em envios_email pra dar pra conferir depois.
+  let email: { enviado: boolean; erro?: string } = { enviado: false };
+  if (quantidade > 0) {
+    email = await enviarEmailDoLote({ admin, nfRemessa, quantidade, linhasPlanilha, userId: user.id });
+  }
+
+  return NextResponse.json({ ok: true, quantidade, email });
+}
+
+type ClienteAdmin = ReturnType<typeof createAdminClient>;
+
+async function enviarEmailDoLote({
+  admin,
+  nfRemessa,
+  quantidade,
+  linhasPlanilha,
+  userId,
+}: {
+  admin: ClienteAdmin;
+  nfRemessa: string;
+  quantidade: number;
+  linhasPlanilha: LinhaPlanilhaOrcamento[];
+  userId: string;
+}): Promise<{ enviado: boolean; erro?: string }> {
+  const apiKey = process.env.RESEND_API_KEY;
+
+  const [{ data: config }, { data: destinatariosBrutos }] = await Promise.all([
+    admin.from("configuracoes_email").select("remetente_nome, remetente_email, assunto_padrao, corpo_padrao").eq("id", 1).single(),
+    admin.from("configuracoes_email_destinatarios").select("email").eq("ativo", true),
+  ]);
+
+  const destinatarios = (destinatariosBrutos ?? []).map((d: { email: string }) => d.email);
+
+  // sem chave de API, sem remetente configurado, ou sem nenhum
+  // destinatário ativo: não é erro de verdade (a funcionalidade pode
+  // simplesmente ainda não ter sido configurada) — só não envia, e nem
+  // registra no log pra não poluir com "erro" todo avanço de lote de
+  // quem ainda não configurou nada.
+  if (!apiKey || !config?.remetente_email || destinatarios.length === 0) {
+    return { enviado: false };
+  }
+
+  const dadosModelo = { nf_remessa: nfRemessa, quantidade };
+  const assunto = preencherModeloEmail(config.assunto_padrao, dadosModelo);
+  const corpoTexto = preencherModeloEmail(config.corpo_padrao, dadosModelo);
+  const corpoHtml = corpoTexto
+    .split("\n")
+    .map((linha) => `<p>${linha}</p>`)
+    .join("");
+
+  try {
+    const planilha = montarPlanilhaOrcamentos(linhasPlanilha);
+    const resultado = await enviarEmailResend({
+      apiKey,
+      remetente: `${config.remetente_nome} <${config.remetente_email}>`,
+      destinatarios,
+      assunto,
+      corpoHtml,
+      anexoNomeArquivo: `orcamentos-${nfRemessa}.xlsx`,
+      anexoBuffer: planilha,
+    });
+
+    await admin.from("envios_email").insert({
+      nf_remessa_allied: nfRemessa,
+      destinatarios,
+      assunto,
+      status: "enviado",
+      resend_id: resultado.id,
+      enviado_por: userId,
+    });
+
+    return { enviado: true };
+  } catch (erro) {
+    const mensagem = erro instanceof Error ? erro.message : "Falha desconhecida ao enviar e-mail.";
+    await admin.from("envios_email").insert({
+      nf_remessa_allied: nfRemessa,
+      destinatarios,
+      assunto,
+      status: "erro",
+      erro_mensagem: mensagem,
+      enviado_por: userId,
+    });
+    return { enviado: false, erro: mensagem };
+  }
 }

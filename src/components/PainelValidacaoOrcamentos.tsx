@@ -190,6 +190,7 @@ export default function PainelValidacaoOrcamentos({
   const [cardAberto, setCardAberto] = useState<CardKey | null>(null);
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
   const [avisoPendenciaAnterior, setAvisoPendenciaAnterior] = useState(false);
+  const [avisoEmail, setAvisoEmail] = useState<string | null>(null);
 
   // "Recalcular": busca de novo os custos da Base Peças pra essa mesma
   // lista — pega na hora qualquer código cadastrado manualmente (nesse
@@ -278,6 +279,9 @@ export default function PainelValidacaoOrcamentos({
     if (!res.ok) {
       throw new Error(data?.error || "Não foi possível confirmar o envio.");
     }
+    // o lote já avançou de etapa normalmente mesmo que o e-mail falhe —
+    // só avisa, não impede nem desfaz nada (ver enviarEmailDoLote na rota).
+    setAvisoEmail(data?.email?.erro ? `O lote avançou, mas o e-mail não foi enviado: ${data.email.erro}` : null);
     setPopupRevisao(null);
     setLoteSelecionado("");
     router.refresh();
@@ -497,6 +501,13 @@ export default function PainelValidacaoOrcamentos({
           </button>
         </div>
       </div>
+
+      {avisoEmail && (
+        <p className="text-xs flex items-center gap-1.5" style={{ color: "#b45309" }}>
+          <AlertTriangle size={13} />
+          {avisoEmail}
+        </p>
+      )}
 
       {loteSelecionado && (loteTemPendenciaAnterior || loteTemPecaSemCusto || loteTemPendenteConfirmacao) && (
         <p className="text-xs flex items-center gap-1.5" style={{ color: "#ef4444" }}>
