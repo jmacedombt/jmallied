@@ -108,6 +108,7 @@ function CardStat({
   valor,
   cor,
   explicacao,
+  destaque,
   onClick,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -119,24 +120,36 @@ function CardStat({
    * pra abrir o detalhe — usado no card Total Venda pra deixar claro o
    * que é aquele número sem precisar abrir o pop-up. */
   explicacao?: string;
+  /** dá ênfase ao card usando a própria cor de destaque do sistema (a
+   * mesma do botão Confirmar/da faixa de degradê) — usado só no Total
+   * Venda, pra saltar aos olhos sem sair da paleta escolhida pela pessoa
+   * em "Cor do sistema". */
+  destaque?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group relative text-left rounded-lg border overflow-hidden transition hover:brightness-110 cursor-pointer"
-      style={{ borderColor: "var(--line)", background: "var(--surface2)" }}
+      className="group relative flex flex-col text-left rounded-lg border overflow-hidden transition hover:brightness-110 cursor-pointer w-full"
+      style={{
+        borderColor: destaque ? "var(--accent2)" : "var(--line)",
+        background: destaque ? "var(--accent-glow)" : "var(--surface2)",
+        boxShadow: destaque ? "0 0 14px var(--accent-glow)" : undefined,
+      }}
       title={explicacao ? undefined : "Clique pra ver o detalhe desse dado"}
     >
       <FaixaDegrade />
       <div className="flex items-center gap-2 px-3 py-1.5">
         <Icone size={14} style={{ color: cor ?? "var(--accent2)" }} />
-        <span className="flex flex-col leading-tight">
-          <span className="text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+        <span className="flex flex-col leading-tight min-w-0">
+          <span className="text-[10px] uppercase tracking-wide truncate" style={{ color: "var(--muted)" }}>
             {label}
           </span>
-          <span className="text-xs font-semibold" style={{ color: cor ?? "var(--ink)" }}>
+          <span
+            className={destaque ? "text-sm font-bold" : "text-xs font-semibold"}
+            style={{ color: cor ?? (destaque ? "var(--accent2)" : "var(--ink)") }}
+          >
             {valor}
           </span>
         </span>
@@ -327,6 +340,8 @@ export default function PainelValidacaoOrcamentos({
      * do pop-up) — usado no Total Venda pra já deixar claro o que é sem
      * precisar clicar. */
     explicacao?: string;
+    /** ver CardStat.destaque — só true no Total Venda. */
+    destaque?: boolean;
     formatar: (r: ResumoValidacao) => string;
     /** conta feita com os números reais (todos os lotes juntos), pra
      * mostrar ao passar o mouse em cima do valor no pop-up de detalhe —
@@ -343,6 +358,7 @@ export default function PainelValidacaoOrcamentos({
       icone: Banknote,
       label: "Total Venda",
       formula: "Mão de obra + Venda de Peças",
+      destaque: true,
       explicacao: "Total Venda = Mão de obra + Venda de Peças. É a receita bruta total faturada nesse orçamento (serviço + peça), antes de descontar o custo da peça e o imposto.",
       formatar: (r) => formatarReal(r.vendaTotalPecas + r.maoDeObraTotal),
       explicacaoResultado: (r) =>
@@ -425,8 +441,8 @@ export default function PainelValidacaoOrcamentos({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center flex-wrap gap-2 [&>a]:!mb-0">
-        {topo}
+      {topo}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-2">
         <CardStat icone={Gauge} label="Nessa etapa" valor={pendentesLabel} onClick={() => setCardAberto("pendentes")} />
         {CARDS.map((c) => (
           <CardStat
@@ -436,6 +452,7 @@ export default function PainelValidacaoOrcamentos({
             valor={c.formatar(resumo)}
             cor={c.cor}
             explicacao={c.explicacao}
+            destaque={c.destaque}
             onClick={() => setCardAberto(c.key)}
           />
         ))}

@@ -75,6 +75,15 @@ export default async function OperacionalPage() {
     mapaContagens.set(c.status_operacional, Number(c.quantidade));
   }
 
+  // total usado como base do percentual de cada card — sem "Produto
+  // Entregue", que só acumula pra sempre e, com o tempo, dominaria a
+  // conta e esconderia como o volume ATUAL está distribuído nas etapas
+  // ainda em andamento.
+  const totalPipelineAtivo = STATUS_OPERACIONAL.filter((s) => s.slug !== "produto-entregue").reduce(
+    (soma, s) => soma + (mapaContagens.get(s.valor) ?? 0),
+    0
+  );
+
   return (
     <AppShell titulo="Operacional" perfil={perfil}>
       <p className="text-sm mb-5" style={{ color: "var(--muted)" }}>
@@ -86,6 +95,8 @@ export default async function OperacionalPage() {
           const Icone = ICONES[status.slug];
           const cores = CORES[status.slug];
           const quantidade = mapaContagens.get(status.valor) ?? 0;
+          const percentual =
+            status.slug === "produto-entregue" || totalPipelineAtivo === 0 ? null : (quantidade / totalPipelineAtivo) * 100;
           return (
             <Link
               key={status.slug}
@@ -112,6 +123,21 @@ export default async function OperacionalPage() {
               <p className="text-[13px] font-medium leading-snug" style={{ color: "var(--muted)" }}>
                 {status.label}
               </p>
+              {percentual != null && (
+                <div
+                  className="mt-2 h-[3px] w-full rounded-full overflow-hidden"
+                  style={{ background: "var(--surface)" }}
+                  title={`${percentual.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% do pipeline ativo (todas as etapas, exceto Produto Entregue)`}
+                >
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, Math.max(quantidade > 0 ? 2 : 0, percentual))}%`,
+                      background: `linear-gradient(90deg, ${cores.cor}, ${cores.clara})`,
+                    }}
+                  />
+                </div>
+              )}
             </Link>
           );
         })}
