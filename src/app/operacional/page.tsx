@@ -125,17 +125,21 @@ export default async function OperacionalPage() {
               </p>
               {percentual != null && (
                 <div
-                  className="mt-2 h-[3px] w-full rounded-full overflow-hidden"
-                  style={{ background: "var(--surface)" }}
+                  className="mt-2 flex items-center gap-1.5"
                   title={`${percentual.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% do pipeline ativo (todas as etapas, exceto Produto Entregue)`}
                 >
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${Math.min(100, Math.max(quantidade > 0 ? 2 : 0, percentual))}%`,
-                      background: `linear-gradient(90deg, ${cores.cor}, ${cores.clara})`,
-                    }}
-                  />
+                  <div className="h-[3px] flex-1 rounded-full overflow-hidden" style={{ background: "var(--surface)" }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(100, Math.max(quantidade > 0 ? 2 : 0, percentual))}%`,
+                        background: `linear-gradient(90deg, ${cores.cor}, ${cores.clara})`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-[10px] font-semibold shrink-0" style={{ color: cores.cor }}>
+                    {Math.round(percentual)}%
+                  </span>
                 </div>
               )}
             </Link>
