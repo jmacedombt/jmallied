@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
 import { type FaixaMarkup } from "@/lib/bid";
-import PopupCadastrarPecaBase from "@/components/PopupCadastrarPecaBase";
+import PopupCadastrarPecaBid from "@/components/PopupCadastrarPecaBid";
 import PopupConfirmar from "@/components/PopupConfirmar";
 import TooltipCalculoBid, { type PecaParaTooltip } from "@/components/TooltipCalculoBid";
 import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
@@ -38,6 +38,10 @@ export type AparelhoValidacaoDetalhe = DetalheValidacaoOrcamento & {
   nf_remessa_allied: string;
   os_reparadora: string | null;
   trade_allied: string;
+  /** usado só pra pré-preencher o campo "Modelo" no cadastro de peça no
+   * BID (ver PopupCadastrarPecaBid) — se o BID já tiver um modelo pra
+   * esse Part Number, aquele prevalece; esse é só o fallback. */
+  modelo_comercial: string | null;
   validacaoConfirmadoSemPeca: boolean;
   /** true quando Venda de Peças/Lucro/Mão de obra foram ajustados à mão
    * (ver lápis no resumo abaixo) — nesse caso os totais vêm congelados do
@@ -111,7 +115,7 @@ export default function PopupPecasValidacao({
   onAtualizado: () => void;
   onFechar: () => void;
 }) {
-  const [cadastrando, setCadastrando] = useState<string | null>(null);
+  const [cadastrando, setCadastrando] = useState<{ partNumber: string; prefillModelo: string | null } | null>(null);
   const [confirmandoSemPeca, setConfirmandoSemPeca] = useState(false);
   const [erroConfirmar, setErroConfirmar] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ peca: PecaParaTooltip; x: number; y: number } | null>(null);
@@ -408,10 +412,12 @@ export default function PopupPecasValidacao({
                             <button
                               type="button"
                               disabled={!podeCadastrarPeca}
-                              onClick={() => setCadastrando(p.codigo)}
+                              onClick={() =>
+                                setCadastrando({ partNumber: p.codigo, prefillModelo: aparelho.modelo_comercial ?? null })
+                              }
                               className="inline-flex items-center gap-1 text-xs font-medium rounded-md px-2 py-1 transition disabled:opacity-50 disabled:cursor-not-allowed"
                               style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.12)" }}
-                              title={podeCadastrarPeca ? "Cadastrar valor dessa peça na Base Peças" : "Sem custo na Base Peças"}
+                              title={podeCadastrarPeca ? "Cadastrar valor dessa peça no BID" : "Sem custo no BID"}
                             >
                               <PlusCircle size={12} />
                               Cadastrar
@@ -625,8 +631,11 @@ export default function PopupPecasValidacao({
       )}
 
       {cadastrando && (
-        <PopupCadastrarPecaBase
-          codigo={cadastrando}
+        <PopupCadastrarPecaBid
+          partNumber={cadastrando.partNumber}
+          modeloInicial={cadastrando.prefillModelo}
+          faixas={faixas}
+          icmsPercentual={icmsPercentual}
           onFechar={() => setCadastrando(null)}
           onSalvo={() => {
             setCadastrando(null);

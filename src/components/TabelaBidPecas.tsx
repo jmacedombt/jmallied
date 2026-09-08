@@ -2,10 +2,11 @@
 
 import { Fragment, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Clock, Lock, RefreshCcw } from "lucide-react";
+import { ChevronDown, Clock, Lock, PlusCircle, RefreshCcw } from "lucide-react";
 import { type FaixaMarkup } from "@/lib/bid";
 import { formatarDataBrasilia, formatarDataHoraBrasilia } from "@/lib/tempo";
 import TooltipCalculoBid from "@/components/TooltipCalculoBid";
+import PopupCadastrarPecaBid from "@/components/PopupCadastrarPecaBid";
 
 export type SolucaoBid = { id: string; peca_solucao: string; principal: boolean };
 
@@ -60,6 +61,7 @@ export default function TabelaBidPecas({
   faixas = [],
   icmsPercentual = 0,
   partNumbersPrioritarios,
+  podeCadastrar = false,
 }: {
   pecas: PecaBid[];
   faixas?: FaixaMarkup[];
@@ -68,6 +70,10 @@ export default function TabelaBidPecas({
    * destaque (vermelho) e vêm primeiro na lista, já que o cadastro deles
    * no BID é mais urgente. Usado só em Pendências BID. */
   partNumbersPrioritarios?: Set<string>;
+  /** libera o botão "Cadastrar" (mesmo popup usado em 2 - Ag. Análise) em
+   * cada linha sem custo — usado só em Pendências BID, onde toda peça
+   * listada já está sem Custo Peça Samsung/Peça Solução. */
+  podeCadastrar?: boolean;
 }) {
   const router = useRouter();
 
@@ -76,7 +82,20 @@ export default function TabelaBidPecas({
   const [trocando, setTrocando] = useState<string | null>(null);
   const [historicoPorPeca, setHistoricoPorPeca] = useState<Record<string, LinhaHistorico[] | "carregando">>({});
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
+  const [cadastrando, setCadastrando] = useState<{
+    partNumber: string;
+    prefillModelo: string | null;
+    prefillPecaSolucao: string | null;
+    prefillMaoDeObra: number | null;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // a coluna de cadastro só faz sentido em Pendências BID (onde toda
+  // peça listada não tem custo/Peça Solução ainda) — na tela geral do
+  // BID (que não passa partNumbersPrioritarios) ela nem aparece, pra não
+  // sugerir "recadastrar" peças que já têm valor.
+  const mostrarCadastro = partNumbersPrioritarios !== undefined;
+  const totalColunas = mostrarCadastro ? 9 : 8;
 
   function mostrarTooltip(e: React.MouseEvent, peca: PecaBid) {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -148,6 +167,7 @@ export default function TabelaBidPecas({
                 "Imposto (ICMS)",
                 "Custo Peça (Allied)",
                 "Última alteração",
+                ...(mostrarCadastro ? ["Cadastro"] : []),
               ].map(
                 (titulo) => (
                   <th
@@ -273,11 +293,33 @@ export default function TabelaBidPecas({
                         );
                       })()}
                     </td>
+                    {mostrarCadastro && (
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          disabled={!podeCadastrar}
+                          onClick={() =>
+                            setCadastrando({
+                              partNumber: peca.part_number,
+                              prefillModelo: peca.modelo,
+                              prefillPecaSolucao: principal?.peca_solucao ?? null,
+                              prefillMaoDeObra: peca.mao_de_obra,
+                            })
+                          }
+                          className="inline-flex items-center gap-1 text-xs font-medium rounded-md px-2 py-1 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.12)" }}
+                          title={podeCadastrar ? "Cadastrar valor dessa peça no BID" : "Sem permissão pra cadastrar"}
+                        >
+                          <PlusCircle size={12} />
+                          Cadastrar
+                        </button>
+                      </td>
+                    )}
                   </tr>
 
                   {aberto && (
                     <tr style={{ background: "var(--surface2)" }}>
-                      <td colSpan={8} className="px-4 py-4">
+                      <td colSpan={totalColunas} className="px-4 py-4">
                         <p
                           className="text-xs uppercase tracking-wide mb-2 flex items-center gap-1.5"
                           style={{ color: "var(--muted)" }}
@@ -350,6 +392,22 @@ export default function TabelaBidPecas({
         >
           <TooltipCalculoBid peca={tooltip.peca} faixas={faixas} icmsPercentual={icmsPercentual} />
         </div>
+      )}
+
+      {cadastrando && (
+        <PopupCadastrarPecaBid
+          partNumber={cadastrando.partNumber}
+          modeloInicial={cadastrando.prefillModelo}
+          pecaSolucaoInicial={cadastrando.prefillPecaSolucao}
+          maoDeObraInicial={cadastrando.prefillMaoDeObra}
+          faixas={faixas}
+          icmsPercentual={icmsPercentual}
+          onFechar={() => setCadastrando(null)}
+          onSalvo={() => {
+            setCadastrando(null);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );

@@ -3,7 +3,8 @@ import { AlertTriangle, ArrowLeft, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import TabelaBidPecas, { type PecaBid } from "@/components/TabelaBidPecas";
-import { partNumbersReferenciadosEmOrcamentosAbertos, type FaixaMarkup } from "@/lib/bid";
+import BotaoResumoPrioridadeBid from "@/components/BotaoResumoPrioridadeBid";
+import { partNumbersReferenciadosEmOrcamentosAbertos, podeImportarBid, type FaixaMarkup } from "@/lib/bid";
 
 const PAGINA_TAMANHO = 50;
 const LOTE_BUSCA = 1000;
@@ -81,7 +82,9 @@ export default async function PendenciasBidPage({
     return prioridadeA - prioridadeB;
   });
 
-  const totalPrioritarias = pendentesOrdenadas.filter((p) => partNumbersPrioritarios.has(p.part_number)).length;
+  const pecasPrioritarias = pendentesOrdenadas.filter((p) => partNumbersPrioritarios.has(p.part_number));
+  const totalPrioritarias = pecasPrioritarias.length;
+  const podeCadastrar = podeImportarBid(perfil);
 
   // filtro "só prioridade" entra depois da ordenação e não mexe nos
   // totais do resumo acima (que sempre mostram o total geral) — só
@@ -194,6 +197,10 @@ export default async function PendenciasBidPage({
             Limpar
           </Link>
         )}
+
+        <BotaoResumoPrioridadeBid
+          pecas={pecasPrioritarias.map((p) => ({ modelo: p.modelo, part_number: p.part_number }))}
+        />
       </form>
 
       <div className="flex-1 min-h-0">
@@ -202,6 +209,7 @@ export default async function PendenciasBidPage({
           faixas={faixas}
           icmsPercentual={icmsPercentual}
           partNumbersPrioritarios={partNumbersPrioritarios}
+          podeCadastrar={podeCadastrar}
         />
       </div>
 
