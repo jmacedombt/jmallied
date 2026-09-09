@@ -12,6 +12,7 @@ import {
   Database,
   FileSpreadsheet,
   FileText,
+  HardDrive,
   Home,
   Info,
   LayoutGrid,
@@ -57,9 +58,9 @@ type GrupoMenu = {
   itens: ItemMenu[];
 };
 
-// Estrutura do menu lateral. Por enquanto o grupo "Sistema" só tem
-// "Usuários" — as demais funcionalidades entram aqui conforme forem
-// solicitadas.
+// Estrutura do menu lateral. O grupo "Sistema" reúne as telas
+// administrativas do app inteiro (Usuários, Manutenção do Banco) — mais
+// funcionalidades entram aqui conforme forem solicitadas.
 // grupo "Métricas" só entra na lista pra quem tem permissão (mesmo
 // cargo que já confirma o envio de um lote — ver podeConfirmarAnaliseEmLote)
 // — inserido dinamicamente em GRUPOS_MENU.
@@ -119,7 +120,10 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
     id: "sistema",
     label: "Sistema",
     icone: Settings,
-    itens: [{ href: "/usuarios", label: "Usuários", icone: Users }],
+    itens: [
+      { href: "/usuarios", label: "Usuários", icone: Users },
+      { href: "/manutencao", label: "Manutenção do Banco", icone: HardDrive },
+    ],
   },
 ];
 
