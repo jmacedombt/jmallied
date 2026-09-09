@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import TabelaBidPecas, { type PecaBid } from "@/components/TabelaBidPecas";
 import BotaoResumoPrioridadeBid from "@/components/BotaoResumoPrioridadeBid";
-import { partNumbersReferenciadosEmOrcamentosAbertos, podeImportarBid, type FaixaMarkup } from "@/lib/bid";
+import { pecasReferenciadasEmOrcamentosAbertos, podeImportarBid, type FaixaMarkup } from "@/lib/bid";
 
 const PAGINA_TAMANHO = 50;
 const LOTE_BUSCA = 1000;
@@ -60,10 +60,10 @@ export default async function PendenciasBidPage({
     if (data.length < LOTE_BUSCA) break;
   }
 
-  const [{ data: faixasBrutas }, { data: configImposto }, partNumbersPrioritarios] = await Promise.all([
+  const [{ data: faixasBrutas }, { data: configImposto }, mapaReferenciados] = await Promise.all([
     supabase.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
     supabase.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
-    partNumbersReferenciadosEmOrcamentosAbertos(supabase),
+    pecasReferenciadasEmOrcamentosAbertos(supabase),
   ]);
 
   const faixas: FaixaMarkup[] = (faixasBrutas ?? []).map((f) => ({
@@ -73,10 +73,51 @@ export default async function PendenciasBidPage({
   }));
   const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
 
+  const partNumbersPrioritarios = new Set(mapaReferenciados.keys());
+
+  // peças referenciadas por orçamento em aberto que nem chegaram a ter
+  // UMA linha no BID ainda (nenhum cadastro, nem pendente) — sem isso
+  // ficavam completamente fora dessa tela, mesmo sendo o caso mais
+  // urgente de pendência que existe (a pessoa nem sabe que precisa
+  // cadastrar). Checa existência (qualquer custo, não só nulo) em lotes,
+  // pra não montar um "in (...)" gigante numa lista grande de Part
+  // Numbers.
+  const todosReferenciados = Array.from(mapaReferenciados.keys());
+  const partNumbersComLinhaNoBid = new Set<string>();
+  const LOTE_EXISTENCIA = 400;
+  for (let i = 0; i < todosReferenciados.length; i += LOTE_EXISTENCIA) {
+    const lote = todosReferenciados.slice(i, i + LOTE_EXISTENCIA);
+    const { data } = await supabase.from("bid_pecas").select("part_number").in("part_number", lote);
+    for (const linha of (data ?? []) as { part_number: string }[]) partNumbersComLinhaNoBid.add(linha.part_number);
+  }
+
+  const pecasVirtuais: PecaBid[] = todosReferenciados
+    .filter((pn) => !partNumbersComLinhaNoBid.has(pn))
+    .sort((a, b) => (mapaReferenciados.get(a) ?? "").localeCompare(mapaReferenciados.get(b) ?? "") || a.localeCompare(b))
+    .map((pn) => ({
+      id: `virtual:${pn}`,
+      modelo: mapaReferenciados.get(pn) ?? "",
+      part_number: pn,
+      custo_peca_samsung: null,
+      valor_com_margem: null,
+      custo_peca_allied: null,
+      valor_imposto: null,
+      mao_de_obra: null,
+      travado: false,
+      valor_atualizado_em: "",
+      valor_direcao: null,
+      bid_solucoes: [],
+      virtual: true,
+    }))
+    // mesmos filtros de busca aplicados na query do BID acima — essas
+    // peças nunca passaram pelo banco com esse filtro, então repete aqui.
+    .filter((p) => (buscaPartNumber ? p.part_number.toLowerCase().includes(buscaPartNumber.toLowerCase()) : true))
+    .filter((p) => (buscaModelo ? p.modelo.toLowerCase().includes(buscaModelo.toLowerCase()) : true));
+
   // prioridade primeiro (peça esperada por algum pedido em aberto agora),
   // depois ordem alfabética já aplicada na busca é preservada (sort é
   // estável) — dentro de cada grupo continua modelo/part number.
-  const pendentesOrdenadas = [...todasPendentes].sort((a, b) => {
+  const pendentesOrdenadas = [...todasPendentes, ...pecasVirtuais].sort((a, b) => {
     const prioridadeA = partNumbersPrioritarios.has(a.part_number) ? 0 : 1;
     const prioridadeB = partNumbersPrioritarios.has(b.part_number) ? 0 : 1;
     return prioridadeA - prioridadeB;
@@ -140,10 +181,12 @@ export default async function PendenciasBidPage({
             className="pointer-events-none absolute left-1/2 top-6 z-20 hidden w-72 -translate-x-1/2 rounded-lg border p-3 text-xs shadow-2xl group-hover:block"
             style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--muted)" }}
           >
-            Peças do BID cujo Part Number ainda não foi encontrado na Base Peças — por isso não têm custo calculado.
-            Assim que o código aparecer numa importação da Base Peças, a peça sai daqui automaticamente (use o botão
-            "Recalcular" na tela do BID depois de importar). As marcadas como <strong>Prioridade</strong> têm ao
-            menos um pedido em aberto esperando o cadastro dessa peça.
+            Peças do BID cujo Part Number ainda não foi encontrado na Base Peças — por isso não têm custo calculado —
+            e peças usadas em algum orçamento em aberto que nem chegaram a ter cadastro no BID (marcadas em{" "}
+            <strong style={{ color: "#f97316" }}>Sem cadastro</strong>). As do primeiro grupo somem automaticamente
+            assim que o código aparecer numa importação da Base Peças (use o botão "Recalcular" na tela do BID depois
+            de importar); as do segundo somem assim que alguém cadastrar a peça por aqui. As marcadas como{" "}
+            <strong>Prioridade</strong> têm ao menos um pedido em aberto esperando o cadastro dessa peça.
           </div>
         </div>
       </div>

@@ -23,6 +23,12 @@ export type PecaBid = {
   valor_atualizado_em: string;
   valor_direcao: "+" | "-" | null;
   bid_solucoes: SolucaoBid[];
+  /** true quando a peça nunca teve NENHUMA linha no BID (nem uma pendente
+   * sem custo) — só está aqui porque algum orçamento em aberto referencia
+   * esse Part Number. Não existe id real, histórico nem Peça Solução pra
+   * ela ainda; o cadastro cria a linha de verdade no BID. Usado só em
+   * Pendências BID (ver PendenciasBidPage). */
+  virtual?: boolean;
 };
 
 type LinhaHistorico = {
@@ -125,9 +131,12 @@ export default function TabelaBidPecas({
     }
   }
 
-  async function alternarExpandido(pecaId: string) {
+  async function alternarExpandido(pecaId: string, virtual: boolean) {
     const abrindo = expandido !== pecaId;
     setExpandido(abrindo ? pecaId : null);
+    // peça virtual nunca teve linha no BID — não tem id de verdade nem
+    // histórico pra buscar, só o aviso já cobre o clique.
+    if (virtual) return;
     if (abrindo && !historicoPorPeca[pecaId]) {
       setHistoricoPorPeca((h) => ({ ...h, [pecaId]: "carregando" }));
       try {
@@ -193,15 +202,19 @@ export default function TabelaBidPecas({
               return (
                 <Fragment key={peca.id}>
                   <tr
-                    onClick={() => alternarExpandido(peca.id)}
+                    onClick={() => alternarExpandido(peca.id, !!peca.virtual)}
                     className="border-t cursor-pointer transition-colors hover:bg-[var(--surface2)]"
                     style={{
                       borderColor: "var(--line)",
-                      background: prioritaria ? "rgba(239, 68, 68, 0.07)" : "var(--surface)",
+                      background: peca.virtual
+                        ? "rgba(249, 115, 22, 0.09)"
+                        : prioritaria
+                          ? "rgba(239, 68, 68, 0.07)"
+                          : "var(--surface)",
                     }}
                   >
-                    <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
-                      {peca.modelo}
+                    <td className="px-4 py-2.5" style={{ color: peca.modelo ? "var(--ink)" : "var(--muted)" }}>
+                      {peca.modelo || "—"}
                     </td>
                     <td
                       className="px-4 py-2.5 font-mono"
@@ -209,6 +222,15 @@ export default function TabelaBidPecas({
                       title={prioritaria ? "Existe pedido em aberto esperando o cadastro dessa peça no BID" : undefined}
                     >
                       {peca.part_number}
+                      {peca.virtual && (
+                        <span
+                          className="ml-2 inline-block text-[10px] font-sans font-semibold uppercase tracking-wide rounded-full px-1.5 py-0.5 align-middle"
+                          style={{ background: "rgba(249, 115, 22, 0.18)", color: "#f97316" }}
+                          title="Essa peça nunca teve cadastro no BID — só aparece aqui porque um orçamento em aberto usa esse Part Number"
+                        >
+                          Sem cadastro
+                        </span>
+                      )}
                       {prioritaria && (
                         <span
                           className="ml-2 inline-block text-[10px] font-sans font-semibold uppercase tracking-wide rounded-full px-1.5 py-0.5 align-middle"
@@ -283,15 +305,19 @@ export default function TabelaBidPecas({
                       </span>
                     </td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
-                      {(() => {
-                        const { texto, seta, cor } = formatarUltimaAlteracao(peca.valor_atualizado_em, peca.valor_direcao);
-                        return (
-                          <span className="inline-flex items-center gap-1" style={{ color: "var(--muted)" }}>
-                            {texto}
-                            {seta && <span style={{ color: cor }}>{seta}</span>}
-                          </span>
-                        );
-                      })()}
+                      {peca.virtual ? (
+                        <span style={{ color: "#f97316" }}>Nunca cadastrada</span>
+                      ) : (
+                        (() => {
+                          const { texto, seta, cor } = formatarUltimaAlteracao(peca.valor_atualizado_em, peca.valor_direcao);
+                          return (
+                            <span className="inline-flex items-center gap-1" style={{ color: "var(--muted)" }}>
+                              {texto}
+                              {seta && <span style={{ color: cor }}>{seta}</span>}
+                            </span>
+                          );
+                        })()
+                      )}
                     </td>
                     {mostrarCadastro && (
                       <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -326,7 +352,13 @@ export default function TabelaBidPecas({
                         >
                           <Clock size={12} /> Histórico de variação de valor
                         </p>
-                        {historico === "carregando" && (
+                        {peca.virtual && (
+                          <p className="text-xs" style={{ color: "var(--muted)" }}>
+                            Essa peça ainda não tem nenhum cadastro no BID — não há histórico. Clique em "Cadastrar" na
+                            linha pra criar o cadastro (Modelo, Peça Solução e Custo).
+                          </p>
+                        )}
+                        {!peca.virtual && historico === "carregando" && (
                           <p className="text-xs" style={{ color: "var(--muted)" }}>
                             Carregando...
                           </p>

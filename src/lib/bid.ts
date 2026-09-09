@@ -110,25 +110,37 @@ export function percentualLucro(valorEditado: number, custoBasePecas: number | n
   return ((valorEditado - custoBasePecas) / custoBasePecas) * 100;
 }
 
-const COLUNAS_PECA_ORCAMENTO = Array.from({ length: 10 }, (_, i) => `peca_${i + 1}`);
+// peça_1..10 (posições padrão) + peça_add_1..5 (peças adicionais) — as
+// duas famílias de coluna onde um Part Number pode estar gravado num
+// orçamento (ver COLUNAS_PECAS em validacaoEnvioAllied.ts/reprovar route).
+// Faltar peça_add_* aqui deixava peça adicional de fora da prioridade.
+const COLUNAS_PECA_ORCAMENTO = [
+  ...Array.from({ length: 10 }, (_, i) => `peca_${i + 1}`),
+  ...Array.from({ length: 5 }, (_, i) => `peca_add_${i + 1}`),
+];
 
-/** Busca o conjunto de Part Numbers referenciados em ao menos um
- * orçamento "em aberto" (qualquer status fora de STATUS_ORCAMENTO_FECHADOS)
- * — usado pra decidir prioridade de cadastro em Pendências BID e pro
- * alerta de notificações. Aceita tanto o client de servidor (cookies)
- * quanto o admin (service role); usa `any` porque os dois clientes têm
- * tipagens diferentes e nenhuma delas é reaproveitada aqui. */
-export async function partNumbersReferenciadosEmOrcamentosAbertos(
+/** Busca, pra cada Part Number referenciado em ao menos um orçamento "em
+ * aberto" (qualquer status fora de STATUS_ORCAMENTO_FECHADOS), um Modelo
+ * de exemplo (o do primeiro orçamento aberto encontrado com essa peça) —
+ * usado em Pendências BID pra decidir prioridade de cadastro E pra
+ * detectar peças que nem chegaram a ser importadas/cadastradas no BID
+ * ainda (nenhuma linha em bid_pecas, não só sem custo). O Modelo serve só
+ * de sugestão pra pré-preencher o cadastro manual — a peça pode aparecer
+ * em mais de um modelo, aqui fica só o primeiro achado. Aceita tanto o
+ * client de servidor (cookies) quanto o admin (service role); usa `any`
+ * porque os dois clientes têm tipagens diferentes e nenhuma delas é
+ * reaproveitada aqui. */
+export async function pecasReferenciadasEmOrcamentosAbertos(
   supabase: any // eslint-disable-line @typescript-eslint/no-explicit-any
-): Promise<Set<string>> {
+): Promise<Map<string, string | null>> {
   const LOTE = 1000;
   const listaFechados = STATUS_ORCAMENTO_FECHADOS.map((s) => `"${s}"`).join(",");
-  const referenciados = new Set<string>();
+  const referenciados = new Map<string, string | null>();
 
   for (let inicio = 0; ; inicio += LOTE) {
     const { data, error } = await supabase
       .from("orcamentos")
-      .select(COLUNAS_PECA_ORCAMENTO.join(", "))
+      .select([...COLUNAS_PECA_ORCAMENTO, "modelo_comercial"].join(", "))
       .not("status_operacional", "in", `(${listaFechados})`)
       .range(inicio, inicio + LOTE - 1);
 
@@ -137,7 +149,9 @@ export async function partNumbersReferenciadosEmOrcamentosAbertos(
     for (const linha of data as Record<string, string | null>[]) {
       for (const coluna of COLUNAS_PECA_ORCAMENTO) {
         const valor = linha[coluna];
-        if (valor && valor.trim()) referenciados.add(valor.trim());
+        if (!valor || !valor.trim()) continue;
+        const codigo = valor.trim();
+        if (!referenciados.has(codigo)) referenciados.set(codigo, linha.modelo_comercial ?? null);
       }
     }
 
