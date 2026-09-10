@@ -122,7 +122,16 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
+  // antes só excluía "logo-allied.png" por nome — o logo usado de
+  // verdade no menu (logo-parceria-menu.png) não estava na lista, então
+  // pra um login ALLIED cada pedido dessa imagem caía na checagem de
+  // "página permitida" (que não sabe nada sobre arquivo estático),
+  // levava um redirect pro /operacional, e o navegador recebia HTML no
+  // lugar do PNG — o logo simplesmente não carregava, só pro cargo
+  // ALLIED (outros cargos não passam por essa checagem). Trocado pra
+  // excluir qualquer caminho terminado numa extensão de arquivo estático
+  // comum, em vez de ter que listar cada imagem uma por uma.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|logo-allied.png).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico)$).*)",
   ],
 };
