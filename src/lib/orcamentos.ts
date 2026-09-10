@@ -148,6 +148,11 @@ export const STATUS_OPERACIONAL = [
   { valor: "2 - Ag. Análise", slug: "2-ag-analise", label: "2 - Ag. Análise" },
   { valor: "Validação de Orçamentos", slug: "validacao-orcamentos", label: "Validação de Orçamentos" },
   { valor: "3 - Ag. Resposta de Orçamento", slug: "3-ag-resposta-orcamento", label: "3 - Ag. Resposta de Orçamento" },
+  // sem número, inserida entre "3" e "4" — mesmo motivo de "Validação de
+  // Orçamentos" acima: não precisa renumerar/migrar as etapas seguintes,
+  // que já têm o número gravado no valor de status_operacional de cada
+  // orçamento existente (ver migration 0033).
+  { valor: "Ag. Contra Proposta", slug: "ag-contra-proposta", label: "Ag. Contra Proposta" },
   { valor: "4 - Ag. Resposta de Reorçamento", slug: "4-ag-resposta-reorcamento", label: "4 - Ag. Resposta de Reorçamento" },
   { valor: "5 - Ag. Peças", slug: "5-ag-pecas", label: "5 - Ag. Peças" },
   { valor: "6 - Ag. Reparo", slug: "6-ag-reparo", label: "6 - Ag. Reparo" },
@@ -169,6 +174,10 @@ export const STATUS_AG_ABERTURA = STATUS_OPERACIONAL.find((s) => s.slug === "ag-
 export const STATUS_AG_TRIAGEM = STATUS_OPERACIONAL.find((s) => s.slug === "1-ag-triagem")!.valor;
 export const STATUS_AG_ANALISE = STATUS_OPERACIONAL.find((s) => s.slug === "2-ag-analise")!.valor;
 export const STATUS_VALIDACAO_ORCAMENTOS = STATUS_OPERACIONAL.find((s) => s.slug === "validacao-orcamentos")!.valor;
+export const STATUS_AG_RESPOSTA_ORCAMENTO = STATUS_OPERACIONAL.find((s) => s.slug === "3-ag-resposta-orcamento")!.valor;
+export const STATUS_AG_CONTRA_PROPOSTA = STATUS_OPERACIONAL.find((s) => s.slug === "ag-contra-proposta")!.valor;
+export const STATUS_AG_RESPOSTA_REORCAMENTO = STATUS_OPERACIONAL.find((s) => s.slug === "4-ag-resposta-reorcamento")!.valor;
+export const STATUS_AG_PECAS = STATUS_OPERACIONAL.find((s) => s.slug === "5-ag-pecas")!.valor;
 export const STATUS_ORCAMENTO_REPROVADO = STATUS_OPERACIONAL.find((s) => s.slug === "8-orcamento-reprovado")!.valor;
 
 // etapas anteriores a "2 - Ag. Análise" (inclusive) — usado pra travar
@@ -433,4 +442,84 @@ export function aplicarAjusteManualValidacao(
     percLucroPecas,
     percLucroTotal,
   };
+}
+
+// ---- Resultado de aprovação da Allied (3 - Ag. Resposta de Orçamento) ----
+// (ver migration 0033_resposta_orcamento_aprovacao e PainelRespostaOrcamento.tsx)
+
+export const RESULTADOS_APROVACAO_ALLIED = ["Aguardando", "Aprovado", "Contra Proposta", "Reprovado"] as const;
+export type ResultadoAprovacaoAllied = (typeof RESULTADOS_APROVACAO_ALLIED)[number];
+
+// cor/rótulo de cada resultado — dado puro (sem ícone, que é
+// componente/lucide e fica só no client); usado tanto na tabela de
+// "3 - Ag. Resposta de Orçamento" quanto nos cards de contagem.
+export const CORES_RESULTADO_APROVACAO: Record<ResultadoAprovacaoAllied, { cor: string; fundo: string; borda: string }> = {
+  Aguardando: { cor: "var(--muted)", fundo: "var(--surface2)", borda: "var(--line)" },
+  Aprovado: { cor: "#16a34a", fundo: "rgba(34, 197, 94, 0.12)", borda: "#22c55e" },
+  "Contra Proposta": { cor: "#c2410c", fundo: "rgba(234, 179, 8, 0.14)", borda: "#f97316" },
+  Reprovado: { cor: "#dc2626", fundo: "rgba(239, 68, 68, 0.12)", borda: "#ef4444" },
+};
+
+// quem confirma o avanço de lote em Validação de Orçamentos também
+// confirma o resultado de aprovação em "3 - Ag. Resposta de Orçamento" e
+// o envio da Contra Proposta — mesma trava de cargo (Supervisor/Gerente
+// + is_master), reaproveitada em vez de criar uma permissão nova só pra
+// isso (mesma função, só com um nome que faz sentido nessas telas).
+export const podeConfirmarAprovacaoOrcamento = podeConfirmarAnaliseEmLote;
+
+// ---- Contra Proposta (Ag. Contra Proposta) — ajuste peça a peça ----
+// (ver migration 0033, PopupPecasContraProposta.tsx, PainelContraProposta.tsx)
+
+/** Uma peça dentro do ajuste de Contra Proposta — custo/imposto ficam
+ * sempre congelados no valor de referência (o mesmo que Validação de
+ * Orçamentos já tinha calculado); só vendaNova é editável em tela. */
+export type PecaContraProposta = {
+  posicao: string;
+  codigo: string;
+  custo: number;
+  imposto: number;
+  vendaOriginal: number;
+  vendaNova: number;
+};
+
+/** Monta o rascunho inicial de Contra Proposta a partir do detalhe já
+ * calculado (mesma origem do resumo de Validação de Orçamentos) — cada
+ * peça começa com vendaNova = vendaOriginal (nada mudou ainda) e a mão
+ * de obra começa igual à mão de obra atual do orçamento. */
+export function montarPecasContraPropostaIniciais(detalhe: DetalheValidacaoOrcamento): PecaContraProposta[] {
+  return detalhe.pecas.map((p) => ({
+    posicao: p.posicao,
+    codigo: p.codigo,
+    custo: p.custo ?? 0,
+    imposto: p.imposto,
+    vendaOriginal: p.vendaPeca ?? 0,
+    vendaNova: p.vendaPeca ?? 0,
+  }));
+}
+
+export type ResumoContraProposta = {
+  custoTotalPecas: number;
+  impostoTotalPecas: number;
+  vendaTotalPecas: number;
+  maoDeObra: number;
+  lucroLiquidoPeca: number;
+  lucroTotal: number;
+  percLucroPecas: number;
+  percLucroTotal: number;
+};
+
+/** Soma as peças (vendaNova) + mão de obra e deriva lucro/percentuais —
+ * mesma fórmula usada em toda parte do sistema (venda − custo − imposto,
+ * sem misturar mão de obra; total combinado por cima). Recalculado a
+ * cada tecla digitada nos campos de valor. */
+export function calcularResumoContraProposta(pecas: PecaContraProposta[], maoDeObra: number): ResumoContraProposta {
+  const custoTotalPecas = pecas.reduce((soma, p) => soma + p.custo, 0);
+  const impostoTotalPecas = pecas.reduce((soma, p) => soma + p.imposto, 0);
+  const vendaTotalPecas = pecas.reduce((soma, p) => soma + p.vendaNova, 0);
+  const lucroLiquidoPeca = vendaTotalPecas - custoTotalPecas - impostoTotalPecas;
+  const lucroTotal = lucroLiquidoPeca + maoDeObra;
+  const percLucroPecas = vendaTotalPecas > 0 ? (lucroLiquidoPeca / vendaTotalPecas) * 100 : 0;
+  const baseLucroTotal = vendaTotalPecas + maoDeObra;
+  const percLucroTotal = baseLucroTotal > 0 ? (lucroTotal / baseLucroTotal) * 100 : 0;
+  return { custoTotalPecas, impostoTotalPecas, vendaTotalPecas, maoDeObra, lucroLiquidoPeca, lucroTotal, percLucroPecas, percLucroTotal };
 }

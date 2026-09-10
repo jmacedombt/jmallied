@@ -16,6 +16,8 @@ import PainelAgTriagem from "@/components/PainelAgTriagem";
 import PainelAgAnalise, { type AparelhoAgAnalise } from "@/components/PainelAgAnalise";
 import PainelValidacaoOrcamentos, { type AparelhoValidacao } from "@/components/PainelValidacaoOrcamentos";
 import PainelOrcamentoReprovado, { type AparelhoReprovado } from "@/components/PainelOrcamentoReprovado";
+import PainelRespostaOrcamento, { type AparelhoRespostaOrcamento } from "@/components/PainelRespostaOrcamento";
+import PainelContraProposta, { type AparelhoContraPropostaLista } from "@/components/PainelContraProposta";
 import PainelEtapaSimples, { type AparelhoEtapaSimples } from "@/components/PainelEtapaSimples";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
 import { buscarPrecosBidPorPartNumber, type FaixaMarkup } from "@/lib/bid";
@@ -313,6 +315,60 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
+  if (status.slug === "3-ag-resposta-orcamento") {
+    const { data: aparelhos } = await supabase
+      .from("orcamentos")
+      .select(
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, resultado_aprovacao_allied"
+      )
+      .eq("status_operacional", status.valor)
+      .order("resultado_aprovacao_definido_em", { ascending: false, nullsFirst: false })
+      .order("updated_at", { ascending: false });
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <PainelRespostaOrcamento
+          aparelhos={(aparelhos ?? []) as AparelhoRespostaOrcamento[]}
+          perfil={perfil}
+          topo={
+            <>
+              {voltar}
+              {badgeContador(aparelhos?.length ?? 0)}
+            </>
+          }
+          mensagemVazia="Nenhum aparelho em 3 - Ag. Resposta de Orçamento no momento."
+        />
+      </AppShell>
+    );
+  }
+
+  if (status.slug === "ag-contra-proposta") {
+    const { data: aparelhos } = await supabase
+      .from("orcamentos")
+      .select(
+        "id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, contra_proposta_pecas, contra_proposta_mao_de_obra, contra_proposta_ajustado"
+      )
+      .eq("status_operacional", status.valor)
+      .order("nf_remessa_allied", { ascending: true })
+      .order("updated_at", { ascending: false });
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <PainelContraProposta
+          aparelhos={(aparelhos ?? []) as unknown as AparelhoContraPropostaLista[]}
+          perfil={perfil}
+          topo={
+            <>
+              {voltar}
+              {badgeContador(aparelhos?.length ?? 0)}
+            </>
+          }
+          mensagemVazia="Nenhum aparelho em Ag. Contra Proposta no momento."
+        />
+      </AppShell>
+    );
+  }
+
   if (status.slug === "8-orcamento-reprovado") {
     const { data: aparelhos } = await supabase
       .from("orcamentos")
@@ -362,9 +418,10 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
-  // etapas ainda sem tela própria (3 a 7, e Produto Entregue) — só a
-  // lista, com o ícone de reprovar em todas menos Produto Entregue (não
-  // faz sentido reprovar um orçamento já entregue).
+  // etapas ainda sem tela própria (4 a 7, e Produto Entregue — "3" e
+  // "Ag. Contra Proposta" já ganharam tela própria acima) — só a lista,
+  // com o ícone de reprovar em todas menos Produto Entregue (não faz
+  // sentido reprovar um orçamento já entregue).
   const { data: aparelhos } = await supabase
     .from("orcamentos")
     .select("id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa")

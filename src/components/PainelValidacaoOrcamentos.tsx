@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Coins,
   Gauge,
+  History,
   LayoutList,
   PackageCheck,
   PiggyBank,
@@ -24,6 +25,7 @@ import { podeImportarBasePecas } from "@/lib/pecas";
 import { type FaixaMarkup } from "@/lib/bid";
 import PopupPecasValidacao, { type AparelhoValidacaoDetalhe } from "@/components/PopupPecasValidacao";
 import PopupRevisaoValidacao, { type ResumoValidacao } from "@/components/PopupRevisaoValidacao";
+import PopupHistoricoEnvios from "@/components/PopupHistoricoEnvios";
 import CelulaLucroPercentual, { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupDetalheCard, { type BaseCalculoResumo, type LinhaDetalheCard } from "@/components/PopupDetalheCard";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
@@ -204,6 +206,7 @@ export default function PainelValidacaoOrcamentos({
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
   const [avisoPendenciaAnterior, setAvisoPendenciaAnterior] = useState(false);
   const [avisoEmail, setAvisoEmail] = useState<string | null>(null);
+  const [mostrarHistorico, setMostrarHistorico] = useState(false);
 
   // "Recalcular": busca de novo os custos da Base Peças pra essa mesma
   // lista — pega na hora qualquer código cadastrado manualmente (nesse
@@ -503,6 +506,16 @@ export default function PainelValidacaoOrcamentos({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setMostrarHistorico(true)}
+            title="Ver o histórico de envios já confirmados, com opção de baixar o Excel de novo"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)]"
+            style={{ color: "var(--ink)", border: "1px solid var(--line)" }}
+          >
+            <History size={13} style={{ color: "var(--accent2)" }} />
+            Histórico
+          </button>
+          <button
+            type="button"
             onClick={() => setPopupRevisao("revisao")}
             disabled={!loteSelecionado}
             title={!loteSelecionado ? "Selecione um lote específico pra ver a revisão." : undefined}
@@ -709,6 +722,8 @@ export default function PainelValidacaoOrcamentos({
           }}
         />
       )}
+
+      {mostrarHistorico && <PopupHistoricoEnvios onFechar={() => setMostrarHistorico(false)} />}
 
       {avisoPendenciaAnterior && (
         <PopupAviso

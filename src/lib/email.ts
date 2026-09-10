@@ -87,7 +87,10 @@ export type LinhaPlanilhaOrcamento = {
   maoDeObra: number;
   /** valorTotalPeca + maoDeObra — 0 no RECUSADO. */
   valorTotalReparo: number;
-  statusOrcamento: "AGUARDANDO" | "RECUSADO";
+  /** "CONTRA PROPOSTA" só é usado no envio de Contra Proposta (Ag. Contra
+   * Proposta > Enviar Contra Proposta) — mesmo arquivo/formato, valor
+   * novo na coluna STATUS ORÇAMENTO. */
+  statusOrcamento: "AGUARDANDO" | "RECUSADO" | "CONTRA PROPOSTA";
   /** só preenchido no RECUSADO. */
   motivoReprova: string | null;
   /** sempre igual a observacaoTecnicaReparadora. */
