@@ -178,6 +178,32 @@ export function formatarDias(valor: number): string {
   return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}d`;
 }
 
+/** dias corridos entre duas datas "aaaa-mm-dd" (sem hora) — positivo
+ * quando `fimIso` é depois de `inicioIso`. */
+function diferencaDiasIso(inicioIso: string, fimIso: string): number {
+  const MS_POR_DIA = 24 * 60 * 60 * 1000;
+  const inicio = new Date(`${inicioIso}T00:00:00`).getTime();
+  const fim = new Date(`${fimIso}T00:00:00`).getTime();
+  return (fim - inicio) / MS_POR_DIA;
+}
+
+/**
+ * R-TAT "ao vivo" — média de dias corridos entre a Data Reconhecimento
+ * de cada aparelho e hoje (Brasília), pros aparelhos que estão parados
+ * AGORA numa etapa. Usado no card das telas operacionais de status
+ * numerado (1 a 8 — ver StatusOperacionalPage) — diferente do R-TAT do
+ * menu Métricas (PainelRTat), que soma também os aparelhos já fechados
+ * dentro de um período escolhido; aqui é só "há quanto tempo, em
+ * média, os aparelhos PENDENTES nessa etapa estão abertos até agora".
+ */
+export function calcularRTatAoVivo(datasReconhecimento: (string | null)[]): { mediaDias: number; quantidade: number } {
+  const hoje = hojeBrasiliaIso();
+  const dias = datasReconhecimento.filter((d): d is string => !!d).map((d) => diferencaDiasIso(d, hoje));
+  const quantidade = dias.length;
+  const mediaDias = quantidade > 0 ? dias.reduce((soma, d) => soma + d, 0) / quantidade : 0;
+  return { mediaDias, quantidade };
+}
+
 // ---- Métricas > Orçamentos (resultado: aprovado/reprovado/contra
 // proposta) — ver migration 0029_metricas_orcamentos.sql ----
 

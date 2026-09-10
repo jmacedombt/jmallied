@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Gauge } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import {
@@ -10,6 +10,7 @@ import {
   STATUS_ETAPAS_ANTERIORES_A_VALIDACAO,
   type CamposPecasOrcamento,
 } from "@/lib/orcamentos";
+import { calcularRTatAoVivo, formatarDias } from "@/lib/metricas";
 import { type AparelhoAgAbertura } from "@/components/TabelaAgAbertura";
 import PainelAgAbertura from "@/components/PainelAgAbertura";
 import PainelAgTriagem from "@/components/PainelAgTriagem";
@@ -21,8 +22,11 @@ import PainelContraProposta, { type AparelhoContraPropostaLista } from "@/compon
 import PainelAgPecas, { type AparelhoAgPecas } from "@/components/PainelAgPecas";
 import PainelAgReparo, { type AparelhoAgReparo } from "@/components/PainelAgReparo";
 import PainelEtapaSimples, { type AparelhoEtapaSimples } from "@/components/PainelEtapaSimples";
+import PainelOperacionalAllied from "@/components/PainelOperacionalAllied";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
 import { buscarPrecosBidPorPartNumber, type FaixaMarkup } from "@/lib/bid";
+import { isAllied } from "@/lib/usuarios";
+import { buscarAparelhosAllied } from "@/lib/allied";
 
 const COLUNAS_PECAS =
   "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, custo_peca_1, custo_peca_2, custo_peca_3, custo_peca_4, custo_peca_5, custo_peca_6, custo_peca_7, custo_peca_8, custo_peca_9, custo_peca_10";
@@ -85,6 +89,47 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
+  // Card R-TAT "ao vivo" — média de dias desde a Data Reconhecimento
+  // (abertura do chamado) até hoje, só dos aparelhos parados NESSA etapa
+  // agora (ver calcularRTatAoVivo em lib/metricas.ts) — diferente do
+  // R-TAT do menu Métricas, que olha um período histórico
+  // fechado/escolhido. Só usado nas etapas com número (1 a 8).
+  function badgeRTat(aparelhos: { data_reconhecimento: string | null }[]) {
+    const { mediaDias, quantidade } = calcularRTatAoVivo(aparelhos.map((a) => a.data_reconhecimento));
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium mb-3 ml-2"
+        style={{ borderColor: "var(--line)", background: "var(--surface2)", color: "var(--ink)" }}
+        title="R-TAT: média de dias desde a Data Reconhecimento (abertura do chamado) até hoje, dos aparelhos parados nessa etapa"
+      >
+        <Gauge size={12} style={{ color: "var(--accent2)" }} />
+        R-TAT <strong>{formatarDias(mediaDias)}</strong>
+        {quantidade > 0 && <span style={{ color: "var(--muted)" }}>· {quantidade}</span>}
+      </span>
+    );
+  }
+
+  // ALLIED (login externo, só consulta) enxerga qualquer etapa, mas
+  // sempre com essa mesma tela genérica de só-leitura — nunca os
+  // painéis internos com botão de ação/seleção em massa. Os dados vêm
+  // da RPC orcamentos_allied_listar (ver lib/allied.ts), que roda como
+  // security definer e nunca seleciona nenhuma coluna de custo/BID —
+  // proteção de banco, não só de tela (ver migration 0035_cargo_allied.sql).
+  if (isAllied(perfil)) {
+    const aparelhos = await buscarAparelhosAllied(supabase, status.valor);
+    const etapaNumerada = /^\d/.test(status.valor);
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <div className="flex items-center flex-wrap">
+          {voltar}
+          {badgeContador(aparelhos.length)}
+          {etapaNumerada && badgeRTat(aparelhos)}
+        </div>
+        <PainelOperacionalAllied aparelhos={aparelhos} mensagemVazia="Nenhum aparelho nessa etapa ainda." />
+      </AppShell>
+    );
+  }
+
   if (status.slug === "ag-abertura" || status.slug === "1-ag-triagem") {
     const { data: aparelhos } = await supabase
       .from("orcamentos")
@@ -116,6 +161,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         <div className="flex items-center flex-wrap">
           {voltar}
           {badgeContador(aparelhos?.length ?? 0)}
+          {badgeRTat(aparelhos ?? [])}
         </div>
         <PainelAgTriagem
           aparelhos={(aparelhos ?? []) as AparelhoAgAbertura[]}
@@ -129,7 +175,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, ${COLUNAS_PECAS}`
+        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, data_reconhecimento, ${COLUNAS_PECAS}`
       )
       .eq("status_operacional", status.valor)
       .order("updated_at", { ascending: false });
@@ -169,6 +215,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
             <>
               {voltar}
               {badgeContador(aparelhos?.length ?? 0)}
+              {badgeRTat(aparelhos ?? [])}
             </>
           }
         />
@@ -321,7 +368,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, resultado_aprovacao_allied"
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, resultado_aprovacao_allied, data_reconhecimento"
       )
       .eq("status_operacional", status.valor)
       .order("resultado_aprovacao_definido_em", { ascending: false, nullsFirst: false })
@@ -336,6 +383,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
             <>
               {voltar}
               {badgeContador(aparelhos?.length ?? 0)}
+              {badgeRTat(aparelhos ?? [])}
             </>
           }
           mensagemVazia="Nenhum aparelho em 3 - Ag. Resposta de Orçamento no momento."
@@ -375,7 +423,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, motivo_reprova, reprovado_em, usuarios:reprovado_por (nome, sobrenome), ${COLUNAS_PECAS}`
+        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, motivo_reprova, reprovado_em, data_reconhecimento, usuarios:reprovado_por (nome, sobrenome), ${COLUNAS_PECAS}`
       )
       .eq("status_operacional", status.valor)
       .order("reprovado_em", { ascending: false, nullsFirst: false });
@@ -413,6 +461,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
             <>
               {voltar}
               {badgeContador(aparelhos?.length ?? 0)}
+              {badgeRTat(aparelhos ?? [])}
             </>
           }
         />
@@ -424,7 +473,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pedido_peca_feito, validacao_snapshot"
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pedido_peca_feito, validacao_snapshot, data_reconhecimento"
       )
       .eq("status_operacional", status.valor)
       .order("pedido_peca_feito", { ascending: true })
@@ -439,6 +488,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
             <>
               {voltar}
               {badgeContador(aparelhos?.length ?? 0)}
+              {badgeRTat(aparelhos ?? [])}
             </>
           }
           mensagemVazia="Nenhum aparelho em 5 - Ag. Peças no momento."
@@ -450,7 +500,9 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
   if (status.slug === "6-ag-reparo") {
     const { data: aparelhos } = await supabase
       .from("orcamentos")
-      .select("id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa")
+      .select(
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, data_reconhecimento"
+      )
       .eq("status_operacional", status.valor)
       .order("updated_at", { ascending: false });
 
@@ -463,6 +515,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
             <>
               {voltar}
               {badgeContador(aparelhos?.length ?? 0)}
+              {badgeRTat(aparelhos ?? [])}
             </>
           }
           mensagemVazia="Nenhum aparelho em 6 - Ag. Reparo no momento."
@@ -471,21 +524,29 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
-  // etapas ainda sem tela própria (OQC e 7, e Produto Entregue — "3",
+  // etapas ainda sem tela própria (4, OQC, 7, e Produto Entregue — "3",
   // "Ag. Contra Proposta", "5" e "6" já ganharam tela própria acima) —
   // só a lista, com o ícone de reprovar em todas menos Produto Entregue
-  // (não faz sentido reprovar um orçamento já entregue).
+  // (não faz sentido reprovar um orçamento já entregue), clique na
+  // linha abrindo o pop-up de atendimento/peças, e o card R-TAT só nas
+  // que têm número ("4 - ..." e "7 - ..." — OQC e Produto Entregue não
+  // têm número no valor).
   const { data: aparelhos } = await supabase
     .from("orcamentos")
-    .select("id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa")
+    .select(
+      "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, data_reconhecimento"
+    )
     .eq("status_operacional", status.valor)
     .order("updated_at", { ascending: false });
+
+  const etapaNumerada = /^\d/.test(status.valor);
 
   return (
     <AppShell titulo={status.label} perfil={perfil}>
       <div className="flex items-center flex-wrap">
         {voltar}
         {badgeContador(aparelhos?.length ?? 0)}
+        {etapaNumerada && badgeRTat(aparelhos ?? [])}
       </div>
       <PainelEtapaSimples
         aparelhos={(aparelhos ?? []) as AparelhoEtapaSimples[]}

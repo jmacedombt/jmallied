@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Ban, CheckCheck, Loader2, Search, Wrench } from "lucide-react";
 import PopupConfirmar from "@/components/PopupConfirmar";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
-import { podeConfirmarReparoEmLote } from "@/lib/orcamentos";
+import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
+import { podeConfirmarReparoEmLote, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
 
 function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -19,6 +20,7 @@ export type AparelhoAgReparo = {
   modelo_comercial: string | null;
   sku: string | null;
   descricao_completa: string | null;
+  validacao_snapshot: DetalheValidacaoOrcamento | null;
 };
 
 type Perfil = { cargo: string; is_master: boolean } | null;
@@ -51,6 +53,7 @@ export default function PainelAgReparo({
   const [processandoLote, setProcessandoLote] = useState(false);
   const [erroLote, setErroLote] = useState<string | null>(null);
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
+  const [detalhe, setDetalhe] = useState<AparelhoAgReparo | null>(null);
   const [destaqueSaida, setDestaqueSaida] = useState<Record<string, "verde" | "vermelho">>({});
   const [saindoAgora, setSaindoAgora] = useState<Set<string>>(new Set());
 
@@ -293,7 +296,8 @@ export default function PainelAgReparo({
               return (
                 <tr
                   key={a.id}
-                  className="border-t transition-all duration-300 ease-in"
+                  onClick={() => !destaque && setDetalhe(a)}
+                  className="border-t cursor-pointer transition-all duration-300 ease-in hover:bg-[var(--surface2)]"
                   style={{
                     borderColor: destaque === "verde" ? "#22c55e" : destaque === "vermelho" ? "#ef4444" : "var(--line)",
                     background:
@@ -304,7 +308,9 @@ export default function PainelAgReparo({
                           : "var(--surface)",
                     opacity: saindo ? 0 : 1,
                     transform: saindo ? "translateX(12px)" : "translateX(0)",
+                    pointerEvents: destaque ? "none" : undefined,
                   }}
+                  title="Clique pra ver as peças e valores desse atendimento"
                 >
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <input
@@ -332,7 +338,7 @@ export default function PainelAgReparo({
                   <td className="px-4 py-2.5" style={{ color: "var(--muted)" }} title={a.descricao_completa ?? ""}>
                     {(a.descricao_completa ?? "").split(" ")[0]}
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="inline-flex items-center gap-1.5">
                       <button
                         type="button"
@@ -428,6 +434,8 @@ export default function PainelAgReparo({
           }}
         />
       )}
+
+      {detalhe && <PopupAtendimentoPecas aparelho={detalhe} onFechar={() => setDetalhe(null)} />}
     </div>
   );
 }

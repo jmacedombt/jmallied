@@ -40,6 +40,7 @@ export const CARGOS = [
   "Técnico",
   "Estoque",
   "Operacional",
+  "ALLIED",
 ] as const;
 
 export type Cargo = (typeof CARGOS)[number];

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Ban } from "lucide-react";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
+import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
+import { type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
 
 export type AparelhoEtapaSimples = {
   id: string;
@@ -13,13 +15,16 @@ export type AparelhoEtapaSimples = {
   modelo_comercial: string | null;
   sku: string | null;
   descricao_completa: string | null;
+  validacao_snapshot: DetalheValidacaoOrcamento | null;
 };
 
 // Tabela de consulta genérica usada pelas etapas do Operacional que
-// ainda não têm uma tela própria (3 - Ag. Resposta de Orçamento a
-// 7 - Reparo Finalizado, e Produto Entregue) — só a lista dos
-// aparelhos, com o ícone de reprovar quando `permiteReprovar` (não faz
-// sentido reprovar um orçamento que já foi entregue).
+// ainda não têm uma tela própria (4 - Ag. Resposta de Reorçamento,
+// OQC - Controle de Qualidade, 7 - Reparo Finalizado, e Produto
+// Entregue) — a lista dos aparelhos, com o ícone de reprovar quando
+// `permiteReprovar` (não faz sentido reprovar um orçamento que já foi
+// entregue), e clique na linha abrindo o mesmo pop-up de
+// atendimento/peças de 5 - Ag. Peças e 6 - Ag. Reparo.
 export default function PainelEtapaSimples({
   aparelhos,
   permiteReprovar,
@@ -31,6 +36,7 @@ export default function PainelEtapaSimples({
 }) {
   const router = useRouter();
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
+  const [detalhe, setDetalhe] = useState<AparelhoEtapaSimples | null>(null);
 
   return (
     <>
@@ -49,7 +55,13 @@ export default function PainelEtapaSimples({
           </thead>
           <tbody>
             {aparelhos.map((a) => (
-              <tr key={a.id} className="border-t" style={{ borderColor: "var(--line)", background: "var(--surface)" }}>
+              <tr
+                key={a.id}
+                onClick={() => setDetalhe(a)}
+                className="border-t cursor-pointer transition hover:bg-[var(--surface2)]"
+                style={{ borderColor: "var(--line)", background: "var(--surface)" }}
+                title="Clique pra ver as peças e valores desse atendimento"
+              >
                 <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
                   {a.os_reparadora || "—"}
                 </td>
@@ -69,7 +81,7 @@ export default function PainelEtapaSimples({
                   {(a.descricao_completa ?? "").split(" ")[0]}
                 </td>
                 {permiteReprovar && (
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
@@ -108,6 +120,8 @@ export default function PainelEtapaSimples({
           }}
         />
       )}
+
+      {detalhe && <PopupAtendimentoPecas aparelho={detalhe} onFechar={() => setDetalhe(null)} />}
     </>
   );
 }

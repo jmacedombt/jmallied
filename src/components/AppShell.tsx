@@ -9,6 +9,7 @@ import {
   Bell,
   CalendarCheck2,
   ChevronDown,
+  ClipboardList,
   Database,
   FileSpreadsheet,
   FileText,
@@ -37,6 +38,7 @@ import Avatar from "@/components/Avatar";
 import BotaoTema from "@/components/BotaoTema";
 import ColorPickerSistema from "@/components/ColorPickerSistema";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
+import { isAllied } from "@/lib/usuarios";
 
 type Perfil = {
   nome: string;
@@ -82,6 +84,7 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
     icone: LayoutGrid,
     itens: [
       { href: "/operacional", label: "Painel", icone: LayoutGrid },
+      { href: "/operacional/backlog", label: "Backlog", icone: ClipboardList },
       { href: "/operacional/reconhecimento-lote", label: "Reconhecimento Lote", icone: CalendarCheck2 },
     ],
   },
@@ -127,6 +130,23 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
   },
 ];
 
+// Menu do cargo ALLIED (login externo, só consulta): só Painel e
+// Backlog — nada de Reconhecimento Lote (ação), nem qualquer outro
+// grupo (Bases/BID, Métricas, Configurações, Usuários, Manutenção,
+// Impressão ficam totalmente fora, mesmo digitando a URL: o middleware
+// barra o acesso a essas páginas independente do menu mostrar ou não).
+const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
+  {
+    id: "operacional",
+    label: "Operacional",
+    icone: LayoutGrid,
+    itens: [
+      { href: "/operacional", label: "Painel", icone: LayoutGrid },
+      { href: "/operacional/backlog", label: "Backlog", icone: ClipboardList },
+    ],
+  },
+];
+
 // Item ativo do menu lateral: usa a cor do sistema (definida em "Cor do
 // sistema") pra fundo, texto e a barrinha lateral, então ao arrastar a
 // roda de cores o menu inteiro reage junto — não só os botões.
@@ -166,10 +186,15 @@ export default function AppShell({
   const router = useRouter();
   const supabase = createClient();
 
+  const allied = isAllied(perfil);
+
   // "Métricas" só aparece pra quem tem permissão — inserido logo depois
-  // de "Impressão", antes de "Configurações".
-  const podeVerMetricas = podeConfirmarAnaliseEmLote(perfil);
-  const grupos = GRUPOS_MENU_BASE.flatMap((g) => (g.id === "impressao" && podeVerMetricas ? [g, GRUPO_METRICAS] : [g]));
+  // de "Impressão", antes de "Configurações". ALLIED nunca vê Métricas
+  // nem nenhum outro grupo além de Operacional (Painel + Backlog).
+  const podeVerMetricas = !allied && podeConfirmarAnaliseEmLote(perfil);
+  const grupos = allied
+    ? GRUPOS_MENU_ALLIED
+    : GRUPOS_MENU_BASE.flatMap((g) => (g.id === "impressao" && podeVerMetricas ? [g, GRUPO_METRICAS] : [g]));
 
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>(
@@ -242,15 +267,20 @@ export default function AppShell({
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 space-y-1">
-          <Link
-            href="/dashboard"
-            onClick={() => setSidebarAberta(false)}
-            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
-            style={pathname === "/dashboard" ? ESTILO_ATIVO : { color: "var(--muted)" }}
-          >
-            <Home size={17} />
-            Início
-          </Link>
+          {/* ALLIED não tem Dashboard próprio (ele mostra atalho pra
+              Bases/BID) — o Painel Operacional já é a home dele, e já
+              aparece logo abaixo dentro do grupo Operacional. */}
+          {!allied && (
+            <Link
+              href="/dashboard"
+              onClick={() => setSidebarAberta(false)}
+              className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
+              style={pathname === "/dashboard" ? ESTILO_ATIVO : { color: "var(--muted)" }}
+            >
+              <Home size={17} />
+              Início
+            </Link>
+          )}
 
           {grupos.map((grupo) => {
             const IconeGrupo = grupo.icone;
@@ -326,7 +356,7 @@ export default function AppShell({
             <Menu size={20} />
           </button>
 
-          <SininhoNotificacoes />
+          {!allied && <SininhoNotificacoes />}
 
           <h1 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
             {titulo}
