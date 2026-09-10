@@ -35,7 +35,11 @@ export default function TrocarSenhaForm() {
 
     if (authError) {
       setCarregando(false);
-      setErro("Não foi possível atualizar a senha. Tente novamente.");
+      // mostra o motivo real que o Supabase devolveu (ex: senha fraca
+      // demais pras regras configuradas) em vez de uma mensagem genérica
+      // que escondia o problema e deixava a pessoa travada sem saber
+      // o que ajustar.
+      setErro(authError.message || "Não foi possível atualizar a senha. Tente novamente.");
       return;
     }
 
