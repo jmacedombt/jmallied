@@ -67,14 +67,18 @@ export type LinhaOrcamentoImportada = {
   status_orcamento: string | null;
   motivo_reprova: string | null;
   obs: string | null;
+
+  /** Número/código da Pré-Ordem (sistema N3), vinculado por sequência a
+   * partir do arquivo de Pré-Ordem enviado junto — ver src/lib/preOrdem.ts. */
+  pre_ordem: string | null;
 };
 
-function textoOuNull(v: unknown): string | null {
+export function textoOuNull(v: unknown): string | null {
   const t = String(v ?? "").trim();
   return t === "" ? null : t;
 }
 
-function numeroOuNull(v: unknown): number | null {
+export function numeroOuNull(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
@@ -86,8 +90,13 @@ export function deriveImeiReparadora(imeiAllied: string | null): string | null {
   return imeiAllied.toUpperCase().startsWith("REC") ? imeiAllied.slice(3) : imeiAllied;
 }
 
-/** Lê uma linha bruta da planilha (array de células) e monta o objeto tipado. */
-export function lerLinhaOrcamento(linha: unknown[]): LinhaOrcamentoImportada | null {
+/**
+ * Lê uma linha bruta da planilha (array de células) e monta o objeto
+ * tipado. `preOrdem` é o valor já vinculado por sequência a partir do
+ * arquivo de Pré-Ordem (ver src/lib/preOrdem.ts) — opcional só pra não
+ * quebrar quem ainda chama sem o segundo arquivo.
+ */
+export function lerLinhaOrcamento(linha: unknown[], preOrdem: string | null = null): LinhaOrcamentoImportada | null {
   const nfRemessa = textoOuNull(linha[COL_NF_REMESSA_ALLIED]);
   const tradeAllied = textoOuNull(linha[COL_TRADE_ALLIED]);
   if (!nfRemessa || !tradeAllied) return null;
@@ -124,6 +133,7 @@ export function lerLinhaOrcamento(linha: unknown[]): LinhaOrcamentoImportada | n
     status_orcamento: textoOuNull(linha[COL_STATUS_ORCAMENTO]),
     motivo_reprova: textoOuNull(linha[COL_MOTIVO_REPROVA]),
     obs: textoOuNull(linha[COL_OBS]),
+    pre_ordem: preOrdem,
   };
 }
 
