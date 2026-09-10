@@ -12,6 +12,11 @@ import { STATUS_OPERACIONAL } from "@/lib/orcamentos";
 // banco, ver migration 0035_cargo_allied.sql.
 const SLUGS_OPERACIONAL_ALLIED = STATUS_OPERACIONAL.map((s) => s.slug);
 
+// única chamada de API que ALLIED pode fazer: o botão "Exportar
+// backlog" da tela Backlog — sem nenhuma coluna de custo, então não
+// tem problema nenhum em liberar (ver route.ts dessa rota).
+const APIS_PERMITIDAS_ALLIED = ["/api/operacional/backlog/exportar-allied"];
+
 function rotaPermitidaParaAllied(path: string): boolean {
   if (path === "/operacional") return true;
   if (path === "/operacional/backlog" || path.startsWith("/operacional/backlog/")) return true;
@@ -90,7 +95,7 @@ export async function middleware(request: NextRequest) {
     }
 
     if (perfil?.cargo === "ALLIED") {
-      if (path.startsWith("/api/")) {
+      if (path.startsWith("/api/") && !APIS_PERMITIDAS_ALLIED.includes(path)) {
         return NextResponse.json({ error: "Não permitido para este cargo." }, { status: 403 });
       }
       if (!rotaPermitidaParaAllied(path)) {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Gauge, ClipboardList } from "lucide-react";
+import { ArrowLeft, Gauge, ClipboardList, Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import { STATUS_OPERACIONAL } from "@/lib/orcamentos";
@@ -59,6 +59,16 @@ export default async function BacklogPage() {
           <ClipboardList size={12} style={{ color: "var(--accent2)" }} />
           <strong>{totalQuantidade}</strong> aparelho(s) nas etapas numeradas
         </span>
+
+        <a
+          href="/api/operacional/backlog/exportar-allied"
+          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium mb-3 ml-auto transition hover:border-[var(--accent2)]"
+          style={{ borderColor: "var(--line)", color: "var(--ink)" }}
+          title="Baixar o backlog em Excel, no layout usado pela Allied"
+        >
+          <Download size={14} style={{ color: "var(--accent2)" }} />
+          Exportar backlog
+        </a>
       </div>
 
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
