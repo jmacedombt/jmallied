@@ -20,7 +20,8 @@ import PainelOrcamentoReprovado, { type AparelhoReprovado } from "@/components/P
 import PainelRespostaOrcamento, { type AparelhoRespostaOrcamento } from "@/components/PainelRespostaOrcamento";
 import PainelContraProposta, { type AparelhoContraPropostaLista } from "@/components/PainelContraProposta";
 import PainelAgPecas, { type AparelhoAgPecas } from "@/components/PainelAgPecas";
-import PainelAgReparo, { type AparelhoAgReparo } from "@/components/PainelAgReparo";
+import PainelAgReparo, { type AparelhoAgReparo, type FalhaOqcResumo } from "@/components/PainelAgReparo";
+import PainelOqc, { type AparelhoOqcLista } from "@/components/PainelOqc";
 import PainelEtapaSimples, { type AparelhoEtapaSimples } from "@/components/PainelEtapaSimples";
 import PainelOperacionalAllied from "@/components/PainelOperacionalAllied";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
@@ -506,11 +507,36 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       .eq("status_operacional", status.valor)
       .order("updated_at", { ascending: false });
 
+    const listaAparelhos = (aparelhos ?? []) as AparelhoAgReparo[];
+
+    // histórico de reprovações no OQC de cada aparelho dessa lista — base
+    // do destaque preto/amarelo e da tag "OQC FAIL xN" (ver
+    // PainelAgReparo.tsx e migration 0037_oqc_avaliacoes.sql).
+    const falhasOqc: Record<string, FalhaOqcResumo> = {};
+    if (listaAparelhos.length > 0) {
+      const { data: falhasBrutas } = await supabase
+        .from("oqc_avaliacoes")
+        .select("orcamento_id, motivo, avaliado_em")
+        .in(
+          "orcamento_id",
+          listaAparelhos.map((a) => a.id)
+        )
+        .eq("resultado", "fail")
+        .order("avaliado_em", { ascending: false });
+
+      for (const f of falhasBrutas ?? []) {
+        if (!falhasOqc[f.orcamento_id]) falhasOqc[f.orcamento_id] = { quantidade: 0, historico: [] };
+        falhasOqc[f.orcamento_id].quantidade += 1;
+        falhasOqc[f.orcamento_id].historico.push({ motivo: f.motivo, avaliado_em: f.avaliado_em });
+      }
+    }
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelAgReparo
-          aparelhos={(aparelhos ?? []) as AparelhoAgReparo[]}
+          aparelhos={listaAparelhos}
           perfil={perfil}
+          falhasOqc={falhasOqc}
           topo={
             <>
               {voltar}
@@ -524,13 +550,39 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
-  // etapas ainda sem tela própria (4, OQC, 7, e Produto Entregue — "3",
-  // "Ag. Contra Proposta", "5" e "6" já ganharam tela própria acima) —
-  // só a lista, com o ícone de reprovar em todas menos Produto Entregue
-  // (não faz sentido reprovar um orçamento já entregue), clique na
-  // linha abrindo o pop-up de atendimento/peças, e o card R-TAT só nas
-  // que têm número ("4 - ..." e "7 - ..." — OQC e Produto Entregue não
-  // têm número no valor).
+  if (status.slug === "oqc-controle-qualidade") {
+    const { data: aparelhos } = await supabase
+      .from("orcamentos")
+      .select(
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, data_reconhecimento"
+      )
+      .eq("status_operacional", status.valor)
+      .order("updated_at", { ascending: false });
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <PainelOqc
+          aparelhos={(aparelhos ?? []) as AparelhoOqcLista[]}
+          perfil={perfil}
+          topo={
+            <>
+              {voltar}
+              {badgeContador(aparelhos?.length ?? 0)}
+            </>
+          }
+          mensagemVazia="Nenhum aparelho em OQC - Controle de Qualidade no momento."
+        />
+      </AppShell>
+    );
+  }
+
+  // etapas ainda sem tela própria (4, 7, e Produto Entregue — "3",
+  // "Ag. Contra Proposta", "5", "6" e "OQC - Controle de Qualidade" já
+  // ganharam tela própria acima) — só a lista, com o ícone de reprovar em
+  // todas menos Produto Entregue (não faz sentido reprovar um orçamento
+  // já entregue), clique na linha abrindo o pop-up de atendimento/peças,
+  // e o card R-TAT só nas que têm número ("4 - ..." e "7 - ..." —
+  // Produto Entregue não tem número no valor).
   const { data: aparelhos } = await supabase
     .from("orcamentos")
     .select(

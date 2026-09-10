@@ -184,6 +184,7 @@ export const STATUS_AG_RESPOSTA_REORCAMENTO = STATUS_OPERACIONAL.find((s) => s.s
 export const STATUS_AG_PECAS = STATUS_OPERACIONAL.find((s) => s.slug === "5-ag-pecas")!.valor;
 export const STATUS_AG_REPARO = STATUS_OPERACIONAL.find((s) => s.slug === "6-ag-reparo")!.valor;
 export const STATUS_OQC = STATUS_OPERACIONAL.find((s) => s.slug === "oqc-controle-qualidade")!.valor;
+export const STATUS_REPARO_FINALIZADO = STATUS_OPERACIONAL.find((s) => s.slug === "7-reparo-finalizado")!.valor;
 export const STATUS_ORCAMENTO_REPROVADO = STATUS_OPERACIONAL.find((s) => s.slug === "8-orcamento-reprovado")!.valor;
 
 // etapas anteriores a "2 - Ag. Análise" (inclusive) — usado pra travar
@@ -480,6 +481,9 @@ export const podeConfirmarAprovacaoOrcamento = podeConfirmarAnaliseEmLote;
 export const podeConfirmarPedidoPecaEmLote = podeConfirmarAnaliseEmLote;
 export const podeConfirmarChegadaPecaEmLote = podeConfirmarAnaliseEmLote;
 export const podeConfirmarReparoEmLote = podeConfirmarAnaliseEmLote;
+// idem pra "OQC - Controle de Qualidade" (marcar PASS/FAIL em lote) —
+// cadastro individual continua liberado pra qualquer um.
+export const podeConfirmarOqcEmLote = podeConfirmarAnaliseEmLote;
 
 // ---- Contra Proposta (Ag. Contra Proposta) — ajuste peça a peça ----
 // (ver migration 0033, PopupPecasContraProposta.tsx, PainelContraProposta.tsx)

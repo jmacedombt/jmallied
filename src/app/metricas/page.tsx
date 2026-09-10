@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, Gauge, PackageCheck } from "lucide-react";
+import { BarChart3, Gauge, PackageCheck, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
@@ -28,6 +28,14 @@ const TILES = [
     icone: PackageCheck,
     cor: "#059669",
     clara: "#34d399",
+  },
+  {
+    href: "/metricas/oqc",
+    titulo: "OQC",
+    descricao: "PASS x FAIL do controle de qualidade por lote, reincidência de falha por aparelho, e a evolução por semana/mês.",
+    icone: ShieldCheck,
+    cor: "#dc2626",
+    clara: "#f87171",
   },
 ];
 

@@ -2,18 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Ban, CheckCheck, Loader2, Search, Wrench } from "lucide-react";
+import { Ban, CheckCircle2, Loader2, Search, XCircle } from "lucide-react";
 import PopupConfirmar from "@/components/PopupConfirmar";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
-import PopupHistoricoOqc, { type FalhaOqcHistorico } from "@/components/PopupHistoricoOqc";
-import { podeConfirmarReparoEmLote, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import PopupOqcFail, { type AparelhoOqc } from "@/components/PopupOqcFail";
+import PopupOqcFailLote from "@/components/PopupOqcFailLote";
+import { podeConfirmarOqcEmLote, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
 
 function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export type AparelhoAgReparo = {
+export type AparelhoOqcLista = {
   id: string;
   os_reparadora: string | null;
   trade_allied: string;
@@ -24,30 +25,23 @@ export type AparelhoAgReparo = {
   validacao_snapshot: DetalheValidacaoOrcamento | null;
 };
 
-/** Resumo das reprovações de OQC já sofridas por um aparelho que voltou
- * pra "6 - Ag. Reparo" — quantidade (a "1x/2x/3x" pedida) e o histórico
- * completo de motivos, mais recente primeiro (ver PopupHistoricoOqc). */
-export type FalhaOqcResumo = { quantidade: number; historico: FalhaOqcHistorico[] };
-
 type Perfil = { cargo: string; is_master: boolean } | null;
 
-// "6 - Ag. Reparo" — mesmo padrão de seleção (individual + em lote) de
-// 2 - Ag. Análise. "Reparado" avança o aparelho pra "OQC - Controle de
-// Qualidade". Aparelho que já voltou reprovado de um OQC FAIL (ver
-// falhasOqc) ganha destaque visual — fundo preto, fonte amarela em
-// negrito — e uma tag "OQC FAIL xN" clicável, que abre o histórico dos
-// motivos já registrados (ver migration 0037_oqc_avaliacoes.sql).
-export default function PainelAgReparo({
+// "OQC - Controle de Qualidade" — mesmo padrão de seleção (individual +
+// em lote) de 2 - Ag. Análise / 6 - Ag. Reparo. "OQC PASS" avança o
+// aparelho pra "7 - Reparo Finalizado"; "OQC FAIL" abre o pop-up de
+// motivo e volta pra "6 - Ag. Reparo" (ganhando lá o destaque preto/
+// amarelo e a tag "OQC FAIL xN" — ver PainelAgReparo.tsx). Ambas gravam
+// uma linha em oqc_avaliacoes, base da Métrica de OQC.
+export default function PainelOqc({
   aparelhos,
   topo,
   perfil = null,
-  falhasOqc = {},
-  mensagemVazia = "Nenhum aparelho em 6 - Ag. Reparo no momento.",
+  mensagemVazia = "Nenhum aparelho em OQC - Controle de Qualidade no momento.",
 }: {
-  aparelhos: AparelhoAgReparo[];
+  aparelhos: AparelhoOqcLista[];
   topo: React.ReactNode;
   perfil?: Perfil;
-  falhasOqc?: Record<string, FalhaOqcResumo>;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
@@ -55,23 +49,25 @@ export default function PainelAgReparo({
   const [itens, setItens] = useState(aparelhos);
   const [buscaOs, setBuscaOs] = useState("");
   const [buscaTrade, setBuscaTrade] = useState("");
-  const [confirmando, setConfirmando] = useState<AparelhoAgReparo | null>(null);
+  const [confirmandoPass, setConfirmandoPass] = useState<AparelhoOqcLista | null>(null);
   const [processandoId, setProcessandoId] = useState<string | null>(null);
   const [erroConfirmar, setErroConfirmar] = useState<string | null>(null);
+  const [falhando, setFalhando] = useState<AparelhoOqc | null>(null);
 
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
-  const [confirmandoLote, setConfirmandoLote] = useState(false);
+  const [confirmandoPassLote, setConfirmandoPassLote] = useState(false);
   const [processandoLote, setProcessandoLote] = useState(false);
   const [erroLote, setErroLote] = useState<string | null>(null);
+  const [falhandoLote, setFalhandoLote] = useState(false);
+
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
-  const [detalhe, setDetalhe] = useState<AparelhoAgReparo | null>(null);
-  const [verHistoricoOqc, setVerHistoricoOqc] = useState<AparelhoAgReparo | null>(null);
+  const [detalhe, setDetalhe] = useState<AparelhoOqcLista | null>(null);
   const [destaqueSaida, setDestaqueSaida] = useState<Record<string, "verde" | "vermelho">>({});
   const [saindoAgora, setSaindoAgora] = useState<Set<string>>(new Set());
 
   useEffect(() => setItens(aparelhos), [aparelhos]);
 
-  const podeLote = podeConfirmarReparoEmLote(perfil);
+  const podeLote = podeConfirmarOqcEmLote(perfil);
 
   const filtrados = useMemo(() => {
     const os = buscaOs.trim();
@@ -136,39 +132,14 @@ export default function PainelAgReparo({
     router.refresh();
   }
 
-  async function confirmarReparo() {
-    if (!confirmando) return;
-    const id = confirmando.id;
-    setProcessandoId(id);
-    setErroConfirmar(null);
-
-    try {
-      const res = await fetch(`/api/operacional/orcamentos/${id}/confirmar-reparo`, { method: "POST" });
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        setErroConfirmar(data?.error || "Não foi possível confirmar o reparo.");
-        setProcessandoId(null);
-        return;
-      }
-
-      setConfirmando(null);
-      setProcessandoId(null);
-      await animarSaidaDaLista([id], "verde");
-    } catch {
-      setErroConfirmar("Falha de conexão. Tente novamente.");
-      setProcessandoId(null);
-    }
-  }
-
   const ATRASO_ONDA_MS = 160;
   const DURACAO_VERDE_MS = 700;
   const DURACAO_SAIDA_MS = 300;
 
-  async function animarConfirmacaoEmOnda(ids: string[]) {
+  async function animarConfirmacaoEmOnda(ids: string[], cor: "verde" | "vermelho") {
     setSelecionados(new Set());
     for (const id of ids) {
-      setDestaqueSaida((atual) => ({ ...atual, [id]: "verde" }));
+      setDestaqueSaida((atual) => ({ ...atual, [id]: cor }));
       (async () => {
         await esperar(DURACAO_VERDE_MS);
         setSaindoAgora((atual) => new Set([...atual, id]));
@@ -191,7 +162,32 @@ export default function PainelAgReparo({
     router.refresh();
   }
 
-  async function confirmarReparoEmLote() {
+  async function confirmarPass() {
+    if (!confirmandoPass) return;
+    const id = confirmandoPass.id;
+    setProcessandoId(id);
+    setErroConfirmar(null);
+
+    try {
+      const res = await fetch(`/api/operacional/orcamentos/${id}/oqc-pass`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setErroConfirmar(data?.error || "Não foi possível confirmar o OQC PASS.");
+        setProcessandoId(null);
+        return;
+      }
+
+      setConfirmandoPass(null);
+      setProcessandoId(null);
+      await animarSaidaDaLista([id], "verde");
+    } catch {
+      setErroConfirmar("Falha de conexão. Tente novamente.");
+      setProcessandoId(null);
+    }
+  }
+
+  async function confirmarPassEmLote() {
     const ids = Array.from(selecionados);
     if (ids.length === 0) return;
 
@@ -199,7 +195,7 @@ export default function PainelAgReparo({
     setErroLote(null);
 
     try {
-      const res = await fetch("/api/operacional/orcamentos/confirmar-reparo-em-massa", {
+      const res = await fetch("/api/operacional/orcamentos/oqc-pass-em-massa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids }),
@@ -207,14 +203,44 @@ export default function PainelAgReparo({
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setErroLote(data?.error || "Não foi possível confirmar os reparos selecionados.");
+        setErroLote(data?.error || "Não foi possível confirmar os OQC PASS selecionados.");
         setProcessandoLote(false);
         return;
       }
 
-      setConfirmandoLote(false);
+      setConfirmandoPassLote(false);
       setProcessandoLote(false);
-      await animarConfirmacaoEmOnda(ids);
+      await animarConfirmacaoEmOnda(ids, "verde");
+    } catch {
+      setErroLote("Falha de conexão. Tente novamente.");
+      setProcessandoLote(false);
+    }
+  }
+
+  async function salvarFailLote(motivo: string) {
+    const ids = Array.from(selecionados);
+    if (ids.length === 0 || !motivo) return;
+
+    setProcessandoLote(true);
+    setErroLote(null);
+
+    try {
+      const res = await fetch("/api/operacional/orcamentos/oqc-fail-em-massa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, motivo }),
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setErroLote(data?.error || "Não foi possível registrar os OQC FAIL selecionados.");
+        setProcessandoLote(false);
+        return;
+      }
+
+      setFalhandoLote(false);
+      setProcessandoLote(false);
+      await animarConfirmacaoEmOnda(ids, "vermelho");
     } catch {
       setErroLote("Falha de conexão. Tente novamente.");
       setProcessandoLote(false);
@@ -262,21 +288,32 @@ export default function PainelAgReparo({
 
       {podeLote && selecionados.size > 0 && (
         <div
-          className="flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5"
+          className="flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 flex-wrap"
           style={{ borderColor: "var(--accent2)", background: "var(--accent-glow)" }}
         >
           <span className="text-sm" style={{ color: "var(--ink)" }}>
             <strong>{selecionados.size}</strong> selecionado(s)
           </span>
-          <button
-            type="button"
-            onClick={() => setConfirmandoLote(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition"
-            style={{ background: "var(--accent)" }}
-          >
-            <CheckCheck size={14} />
-            Confirmar Reparado ({selecionados.size})
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFalhandoLote(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition"
+              style={{ background: "#ef4444" }}
+            >
+              <XCircle size={14} />
+              OQC FAIL ({selecionados.size})
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmandoPassLote(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition"
+              style={{ background: "#16a34a" }}
+            >
+              <CheckCircle2 size={14} />
+              OQC PASS ({selecionados.size})
+            </button>
+          </div>
         </div>
       )}
 
@@ -305,13 +342,6 @@ export default function PainelAgReparo({
             {filtrados.map((a) => {
               const destaque = destaqueSaida[a.id];
               const saindo = saindoAgora.has(a.id);
-              // aparelho que voltou de um "OQC FAIL" — fundo preto e
-              // fonte amarela em negrito, pedido explicitamente pelo
-              // Rafael pra chamar atenção de quem tá olhando a lista de
-              // "6 - Ag. Reparo" que esse não é um reparo de primeira.
-              const falha = falhasOqc[a.id];
-              const reprovadoNoOqc = !destaque && !!falha && falha.quantidade > 0;
-              const corTexto = reprovadoNoOqc ? "#facc15" : undefined;
               return (
                 <tr
                   key={a.id}
@@ -324,9 +354,7 @@ export default function PainelAgReparo({
                         ? "rgba(34, 197, 94, 0.22)"
                         : destaque === "vermelho"
                           ? "rgba(239, 68, 68, 0.22)"
-                          : reprovadoNoOqc
-                            ? "#000"
-                            : "var(--surface)",
+                          : "var(--surface)",
                     opacity: saindo ? 0 : 1,
                     transform: saindo ? "translateX(12px)" : "translateX(0)",
                     pointerEvents: destaque ? "none" : undefined,
@@ -341,64 +369,53 @@ export default function PainelAgReparo({
                       aria-label={`Selecionar ${a.trade_allied}`}
                     />
                   </td>
-                  <td
-                    className={`px-4 py-2.5 ${reprovadoNoOqc ? "font-bold" : "font-medium"}`}
-                    style={{ color: corTexto ?? "var(--ink)" }}
-                  >
+                  <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
                     {a.os_reparadora || "—"}
                   </td>
-                  <td className={`px-4 py-2.5 ${reprovadoNoOqc ? "font-bold" : ""}`} style={{ color: corTexto ?? "var(--ink)" }}>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {a.trade_allied}
-                      {reprovadoNoOqc && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setVerHistoricoOqc(a);
-                          }}
-                          title="Ver histórico de reprovações no OQC"
-                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition hover:brightness-110"
-                          style={{ background: "#facc15", color: "#000" }}
-                        >
-                          <AlertTriangle size={10} />
-                          OQC FAIL x{falha!.quantidade}
-                        </button>
-                      )}
-                    </div>
+                  <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
+                    {a.trade_allied}
                   </td>
-                  <td className={`px-4 py-2.5 ${reprovadoNoOqc ? "font-semibold" : ""}`} style={{ color: corTexto ?? "var(--muted)" }}>
+                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
                     {a.os_care_allied}
                   </td>
-                  <td className={`px-4 py-2.5 ${reprovadoNoOqc ? "font-semibold" : ""}`} style={{ color: corTexto ?? "var(--muted)" }}>
+                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
                     {a.modelo_comercial}
                   </td>
-                  <td className={`px-4 py-2.5 ${reprovadoNoOqc ? "font-semibold" : ""}`} style={{ color: corTexto ?? "var(--muted)" }}>
+                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
                     {a.sku}
                   </td>
-                  <td
-                    className={`px-4 py-2.5 ${reprovadoNoOqc ? "font-semibold" : ""}`}
-                    style={{ color: corTexto ?? "var(--muted)" }}
-                    title={a.descricao_completa ?? ""}
-                  >
+                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }} title={a.descricao_completa ?? ""}>
                     {(a.descricao_completa ?? "").split(" ")[0]}
                   </td>
                   <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="inline-flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setConfirmando(a)}
+                        onClick={() =>
+                          setFalhando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })
+                        }
                         disabled={processandoId === a.id}
-                        className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[var(--accent2)] disabled:opacity-60"
-                        style={{ borderColor: "var(--line)", color: "var(--ink)" }}
-                        title="Confirmar que o reparo foi realizado"
+                        title="OQC FAIL — reprovar no controle de qualidade"
+                        className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[#ef4444] disabled:opacity-60"
+                        style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                      >
+                        <XCircle size={14} />
+                        FAIL
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmandoPass(a)}
+                        disabled={processandoId === a.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[#16a34a] disabled:opacity-60"
+                        style={{ borderColor: "var(--line)", color: "#16a34a" }}
+                        title="OQC PASS — aprovar no controle de qualidade"
                       >
                         {processandoId === a.id ? (
                           <Loader2 size={14} className="animate-spin" />
                         ) : (
-                          <Wrench size={14} style={{ color: "#9333ea" }} />
+                          <CheckCircle2 size={14} />
                         )}
-                        Reparado
+                        PASS
                       </button>
                       <button
                         type="button"
@@ -425,44 +442,70 @@ export default function PainelAgReparo({
         </table>
       </div>
 
-      {confirmando && (
+      {confirmandoPass && (
         <PopupConfirmar
-          titulo="Confirmar reparo"
+          titulo="Confirmar OQC PASS"
           mensagem={
             <>
-              Confirma que o reparo do aparelho <strong>{confirmando.trade_allied}</strong>
-              {confirmando.os_reparadora && <> (OS Reparadora {confirmando.os_reparadora})</>} foi realizado? Ele vai
-              avançar para <strong>OQC - Controle de Qualidade</strong>.
+              Confirma que o aparelho <strong>{confirmandoPass.trade_allied}</strong>
+              {confirmandoPass.os_reparadora && <> (OS Reparadora {confirmandoPass.os_reparadora})</>} passou no
+              controle de qualidade? Ele vai avançar para <strong>7 - Reparo Finalizado</strong>.
             </>
           }
           rotuloConfirmar="Confirmar"
-          carregando={processandoId === confirmando.id}
+          carregando={processandoId === confirmandoPass.id}
           erro={erroConfirmar}
-          onConfirmar={confirmarReparo}
+          onConfirmar={confirmarPass}
           onFechar={() => {
             if (processandoId) return;
-            setConfirmando(null);
+            setConfirmandoPass(null);
             setErroConfirmar(null);
           }}
         />
       )}
 
-      {confirmandoLote && (
+      {confirmandoPassLote && (
         <PopupConfirmar
-          titulo="Confirmar reparos em lote"
+          titulo="Confirmar OQC PASS em lote"
           mensagem={
             <>
-              Confirma que o reparo dos <strong>{selecionados.size}</strong> aparelho(s) selecionado(s) foi realizado?
-              Eles vão avançar para <strong>OQC - Controle de Qualidade</strong>.
+              Confirma que os <strong>{selecionados.size}</strong> aparelho(s) selecionado(s) passaram no controle de
+              qualidade? Eles vão avançar para <strong>7 - Reparo Finalizado</strong>.
             </>
           }
           rotuloConfirmar="Confirmar todos"
           carregando={processandoLote}
           erro={erroLote}
-          onConfirmar={confirmarReparoEmLote}
+          onConfirmar={confirmarPassEmLote}
           onFechar={() => {
             if (processandoLote) return;
-            setConfirmandoLote(false);
+            setConfirmandoPassLote(false);
+            setErroLote(null);
+          }}
+        />
+      )}
+
+      {falhando && (
+        <PopupOqcFail
+          aparelho={falhando}
+          onFechar={() => setFalhando(null)}
+          onReprovado={() => {
+            const id = falhando.id;
+            setFalhando(null);
+            animarSaidaDaLista([id], "vermelho");
+          }}
+        />
+      )}
+
+      {falhandoLote && (
+        <PopupOqcFailLote
+          quantidade={selecionados.size}
+          salvando={processandoLote}
+          erro={erroLote}
+          onSalvar={salvarFailLote}
+          onFechar={() => {
+            if (processandoLote) return;
+            setFalhandoLote(false);
             setErroLote(null);
           }}
         />
@@ -481,15 +524,6 @@ export default function PainelAgReparo({
       )}
 
       {detalhe && <PopupAtendimentoPecas aparelho={detalhe} onFechar={() => setDetalhe(null)} />}
-
-      {verHistoricoOqc && (
-        <PopupHistoricoOqc
-          tradeAllied={verHistoricoOqc.trade_allied}
-          osReparadora={verHistoricoOqc.os_reparadora}
-          historico={falhasOqc[verHistoricoOqc.id]?.historico ?? []}
-          onFechar={() => setVerHistoricoOqc(null)}
-        />
-      )}
     </div>
   );
 }

@@ -419,3 +419,112 @@ export function formatarReal(valor: number): string {
 export function formatarPercentual(valor: number): string {
   return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
+
+// ---- Métricas > OQC (PASS/FAIL) — ver migration 0037_oqc_avaliacoes.sql ----
+
+export type ResultadoOqc = "pass" | "fail";
+
+/** Uma linha por avaliação de OQC, exatamente como volta de
+ * oqc_avaliacoes_periodo — a tela agrupa por lote e por reincidência a
+ * partir dela, igual já é feito com metricas_resultado_orcamentos. */
+export type LinhaOqc = {
+  orcamentoId: string;
+  nfRemessaAllied: string | null;
+  tradeAllied: string | null;
+  resultado: ResultadoOqc;
+  avaliadoEm: string;
+};
+
+export type ResumoOqc = {
+  total: number;
+  pass: number;
+  fail: number;
+  /** % de FAIL sobre quem já passou pelo OQC (pass + fail) — nunca sobre
+   * o lote inteiro, que pode ter aparelho ainda não avaliado. */
+  percentualFail: number;
+};
+
+export function resumirOqc(linhas: LinhaOqc[]): ResumoOqc {
+  const total = linhas.length;
+  const pass = linhas.filter((l) => l.resultado === "pass").length;
+  const fail = total - pass;
+  const percentualFail = total > 0 ? (fail / total) * 100 : 0;
+  return { total, pass, fail, percentualFail };
+}
+
+export type LinhaOqcPorLote = {
+  nfRemessaAllied: string;
+  pass: number;
+  fail: number;
+  total: number;
+  percentualFail: number;
+};
+
+/** Agrupa por NF Remessa (lote) — quantidade de PASS/FAIL e o % de FAIL
+ * daquele lote específico (só sobre quem já foi avaliado nele), do lote
+ * com mais avaliações pro com menos. */
+export function agruparOqcPorLote(linhas: LinhaOqc[]): LinhaOqcPorLote[] {
+  const porLote = new Map<string, LinhaOqc[]>();
+  for (const linha of linhas) {
+    const chave = linha.nfRemessaAllied ?? "(sem NF Remessa)";
+    if (!porLote.has(chave)) porLote.set(chave, []);
+    porLote.get(chave)!.push(linha);
+  }
+
+  return Array.from(porLote.entries())
+    .map(([nfRemessaAllied, doLote]) => {
+      const resumo = resumirOqc(doLote);
+      return { nfRemessaAllied, pass: resumo.pass, fail: resumo.fail, total: resumo.total, percentualFail: resumo.percentualFail };
+    })
+    .sort((a, b) => b.total - a.total);
+}
+
+export type LinhaReincidenciaOqc = {
+  orcamentoId: string;
+  nfRemessaAllied: string | null;
+  tradeAllied: string | null;
+  quantidadeFail: number;
+  ultimoMotivo: string | null;
+  ultimaFalhaEm: string;
+};
+
+/** Ranking de orçamentos que falharam MAIS DE UMA VEZ no OQC dentro do
+ * período — a métrica de reincidência pedida (1x, 2x, 3x...), pra achar
+ * em que período a reincidência está concentrada. Orçamento com só 1
+ * falha no período não conta como reincidência (fica de fora). */
+export function agruparReincidenciaOqc(linhas: LinhaOqc[]): LinhaReincidenciaOqc[] {
+  const porOrcamento = new Map<string, LinhaOqc[]>();
+  for (const linha of linhas) {
+    if (linha.resultado !== "fail") continue;
+    if (!porOrcamento.has(linha.orcamentoId)) porOrcamento.set(linha.orcamentoId, []);
+    porOrcamento.get(linha.orcamentoId)!.push(linha);
+  }
+
+  return Array.from(porOrcamento.entries())
+    .map(([orcamentoId, falhas]) => {
+      const ordenadas = [...falhas].sort((a, b) => b.avaliadoEm.localeCompare(a.avaliadoEm));
+      const maisRecente = ordenadas[0];
+      return {
+        orcamentoId,
+        nfRemessaAllied: maisRecente.nfRemessaAllied,
+        tradeAllied: maisRecente.tradeAllied,
+        quantidadeFail: falhas.length,
+        ultimoMotivo: null as string | null,
+        ultimaFalhaEm: maisRecente.avaliadoEm,
+      };
+    })
+    .filter((l) => l.quantidadeFail > 1)
+    .sort((a, b) => b.quantidadeFail - a.quantidadeFail);
+}
+
+/** Uma linha por bucket de tempo x resultado, exatamente como volta de
+ * oqc_serie_por_periodo — usado no gráfico de evolução (PASS x FAIL). */
+export type PontoPeriodoOqc = { periodo: string; resultado: ResultadoOqc; quantidade: number };
+
+/** Extrai a série de um resultado específico (pass ou fail) já
+ * completada com zero nos períodos sem avaliação — mesmo padrão de
+ * serieDoStatus usado em PainelVolumetria. */
+export function serieOqcDoResultado(pontos: PontoPeriodoOqc[], resultado: ResultadoOqc, periodos: string[]): PontoPeriodo[] {
+  const filtrados = pontos.filter((p) => p.resultado === resultado);
+  return completarSerie(filtrados, periodos);
+}
