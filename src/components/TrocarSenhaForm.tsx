@@ -13,6 +13,7 @@ export default function TrocarSenhaForm() {
   const [confirmar, setConfirmar] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
+  const [sucesso, setSucesso] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,18 +46,46 @@ export default function TrocarSenhaForm() {
 
     const {
       data: { user },
+      error: getUserError,
     } = await supabase.auth.getUser();
 
-    if (user) {
-      await supabase
-        .from("usuarios")
-        .update({ must_change_password: false })
-        .eq("id", user.id);
+    if (getUserError || !user) {
+      // a senha JÁ foi trocada nesse ponto (updateUser acima deu certo) —
+      // só não conseguimos confirmar a sessão pra liberar o acesso. Sem
+      // isso, "Salvar e continuar" ficava sem nenhuma mensagem e parado
+      // na mesma tela, e se a pessoa tentasse de novo com a MESMA senha
+      // o Supabase recusava ("senha igual à anterior") sem explicar o
+      // que realmente tinha acontecido.
+      setCarregando(false);
+      setErro("Sua senha foi trocada, mas não consegui confirmar sua sessão. Recarregue a página e entre com a senha nova.");
+      return;
+    }
+
+    // libera o acesso (tira a obrigação de troca) — se isso falhar, o
+    // middleware ia jogar a pessoa de volta pra essa mesma tela sem
+    // explicação nenhuma, então checamos o erro em vez de ignorar.
+    const { error: erroFlag } = await supabase
+      .from("usuarios")
+      .update({ must_change_password: false })
+      .eq("id", user.id);
+
+    if (erroFlag) {
+      setCarregando(false);
+      setErro(
+        `Sua senha foi trocada, mas não consegui liberar seu acesso (${erroFlag.message}). Recarregue a página e entre com a senha nova.`
+      );
+      return;
     }
 
     setCarregando(false);
+    setSucesso(true);
     router.refresh();
-    router.push("/dashboard");
+    // navegação "dura" (recarrega a página inteira) em vez de
+    // router.push: garante que o middleware leia a sessão/flag já
+    // atualizada nessa nova requisição, sem depender de cache do
+    // roteador do Next — é exatamente essa falta de garantia que deixava
+    // a pessoa presa na tela de trocar senha sem nenhum aviso.
+    window.location.href = "/dashboard";
   }
 
   return (
@@ -93,12 +122,18 @@ export default function TrocarSenhaForm() {
         </p>
       )}
 
+      {sucesso && (
+        <p className="text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2">
+          Senha atualizada! Entrando...
+        </p>
+      )}
+
       <button
         type="submit"
-        disabled={carregando}
+        disabled={carregando || sucesso}
         className="w-full rounded-lg bg-allied-accent hover:bg-allied-accent2 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium text-sm py-3 transition shadow-glow"
       >
-        {carregando ? "Salvando..." : "Salvar e continuar"}
+        {sucesso ? "Entrando..." : carregando ? "Salvando..." : "Salvar e continuar"}
       </button>
     </form>
   );
