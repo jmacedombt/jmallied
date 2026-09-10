@@ -98,10 +98,18 @@ export async function middleware(request: NextRequest) {
     }
 
     if (perfil?.cargo === "ALLIED") {
-      if (path.startsWith("/api/") && !APIS_PERMITIDAS_ALLIED.includes(path)) {
+      const apiPermitida = APIS_PERMITIDAS_ALLIED.includes(path);
+
+      if (path.startsWith("/api/") && !apiPermitida) {
         return NextResponse.json({ error: "Não permitido para este cargo." }, { status: 403 });
       }
-      if (!rotaPermitidaParaAllied(path)) {
+
+      // a checagem de página abaixo não sabe nada sobre caminhos de API
+      // (só reconhece /operacional e afins) — sem esse "OU apiPermitida",
+      // até uma API já liberada acima (como o exportar do backlog) caía
+      // nela e era redirecionada de volta pro Painel, sem nunca devolver
+      // o arquivo.
+      if (!apiPermitida && !rotaPermitidaParaAllied(path)) {
         const url = request.nextUrl.clone();
         url.pathname = "/operacional";
         url.search = "";
