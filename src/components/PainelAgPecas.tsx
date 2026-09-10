@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Ban, CheckCheck, Clock, Gauge, Loader2, PackageCheck, Search, ShoppingCart, Undo2 } from "lucide-react";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
-import { podeConfirmarChegadaPecaEmLote, podeConfirmarPedidoPecaEmLote } from "@/lib/orcamentos";
+import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
+import { podeConfirmarChegadaPecaEmLote, podeConfirmarPedidoPecaEmLote, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
 
 function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -19,6 +20,7 @@ export type AparelhoAgPecas = {
   sku: string | null;
   descricao_completa: string | null;
   pedido_peca_feito: boolean;
+  validacao_snapshot: DetalheValidacaoOrcamento | null;
 };
 
 type Perfil = { cargo: string; is_master: boolean } | null;
@@ -52,6 +54,7 @@ export default function PainelAgPecas({
   const [processandoLoteChegada, setProcessandoLoteChegada] = useState(false);
   const [erroLote, setErroLote] = useState<string | null>(null);
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
+  const [detalhe, setDetalhe] = useState<AparelhoAgPecas | null>(null);
   const [destaqueSaida, setDestaqueSaida] = useState<Record<string, "verde" | "vermelho">>({});
   const [saindoAgora, setSaindoAgora] = useState<Set<string>>(new Set());
 
@@ -390,7 +393,8 @@ export default function PainelAgPecas({
               return (
                 <tr
                   key={a.id}
-                  className="border-t transition-all duration-300 ease-in"
+                  onClick={() => !destaque && setDetalhe(a)}
+                  className="border-t cursor-pointer transition-all duration-300 ease-in hover:bg-[var(--surface2)]"
                   style={{
                     borderColor:
                       destaque === "verde"
@@ -410,7 +414,9 @@ export default function PainelAgPecas({
                             : "var(--surface)",
                     opacity: saindo ? 0 : 1,
                     transform: saindo ? "translateX(12px)" : "translateX(0)",
+                    pointerEvents: destaque ? "none" : undefined,
                   }}
+                  title="Clique pra ver as peças e valores desse atendimento"
                 >
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <input
@@ -457,7 +463,7 @@ export default function PainelAgPecas({
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="inline-flex items-center gap-1.5">
                       {!a.pedido_peca_feito ? (
                         <button
@@ -537,6 +543,8 @@ export default function PainelAgPecas({
           }}
         />
       )}
+
+      {detalhe && <PopupAtendimentoPecas aparelho={detalhe} onFechar={() => setDetalhe(null)} />}
     </div>
   );
 }
