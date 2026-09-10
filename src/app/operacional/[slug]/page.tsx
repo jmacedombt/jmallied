@@ -18,6 +18,8 @@ import PainelValidacaoOrcamentos, { type AparelhoValidacao } from "@/components/
 import PainelOrcamentoReprovado, { type AparelhoReprovado } from "@/components/PainelOrcamentoReprovado";
 import PainelRespostaOrcamento, { type AparelhoRespostaOrcamento } from "@/components/PainelRespostaOrcamento";
 import PainelContraProposta, { type AparelhoContraPropostaLista } from "@/components/PainelContraProposta";
+import PainelAgPecas, { type AparelhoAgPecas } from "@/components/PainelAgPecas";
+import PainelAgReparo, { type AparelhoAgReparo } from "@/components/PainelAgReparo";
 import PainelEtapaSimples, { type AparelhoEtapaSimples } from "@/components/PainelEtapaSimples";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
 import { buscarPrecosBidPorPartNumber, type FaixaMarkup } from "@/lib/bid";
@@ -418,10 +420,61 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
-  // etapas ainda sem tela própria (4 a 7, e Produto Entregue — "3" e
-  // "Ag. Contra Proposta" já ganharam tela própria acima) — só a lista,
-  // com o ícone de reprovar em todas menos Produto Entregue (não faz
-  // sentido reprovar um orçamento já entregue).
+  if (status.slug === "5-ag-pecas") {
+    const { data: aparelhos } = await supabase
+      .from("orcamentos")
+      .select(
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pedido_peca_feito"
+      )
+      .eq("status_operacional", status.valor)
+      .order("pedido_peca_feito", { ascending: true })
+      .order("updated_at", { ascending: false });
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <PainelAgPecas
+          aparelhos={(aparelhos ?? []) as AparelhoAgPecas[]}
+          perfil={perfil}
+          topo={
+            <>
+              {voltar}
+              {badgeContador(aparelhos?.length ?? 0)}
+            </>
+          }
+          mensagemVazia="Nenhum aparelho em 5 - Ag. Peças no momento."
+        />
+      </AppShell>
+    );
+  }
+
+  if (status.slug === "6-ag-reparo") {
+    const { data: aparelhos } = await supabase
+      .from("orcamentos")
+      .select("id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa")
+      .eq("status_operacional", status.valor)
+      .order("updated_at", { ascending: false });
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <PainelAgReparo
+          aparelhos={(aparelhos ?? []) as AparelhoAgReparo[]}
+          perfil={perfil}
+          topo={
+            <>
+              {voltar}
+              {badgeContador(aparelhos?.length ?? 0)}
+            </>
+          }
+          mensagemVazia="Nenhum aparelho em 6 - Ag. Reparo no momento."
+        />
+      </AppShell>
+    );
+  }
+
+  // etapas ainda sem tela própria (OQC e 7, e Produto Entregue — "3",
+  // "Ag. Contra Proposta", "5" e "6" já ganharam tela própria acima) —
+  // só a lista, com o ícone de reprovar em todas menos Produto Entregue
+  // (não faz sentido reprovar um orçamento já entregue).
   const { data: aparelhos } = await supabase
     .from("orcamentos")
     .select("id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa")

@@ -65,6 +65,10 @@ export default function PainelRespostaOrcamento({
   const [confirmandoDeVerdade, setConfirmandoDeVerdade] = useState(false);
   const [erroConfirmar, setErroConfirmar] = useState<string | null>(null);
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
+  // depois que o Upload (aprovação de orçamentos) termina, o botão
+  // "Confirmar" fica piscando pra chamar atenção pro próximo passo — some
+  // assim que a pessoa clica nele (abre o pop-up de confirmação).
+  const [destacarConfirmar, setDestacarConfirmar] = useState(false);
 
   const podeConfirmar = podeConfirmarAprovacaoOrcamento(perfil);
 
@@ -165,7 +169,10 @@ export default function PainelRespostaOrcamento({
         </button>
         <button
           type="button"
-          onClick={() => setConfirmando(true)}
+          onClick={() => {
+            setDestacarConfirmar(false);
+            setConfirmando(true);
+          }}
           disabled={!podeConfirmar || quantidadeResolvidos === 0}
           title={
             !podeConfirmar
@@ -174,8 +181,11 @@ export default function PainelRespostaOrcamento({
                 ? "Nenhum aparelho tem resultado definido ainda (suba o arquivo de aprovação primeiro)."
                 : undefined
           }
-          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ background: "var(--accent)" }}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition disabled:opacity-50 disabled:cursor-not-allowed ${destacarConfirmar ? "animate-pulse" : ""}`}
+          style={{
+            background: "var(--accent)",
+            boxShadow: destacarConfirmar ? "0 0 0 3px var(--accent-glow), 0 0 20px var(--accent-glow)" : undefined,
+          }}
         >
           <PackageCheck size={13} />
           Confirmar
@@ -256,7 +266,13 @@ export default function PainelRespostaOrcamento({
       </div>
 
       {mostrarUpload && (
-        <PopupUploadAprovacao onFechar={() => setMostrarUpload(false)} onAtualizado={() => router.refresh()} />
+        <PopupUploadAprovacao
+          onFechar={() => setMostrarUpload(false)}
+          onAtualizado={() => {
+            router.refresh();
+            setDestacarConfirmar(true);
+          }}
+        />
       )}
 
       {reprovando && (

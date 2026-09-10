@@ -13,12 +13,18 @@ type Resultado = {
   reprovados: number;
 };
 
+// tempo que o resumo do resultado fica visível antes do pop-up se fechar
+// sozinho — dá pra pessoa ler os números antes de sumir.
+const FECHAR_SOZINHO_MS = 2200;
+
 // Pop-up do botão "Upload (aprovação de orçamentos)" em "3 - Ag.
 // Resposta de Orçamento" — sobe o arquivo que a Allied manda de volta
 // (Aprovado/Contra Proposta/Reprovado por OS Reparadora) e casa cada
 // linha com o aparelho correspondente que estiver esperando nessa etapa.
 // Só marca o resultado — o avanço de etapa de verdade só acontece no
-// botão "Confirmar" da tela.
+// botão "Confirmar" da tela. Depois de processar com sucesso, o pop-up
+// se fecha sozinho (não fica esperando a pessoa clicar em "Fechar") e
+// avisa o componente pai pra destacar o botão "Confirmar".
 export default function PopupUploadAprovacao({ onFechar, onAtualizado }: { onFechar: () => void; onAtualizado: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [nomeArquivo, setNomeArquivo] = useState<string | null>(null);
@@ -45,6 +51,9 @@ export default function PopupUploadAprovacao({ onFechar, onAtualizado }: { onFec
       } else {
         setResultado(data);
         onAtualizado();
+        // mostra o resumo por um instante e fecha sozinho — o próximo
+        // passo (Confirmar) já fica piscando na tela de trás.
+        window.setTimeout(() => onFechar(), FECHAR_SOZINHO_MS);
       }
     } catch {
       setErro("Falha de conexão. Tente novamente.");

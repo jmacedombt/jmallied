@@ -156,6 +156,10 @@ export const STATUS_OPERACIONAL = [
   { valor: "4 - Ag. Resposta de Reorçamento", slug: "4-ag-resposta-reorcamento", label: "4 - Ag. Resposta de Reorçamento" },
   { valor: "5 - Ag. Peças", slug: "5-ag-pecas", label: "5 - Ag. Peças" },
   { valor: "6 - Ag. Reparo", slug: "6-ag-reparo", label: "6 - Ag. Reparo" },
+  // sem número, inserida entre "6" e "7" — mesmo motivo de "Validação de
+  // Orçamentos" e "Ag. Contra Proposta" acima (ver migration 0034). Por
+  // enquanto só etapa de consulta.
+  { valor: "OQC - Controle de Qualidade", slug: "oqc-controle-qualidade", label: "OQC - Controle de Qualidade" },
   { valor: "7 - Reparo Finalizado", slug: "7-reparo-finalizado", label: "7 - Reparo Finalizado" },
   { valor: "8 - Orçamento Reprovado", slug: "8-orcamento-reprovado", label: "8 - Orçamento Reprovado" },
   { valor: "Produto Entregue", slug: "produto-entregue", label: "Produto Entregue" },
@@ -178,6 +182,8 @@ export const STATUS_AG_RESPOSTA_ORCAMENTO = STATUS_OPERACIONAL.find((s) => s.slu
 export const STATUS_AG_CONTRA_PROPOSTA = STATUS_OPERACIONAL.find((s) => s.slug === "ag-contra-proposta")!.valor;
 export const STATUS_AG_RESPOSTA_REORCAMENTO = STATUS_OPERACIONAL.find((s) => s.slug === "4-ag-resposta-reorcamento")!.valor;
 export const STATUS_AG_PECAS = STATUS_OPERACIONAL.find((s) => s.slug === "5-ag-pecas")!.valor;
+export const STATUS_AG_REPARO = STATUS_OPERACIONAL.find((s) => s.slug === "6-ag-reparo")!.valor;
+export const STATUS_OQC = STATUS_OPERACIONAL.find((s) => s.slug === "oqc-controle-qualidade")!.valor;
 export const STATUS_ORCAMENTO_REPROVADO = STATUS_OPERACIONAL.find((s) => s.slug === "8-orcamento-reprovado")!.valor;
 
 // etapas anteriores a "2 - Ag. Análise" (inclusive) — usado pra travar
@@ -466,6 +472,14 @@ export const CORES_RESULTADO_APROVACAO: Record<ResultadoAprovacaoAllied, { cor: 
 // + is_master), reaproveitada em vez de criar uma permissão nova só pra
 // isso (mesma função, só com um nome que faz sentido nessas telas).
 export const podeConfirmarAprovacaoOrcamento = podeConfirmarAnaliseEmLote;
+
+// mesma trava de cargo, reaproveitada pras ações em lote de
+// "5 - Ag. Peças" (marcar pedido feito / peça chegou) e "6 - Ag. Reparo"
+// (confirmar reparo) — cadastro individual continua liberado pra
+// qualquer um, só o modo em massa é restrito (mesmo padrão de Ag. Análise).
+export const podeConfirmarPedidoPecaEmLote = podeConfirmarAnaliseEmLote;
+export const podeConfirmarChegadaPecaEmLote = podeConfirmarAnaliseEmLote;
+export const podeConfirmarReparoEmLote = podeConfirmarAnaliseEmLote;
 
 // ---- Contra Proposta (Ag. Contra Proposta) — ajuste peça a peça ----
 // (ver migration 0033, PopupPecasContraProposta.tsx, PainelContraProposta.tsx)
