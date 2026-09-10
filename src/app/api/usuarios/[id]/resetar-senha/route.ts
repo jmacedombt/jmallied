@@ -57,5 +57,14 @@ export async function POST(_request: Request, { params }: { params: { id: string
 
   await admin.from("usuarios").update({ must_change_password: true }).eq("id", alvo.id);
 
+  // se tinha pedido de "esqueci minha senha" pendente pra essa pessoa,
+  // esse reset já resolve — marca atendida em vez de deixar preso na
+  // lista da tela Usuários.
+  await admin
+    .from("solicitacoes_reset_senha")
+    .update({ status: "atendida", atendido_por: user.id, atendido_em: new Date().toISOString() })
+    .eq("usuario_id", alvo.id)
+    .eq("status", "pendente");
+
   return NextResponse.json({ usuario: alvo.usuario, senhaTemporaria: SENHA_PADRAO });
 }

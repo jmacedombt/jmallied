@@ -16,6 +16,7 @@ import {
   HardDrive,
   Home,
   Info,
+  KeyRound,
   LayoutGrid,
   LineChart,
   LogOut,
@@ -400,6 +401,7 @@ export default function AppShell({
 function SininhoNotificacoes() {
   const [aberto, setAberto] = useState(false);
   const [pendenciasBid, setPendenciasBid] = useState<number | null>(null);
+  const [solicitacoesResetSenha, setSolicitacoesResetSenha] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -408,7 +410,10 @@ function SininhoNotificacoes() {
         const res = await fetch("/api/notificacoes/resumo");
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelado) setPendenciasBid(data.pendenciasBid ?? 0);
+        if (!cancelado) {
+          setPendenciasBid(data.pendenciasBid ?? 0);
+          setSolicitacoesResetSenha(data.solicitacoesResetSenha ?? 0);
+        }
       } catch {
         // silencioso — o sininho só deixa de mostrar o alerta, sem quebrar a tela
       }
@@ -416,6 +421,7 @@ function SininhoNotificacoes() {
     buscarResumo();
     // reconfere de tempos em tempos, pra não precisar recarregar a
     // página inteira pra ver o alerta sumir depois de cadastrar as peças
+    // (ou depois de resetar a senha de quem pediu)
     const intervalo = setInterval(buscarResumo, 5 * 60 * 1000);
     return () => {
       cancelado = true;
@@ -423,7 +429,9 @@ function SininhoNotificacoes() {
     };
   }, []);
 
-  const temPendencia = (pendenciasBid ?? 0) > 0;
+  const temPendenciaBid = (pendenciasBid ?? 0) > 0;
+  const temSolicitacaoReset = (solicitacoesResetSenha ?? 0) > 0;
+  const temPendencia = temPendenciaBid || temSolicitacaoReset;
 
   return (
     <div className="relative">
@@ -457,17 +465,35 @@ function SininhoNotificacoes() {
             </div>
 
             {temPendencia ? (
-              <Link
-                href="/bases/bid/pendencias"
-                onClick={() => setAberto(false)}
-                className="flex items-start gap-2.5 px-4 py-3 text-sm transition hover:bg-[var(--surface2)]"
-              >
-                <AlertTriangle size={16} className="mt-0.5 shrink-0" style={{ color: "#ef4444" }} />
-                <span style={{ color: "var(--ink)" }}>
-                  <strong style={{ color: "#ef4444" }}>{pendenciasBid}</strong> peça(s) pendente(s) de cadastro no
-                  BID.
-                </span>
-              </Link>
+              <>
+                {temSolicitacaoReset && (
+                  <Link
+                    href="/usuarios"
+                    onClick={() => setAberto(false)}
+                    className="flex items-start gap-2.5 px-4 py-3 text-sm transition hover:bg-[var(--surface2)] border-b"
+                    style={{ borderColor: "var(--line)" }}
+                  >
+                    <KeyRound size={16} className="mt-0.5 shrink-0" style={{ color: "#f59e0b" }} />
+                    <span style={{ color: "var(--ink)" }}>
+                      <strong style={{ color: "#f59e0b" }}>{solicitacoesResetSenha}</strong> pedido(s) de reset de
+                      senha aguardando.
+                    </span>
+                  </Link>
+                )}
+                {temPendenciaBid && (
+                  <Link
+                    href="/bases/bid/pendencias"
+                    onClick={() => setAberto(false)}
+                    className="flex items-start gap-2.5 px-4 py-3 text-sm transition hover:bg-[var(--surface2)]"
+                  >
+                    <AlertTriangle size={16} className="mt-0.5 shrink-0" style={{ color: "#ef4444" }} />
+                    <span style={{ color: "var(--ink)" }}>
+                      <strong style={{ color: "#ef4444" }}>{pendenciasBid}</strong> peça(s) pendente(s) de cadastro
+                      no BID.
+                    </span>
+                  </Link>
+                )}
+              </>
             ) : (
               <p className="text-sm p-4" style={{ color: "var(--muted)" }}>
                 Nenhuma notificação por aqui.

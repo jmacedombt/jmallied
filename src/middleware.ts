@@ -62,7 +62,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = path === "/login";
+  // "Esqueci minha senha" (pop-up da tela de login) chama essa API sem
+  // ninguém autenticado ainda — tem que ficar pública igual o /login,
+  // senão o middleware redireciona a chamada antes dela chegar na rota.
+  const isPublic = path === "/login" || path === "/api/auth/solicitar-reset-senha";
   const isTrocarSenha = path === "/trocar-senha";
 
   if (!user && !isPublic) {

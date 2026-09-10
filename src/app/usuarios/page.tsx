@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import TabelaUsuarios from "@/components/TabelaUsuarios";
+import PainelSolicitacoesResetSenha, { type SolicitacaoResetSenhaLinha } from "@/components/PainelSolicitacoesResetSenha";
 import { podeGerenciarUsuarios } from "@/lib/usuarios";
 
 export default async function UsuariosPage() {
@@ -26,8 +27,38 @@ export default async function UsuariosPage() {
     .select("id, nome, sobrenome, usuario, email, telefone, cargo, is_master, must_change_password, bloqueado_em")
     .order("nome", { ascending: true });
 
+  const podeGerenciar = podeGerenciarUsuarios(perfil);
+
+  // pedidos de "esqueci minha senha" pendentes — só busca pra quem pode
+  // resetar senha de qualquer um mesmo (ver PainelSolicitacoesResetSenha.tsx).
+  let solicitacoesPendentes: SolicitacaoResetSenhaLinha[] = [];
+  if (podeGerenciar) {
+    const { data: pendentes } = await supabase
+      .from("solicitacoes_reset_senha")
+      .select("id, criado_em, usuario_id")
+      .eq("status", "pendente")
+      .order("criado_em", { ascending: true });
+
+    if (pendentes && pendentes.length > 0) {
+      const idsAlvo = pendentes.map((p) => p.usuario_id);
+      const { data: donosDosPedidos } = await supabase
+        .from("usuarios")
+        .select("id, nome, sobrenome, usuario")
+        .in("id", idsAlvo);
+      const mapaDonos = new Map((donosDosPedidos ?? []).map((d) => [d.id, d]));
+
+      solicitacoesPendentes = pendentes.flatMap((p) => {
+        const dono = mapaDonos.get(p.usuario_id);
+        if (!dono) return [];
+        return [{ id: p.id, criado_em: p.criado_em, usuario_id: p.usuario_id, nome: dono.nome, sobrenome: dono.sobrenome, usuario: dono.usuario }];
+      });
+    }
+  }
+
   return (
     <AppShell titulo="Usuários" perfil={perfil}>
+      <PainelSolicitacoesResetSenha solicitacoes={solicitacoesPendentes} />
+
       <div className="flex items-center justify-between mb-6">
         <p className="text-sm" style={{ color: "var(--muted)" }}>
           {usuarios?.length ?? 0} usuário(s) cadastrado(s)
@@ -43,7 +74,7 @@ export default async function UsuariosPage() {
 
       <TabelaUsuarios
         usuarios={usuarios ?? []}
-        podeGerenciar={podeGerenciarUsuarios(perfil)}
+        podeGerenciar={podeGerenciar}
         souMaster={!!perfil?.is_master}
         meuId={user?.id ?? ""}
       />

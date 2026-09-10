@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { usuarioParaEmailTecnico } from "@/lib/auth";
 import PasswordInput from "./PasswordInput";
+import PopupSolicitarResetSenha from "./PopupSolicitarResetSenha";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function LoginForm() {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
+  const [solicitandoReset, setSolicitandoReset] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,6 +42,7 @@ export default function LoginForm() {
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="w-full space-y-5">
       <div className="space-y-1.5">
         <label htmlFor="usuario" className="text-xs font-medium uppercase tracking-wide text-allied-silver/70">
@@ -87,9 +90,17 @@ export default function LoginForm() {
       </button>
 
       <p className="text-center text-xs text-allied-silver/50">
-        Esqueci minha senha{" "}
-        <span className="text-allied-silver/30">(em breve — fale com o administrador)</span>
+        <button
+          type="button"
+          onClick={() => setSolicitandoReset(true)}
+          className="text-allied-accent2 hover:underline"
+        >
+          Esqueci minha senha
+        </button>
       </p>
     </form>
+
+    {solicitandoReset && <PopupSolicitarResetSenha onFechar={() => setSolicitandoReset(false)} />}
+    </>
   );
 }

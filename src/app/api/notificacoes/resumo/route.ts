@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { podeGerenciarUsuarios } from "@/lib/usuarios";
 
 /**
- * Resumo usado pelo sininho de notificações no topo da tela — por
- * enquanto só conta pendências de cadastro no BID (peças sem Custo Peça
- * Samsung). Qualquer usuário autenticado pode ver essa contagem, não é
- * informação sensível por cargo.
+ * Resumo usado pelo sininho de notificações no topo da tela:
+ * - pendenciasBid: pendências de cadastro no BID (peças sem Custo Peça
+ *   Samsung) — qualquer usuário autenticado vê, não é informação
+ *   sensível por cargo.
+ * - solicitacoesResetSenha: pedidos de "esqueci minha senha" pendentes
+ *   — só conta (e só aparece no sininho) pra quem pode gerenciar
+ *   usuários (Administrador/Gerente/Diretor); qualquer outro cargo
+ *   sempre recebe 0 aqui, mesmo que existam pedidos.
  */
 export async function GET() {
   const supabase = createClient();
@@ -23,5 +28,16 @@ export async function GET() {
     .select("id", { count: "exact", head: true })
     .is("custo_peca_samsung", null);
 
-  return NextResponse.json({ pendenciasBid: count ?? 0 });
+  const { data: perfil } = await admin.from("usuarios").select("cargo, is_master").eq("id", user.id).single();
+
+  let solicitacoesResetSenha = 0;
+  if (podeGerenciarUsuarios(perfil)) {
+    const { count: countReset } = await admin
+      .from("solicitacoes_reset_senha")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pendente");
+    solicitacoesResetSenha = countReset ?? 0;
+  }
+
+  return NextResponse.json({ pendenciasBid: count ?? 0, solicitacoesResetSenha });
 }
