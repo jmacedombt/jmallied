@@ -103,6 +103,7 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
     id: "bases",
     label: "Bases",
     icone: Database,
+    hrefGrupo: "/bases",
     itens: [
       { href: "/bases/gspn", label: "Base GSPN", icone: Wrench },
       { href: "/bases/pecas", label: "Base Peças", icone: Database },
@@ -117,12 +118,14 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
     id: "impressao",
     label: "Impressão",
     icone: Printer,
+    hrefGrupo: "/impressao",
     itens: [{ href: "/impressao/avulsa", label: "Impressão Avulsa", icone: Printer }],
   },
   {
     id: "configuracoes",
     label: "Configurações",
     icone: SlidersHorizontal,
+    hrefGrupo: "/configuracoes",
     itens: [
       { href: "/configuracoes/mao-de-obra", label: "Mão de obra", icone: SlidersHorizontal },
       { href: "/configuracoes/bid-markup", label: "Faixas de Markup (BID)", icone: TrendingUp },
@@ -134,6 +137,7 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
     id: "sistema",
     label: "Sistema",
     icone: Settings,
+    hrefGrupo: "/sistema",
     itens: [
       { href: "/usuarios", label: "Usuários", icone: Users },
       { href: "/manutencao", label: "Manutenção do Banco", icone: HardDrive },
