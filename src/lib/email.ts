@@ -73,13 +73,17 @@ export type LinhaPlanilhaOrcamento = {
    * orcamentos.peca_N; cai pro próprio Part Number quando a peça tem
    * custo cadastrado mas nenhuma Peça Solução registrada no BID. */
   peca: (string | null)[];
-  /** 5 posições — formato ainda não definido, fica sempre em branco. */
+  /** 5 posições — Peça Solução (BID) das peças adicionais (Reorçamento,
+   * posições "Extra 1".."Extra 5"); em branco pra quem não é envio de
+   * planilha Complementar. */
   pecaAdd: (string | null)[];
   /** 10 posições — Venda de Peça (custo com markup da faixa BID +
    * ICMS) de cada posição, calculada no momento do Confirmar Envio.
    * null nas posições sem peça, ou no aparelho RECUSADO. */
   custoPeca: (number | null)[];
-  /** 5 posições — formato ainda não definido, fica sempre em branco. */
+  /** 5 posições — Venda de Peça das peças adicionais (Reorçamento),
+   * mesma conta de custoPeca; em branco pra quem não é envio de
+   * planilha Complementar. */
   custoPecaAdd: (number | null)[];
   /** soma da Venda de Peça de todas as posições — 0 no RECUSADO. */
   valorTotalPeca: number;
@@ -89,8 +93,10 @@ export type LinhaPlanilhaOrcamento = {
   valorTotalReparo: number;
   /** "CONTRA PROPOSTA" só é usado no envio de Contra Proposta (Ag. Contra
    * Proposta > Enviar Contra Proposta) — mesmo arquivo/formato, valor
-   * novo na coluna STATUS ORÇAMENTO. */
-  statusOrcamento: "AGUARDANDO" | "RECUSADO" | "CONTRA PROPOSTA";
+   * novo na coluna STATUS ORÇAMENTO. "COMPLEMENTAR" é o mesmo esquema,
+   * usado no envio da planilha Complementar (4 - Ag. Resposta de
+   * Reorçamento > Enviar planilha Complementar). */
+  statusOrcamento: "AGUARDANDO" | "RECUSADO" | "CONTRA PROPOSTA" | "COMPLEMENTAR";
   /** só preenchido no RECUSADO. */
   motivoReprova: string | null;
   /** sempre igual a observacaoTecnicaReparadora. */

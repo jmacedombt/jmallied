@@ -19,6 +19,7 @@ import PainelValidacaoOrcamentos, { type AparelhoValidacao } from "@/components/
 import PainelOrcamentoReprovado, { type AparelhoReprovado } from "@/components/PainelOrcamentoReprovado";
 import PainelRespostaOrcamento, { type AparelhoRespostaOrcamento } from "@/components/PainelRespostaOrcamento";
 import PainelContraProposta, { type AparelhoContraPropostaLista } from "@/components/PainelContraProposta";
+import PainelRespostaReorcamento, { type AparelhoRespostaReorcamento } from "@/components/PainelRespostaReorcamento";
 import PainelAgPecas, { type AparelhoAgPecas } from "@/components/PainelAgPecas";
 import PainelAgReparo, { type AparelhoAgReparo, type FalhaOqcResumo } from "@/components/PainelAgReparo";
 import PainelOqc, { type AparelhoOqcLista } from "@/components/PainelOqc";
@@ -420,6 +421,57 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
+  if (status.slug === "4-ag-resposta-reorcamento") {
+    const { data: aparelhos } = await supabase
+      .from("orcamentos")
+      .select(
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, contra_proposta_pecas, reorcamento_detalhe, reorcamento_motivo, reorcamento_enviado_em, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5, custo_peca_add_1, custo_peca_add_2, custo_peca_add_3, custo_peca_add_4, custo_peca_add_5, data_reconhecimento"
+      )
+      .eq("status_operacional", status.valor)
+      .order("updated_at", { ascending: false });
+
+    const listaAparelhos = (aparelhos ?? []) as unknown as AparelhoRespostaReorcamento[];
+
+    // parâmetros de cálculo (markup, ICMS, mão de obra) pro pop-up de
+    // detalhe/ajuste do Reorçamento — mesmo padrão de busca já usado em
+    // "6 - Ag. Reparo".
+    const [{ data: faixasBrutas }, { data: configImposto }, { data: configMaoObraBruta }] = await Promise.all([
+      supabase.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+      supabase.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+      supabase.from("configuracoes_mao_de_obra").select("valor_uma_peca, valor_mais_de_uma_peca").eq("id", 1).single(),
+    ]);
+    const faixasMarkup: FaixaMarkup[] = (faixasBrutas ?? []).map((f) => ({
+      valor_min: Number(f.valor_min),
+      valor_max: f.valor_max == null ? null : Number(f.valor_max),
+      multiplicador: Number(f.multiplicador),
+    }));
+    const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
+    const configMaoDeObra = {
+      valor_uma_peca: Number(configMaoObraBruta?.valor_uma_peca ?? 0),
+      valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 0),
+    };
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <PainelRespostaReorcamento
+          aparelhos={listaAparelhos}
+          perfil={perfil}
+          faixasMarkup={faixasMarkup}
+          icmsPercentual={icmsPercentual}
+          configMaoDeObra={configMaoDeObra}
+          topo={
+            <>
+              {voltar}
+              {badgeContador(aparelhos?.length ?? 0)}
+              {badgeRTat(aparelhos ?? [])}
+            </>
+          }
+          mensagemVazia="Nenhum aparelho em 4 - Ag. Resposta de Reorçamento no momento."
+        />
+      </AppShell>
+    );
+  }
+
   if (status.slug === "8-orcamento-reprovado") {
     const { data: aparelhos } = await supabase
       .from("orcamentos")
@@ -597,12 +649,12 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
-  // etapas ainda sem tela própria (4, 7, e Produto Entregue — "3",
-  // "Ag. Contra Proposta", "5", "6" e "OQC - Controle de Qualidade" já
-  // ganharam tela própria acima) — só a lista, com o ícone de reprovar em
-  // todas menos Produto Entregue (não faz sentido reprovar um orçamento
-  // já entregue), clique na linha abrindo o pop-up de atendimento/peças,
-  // e o card R-TAT só nas que têm número ("4 - ..." e "7 - ..." —
+  // etapas ainda sem tela própria (7 e Produto Entregue — "3",
+  // "Ag. Contra Proposta", "4", "5", "6" e "OQC - Controle de Qualidade"
+  // já ganharam tela própria acima) — só a lista, com o ícone de
+  // reprovar em todas menos Produto Entregue (não faz sentido reprovar
+  // um orçamento já entregue), clique na linha abrindo o pop-up de
+  // atendimento/peças, e o card R-TAT só nas que têm número ("7 - ..." —
   // Produto Entregue não tem número no valor).
   const { data: aparelhos } = await supabase
     .from("orcamentos")

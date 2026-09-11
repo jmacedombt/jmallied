@@ -3,13 +3,14 @@ import { enviarEmailGmail, montarPlanilhaOrcamentos, preencherModeloEmail, type 
 
 /**
  * Persiste (storage + orcamento_envios) e manda por e-mail o Excel de um
- * lote confirmado — usado tanto por "Confirmar Envio" (Validação de
- * Orçamentos) quanto por "Enviar Contra Proposta" (Ag. Contra Proposta).
- * Antes disso o arquivo só era gerado na hora pro e-mail e descartado —
- * agora fica salvo (bucket envios-orcamentos) pra dar pra baixar de novo
- * depois pelo botão Histórico. Uma falha de e-mail NUNCA impede o envio
- * de ficar registrado/salvo — só fica marcada em orcamento_envios pra
- * dar pra conferir depois.
+ * lote confirmado — usado por "Confirmar Envio" (Validação de
+ * Orçamentos), "Enviar Contra Proposta" (Ag. Contra Proposta) e "Enviar
+ * planilha Complementar" (4 - Ag. Resposta de Reorçamento). Antes disso
+ * o arquivo só era gerado na hora pro e-mail e descartado — agora fica
+ * salvo (bucket envios-orcamentos) pra dar pra baixar de novo depois
+ * pelo botão Histórico. Uma falha de e-mail NUNCA impede o envio de
+ * ficar registrado/salvo — só fica marcada em orcamento_envios pra dar
+ * pra conferir depois.
  */
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -24,7 +25,13 @@ export async function persistirEEnviarLote({
   nomeArquivoPrefixo,
 }: {
   admin: AdminClient;
-  tipo: "orcamento" | "contra_proposta";
+  tipo: "orcamento" | "contra_proposta" | "reorcamento";
+  /** identificador do envio — normalmente uma NF Remessa só, mas a
+   * planilha Complementar (Reorçamento) junta vários lotes de uma vez,
+   * então aqui pode vir uma lista tipo "1867459, 1877204"; só entra
+   * como texto (coluna nf_remessa_allied do histórico e placeholder do
+   * e-mail) — o caminho do arquivo no storage é sempre sanitizado, pra
+   * nunca quebrar por causa de vírgula/espaço. */
   nfRemessa: string;
   quantidade: number;
   linhasPlanilha: LinhaPlanilhaOrcamento[];
@@ -32,8 +39,9 @@ export async function persistirEEnviarLote({
   nomeArquivoPrefixo: string;
 }): Promise<{ enviado: boolean; erro?: string }> {
   const planilha = montarPlanilhaOrcamentos(linhasPlanilha);
-  const nomeArquivo = `${nomeArquivoPrefixo}-${nfRemessa}.xlsx`;
-  const caminhoArquivo = `${tipo}/${nfRemessa}/${Date.now()}-${nomeArquivo}`;
+  const nfRemessaArquivo = nfRemessa.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const nomeArquivo = `${nomeArquivoPrefixo}-${nfRemessaArquivo}.xlsx`;
+  const caminhoArquivo = `${tipo}/${nfRemessaArquivo}/${Date.now()}-${nomeArquivo}`;
 
   const { error: erroUpload } = await admin.storage.from("envios-orcamentos").upload(caminhoArquivo, planilha, {
     contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
