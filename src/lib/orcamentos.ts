@@ -541,3 +541,80 @@ export function calcularResumoContraProposta(pecas: PecaContraProposta[], maoDeO
   const percLucroTotal = baseLucroTotal > 0 ? (lucroTotal / baseLucroTotal) * 100 : 0;
   return { custoTotalPecas, impostoTotalPecas, vendaTotalPecas, maoDeObra, lucroLiquidoPeca, lucroTotal, percLucroPecas, percLucroTotal };
 }
+
+// ---- Reorçamento (peça adicional descoberta durante o reparo, pedida
+// em "6 - Ag. Reparo") ----
+// (ver PopupReorcamento.tsx, migration 0038_reorcamento.sql)
+
+export type PecaAddEntrada = {
+  /** "Extra 1".."Extra 5" — mesma nomenclatura de posição já usada em
+   * calcularDetalheValidacao pras peça_add_N (aqui são os mesmos 5
+   * campos peca_add_N / custo_peca_add_N da importação original,
+   * reaproveitados: o técnico só preenche na hora, já que a peça extra
+   * normalmente não era prevista no orçamento). */
+  posicao: string;
+  codigo: string;
+  /** custo que o técnico viu manualmente no GSPN — nunca vem da Base
+   * Peças, porque a peça é nova pra esse orçamento. */
+  custo: number;
+};
+
+/**
+ * Cálculo do Reorçamento: soma as peças NORMAIS já aprovadas (congeladas
+ * em validacao_snapshot desde "Confirmar Envio", em Validação de
+ * Orçamentos) com as peças ADICIONAIS novas que o técnico está lançando
+ * agora (custo digitado à mão, markup por faixa + ICMS aplicados
+ * exatamente como no BID — calcularCustoPecaAllied), e recalcula a mão
+ * de obra pela quantidade TOTAL de peças (normais + novas), já que pode
+ * mudar de faixa (ex: orçamento com 1 peça passa a ter 2). Mesma fórmula
+ * de lucro/percentuais de calcularDetalheValidacao — o resultado é o
+ * novo valor TOTAL do reparo, que segue pra "4 - Ag. Resposta de
+ * Reorçamento" pra Allied aprovar.
+ */
+export function calcularDetalheReorcamento(
+  pecasAddPreenchidas: PecaAddEntrada[],
+  snapshotAtual: DetalheValidacaoOrcamento,
+  icmsPercentual: number,
+  configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca">,
+  faixasMarkup: FaixaMarkup[]
+): DetalheValidacaoOrcamento {
+  const pecasAddCalculadas: PecaDetalheValidacao[] = pecasAddPreenchidas.map((p) => {
+    const resultado = calcularCustoPecaAllied(p.custo, faixasMarkup, icmsPercentual);
+    return {
+      posicao: p.posicao,
+      codigo: p.codigo,
+      custo: p.custo,
+      valorComMargem: resultado?.valorComMargem ?? null,
+      imposto: resultado?.valorImposto ?? 0,
+      vendaPeca: resultado?.custoPecaAllied ?? null,
+    };
+  });
+
+  const todasPecas = [...snapshotAtual.pecas, ...pecasAddCalculadas];
+  const quantidadePecas = todasPecas.length;
+  const custoTotalPecas = todasPecas.reduce((soma, p) => soma + (p.custo ?? 0), 0);
+  const impostoTotalPecas = todasPecas.reduce((soma, p) => soma + p.imposto, 0);
+  const vendaTotalPecas = todasPecas.reduce((soma, p) => soma + (p.vendaPeca ?? 0), 0);
+  const maoDeObra = calcularMaoDeObraValidacao(quantidadePecas, configMaoDeObra);
+  const temPecaSemCusto = todasPecas.some((p) => p.custo == null || p.vendaPeca == null);
+
+  const lucroLiquidoPeca = vendaTotalPecas - custoTotalPecas - impostoTotalPecas;
+  const lucroTotal = lucroLiquidoPeca + maoDeObra;
+  const percLucroPecas = vendaTotalPecas > 0 ? (lucroLiquidoPeca / vendaTotalPecas) * 100 : 0;
+  const baseLucroTotal = vendaTotalPecas + maoDeObra;
+  const percLucroTotal = baseLucroTotal > 0 ? (lucroTotal / baseLucroTotal) * 100 : 0;
+
+  return {
+    quantidadePecas,
+    custoTotalPecas,
+    impostoTotalPecas,
+    vendaTotalPecas,
+    maoDeObra,
+    lucroLiquidoPeca,
+    lucroTotal,
+    percLucroPecas,
+    percLucroTotal,
+    temPecaSemCusto,
+    pecas: todasPecas,
+  };
+}

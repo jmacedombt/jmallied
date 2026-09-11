@@ -27,6 +27,7 @@ import {
   Printer,
   Search,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
   Tags,
   TrendingUp,
@@ -59,6 +60,12 @@ type GrupoMenu = {
   label: string;
   icone: typeof Settings;
   itens: ItemMenu[];
+  /** Só pros grupos que têm uma página própria de "capa" (com os cards
+   * de submenu, tipo /metricas) — quando presente, clicar no NOME do
+   * grupo navega pra essa página (além de expandir a lista), em vez de
+   * só abrir/fechar a lista sem sair do lugar. Grupos sem página própria
+   * (Bases, Configurações, Sistema) continuam só abrindo/fechando. */
+  hrefGrupo?: string;
 };
 
 // Estrutura do menu lateral. O grupo "Sistema" reúne as telas
@@ -71,10 +78,12 @@ const GRUPO_METRICAS: GrupoMenu = {
   id: "metricas",
   label: "Métricas",
   icone: LineChart,
+  hrefGrupo: "/metricas",
   itens: [
     { href: "/metricas/volumetria", label: "Volumetria", icone: LayoutGrid },
     { href: "/metricas/rtat", label: "R-TAT", icone: LineChart },
     { href: "/metricas/orcamentos", label: "Orçamentos", icone: PackageCheck },
+    { href: "/metricas/oqc", label: "OQC", icone: ShieldCheck },
   ],
 };
 
@@ -83,6 +92,7 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
     id: "operacional",
     label: "Operacional",
     icone: LayoutGrid,
+    hrefGrupo: "/operacional",
     itens: [
       { href: "/operacional", label: "Painel", icone: LayoutGrid },
       { href: "/operacional/backlog", label: "Backlog", icone: ClipboardList },
@@ -203,7 +213,12 @@ export default function AppShell({
       Object.fromEntries(
         grupos.map((g) => [
           g.id,
-          g.itens.some((item) => pathname?.startsWith(item.href)),
+          // conta como "aberto" tanto quando a rota atual é de um item da
+          // lista quanto quando é a própria página de capa do grupo (ex:
+          // "/metricas" sozinho não é prefixo de "/metricas/volumetria",
+          // então sem esse segundo caso o grupo aparecia fechado bem na
+          // hora em que a página de capa — com os cards — está aberta).
+          (g.hrefGrupo != null && pathname === g.hrefGrupo) || g.itens.some((item) => pathname?.startsWith(item.href)),
         ])
       )
   );
@@ -287,23 +302,53 @@ export default function AppShell({
             const IconeGrupo = grupo.icone;
             const aberto = gruposAbertos[grupo.id];
             const hrefAtivo = hrefMaisEspecificoAtivo(grupo.itens, pathname);
+            // grupo com página de capa (Métricas, Operacional): o NOME
+            // do grupo é um link de verdade pra essa página — clicar nele
+            // não só abre a lista, leva pra tela com os cards (mesma tela
+            // que antes só aparecia clicando "voltar" de dentro de um
+            // submenu, por acidente). Grupo sem página de capa (Bases,
+            // Configurações, Sistema) continua só abrindo/fechando.
+            const estaNaCapa = grupo.hrefGrupo != null && pathname === grupo.hrefGrupo;
             return (
               <div key={grupo.id} className="pt-1">
-                <button
-                  type="button"
-                  onClick={() => alternarGrupo(grupo.id)}
-                  className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
-                  style={{ color: "var(--muted)" }}
+                <div
+                  className="w-full flex items-center justify-between gap-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
+                  style={estaNaCapa ? ESTILO_ATIVO : { color: "var(--muted)" }}
                 >
-                  <span className="flex items-center gap-2.5">
-                    <IconeGrupo size={17} />
-                    {grupo.label}
-                  </span>
-                  <ChevronDown
-                    size={15}
-                    className={`transition-transform ${aberto ? "rotate-180" : ""}`}
-                  />
-                </button>
+                  {grupo.hrefGrupo ? (
+                    <Link
+                      href={grupo.hrefGrupo}
+                      onClick={() => {
+                        setSidebarAberta(false);
+                        setGruposAbertos((atual) => ({ ...atual, [grupo.id]: true }));
+                      }}
+                      className="flex-1 flex items-center gap-2.5 px-3 py-2.5"
+                    >
+                      <IconeGrupo size={17} />
+                      {grupo.label}
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => alternarGrupo(grupo.id)}
+                      className="flex-1 flex items-center gap-2.5 px-3 py-2.5 text-left"
+                    >
+                      <IconeGrupo size={17} />
+                      {grupo.label}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => alternarGrupo(grupo.id)}
+                    aria-label={aberto ? `Recolher ${grupo.label}` : `Expandir ${grupo.label}`}
+                    className="pr-3 py-2.5 pl-2 shrink-0"
+                  >
+                    <ChevronDown
+                      size={15}
+                      className={`transition-transform ${aberto ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                </div>
                 {aberto && (
                   <div className="mt-1 ml-4 pl-3 border-l space-y-1" style={{ borderColor: "var(--line)" }}>
                     {grupo.itens.map((item) => {

@@ -502,7 +502,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, data_reconhecimento"
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, data_reconhecimento, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5, custo_peca_add_1, custo_peca_add_2, custo_peca_add_3, custo_peca_add_4, custo_peca_add_5"
       )
       .eq("status_operacional", status.valor)
       .order("updated_at", { ascending: false });
@@ -531,12 +531,33 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       }
     }
 
+    // parâmetros de cálculo (markup, ICMS, mão de obra) pro pop-up de
+    // Reorçamento — mesmo padrão de busca já usado em Ag. Análise/Validação.
+    const [{ data: faixasBrutas }, { data: configImposto }, { data: configMaoObraBruta }] = await Promise.all([
+      supabase.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+      supabase.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+      supabase.from("configuracoes_mao_de_obra").select("valor_uma_peca, valor_mais_de_uma_peca").eq("id", 1).single(),
+    ]);
+    const faixasMarkup: FaixaMarkup[] = (faixasBrutas ?? []).map((f) => ({
+      valor_min: Number(f.valor_min),
+      valor_max: f.valor_max == null ? null : Number(f.valor_max),
+      multiplicador: Number(f.multiplicador),
+    }));
+    const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
+    const configMaoDeObra = {
+      valor_uma_peca: Number(configMaoObraBruta?.valor_uma_peca ?? 0),
+      valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 0),
+    };
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelAgReparo
           aparelhos={listaAparelhos}
           perfil={perfil}
           falhasOqc={falhasOqc}
+          faixasMarkup={faixasMarkup}
+          icmsPercentual={icmsPercentual}
+          configMaoDeObra={configMaoDeObra}
           topo={
             <>
               {voltar}

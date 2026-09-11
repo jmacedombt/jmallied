@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Ban, CheckCheck, Loader2, Search, Wrench } from "lucide-react";
+import { AlertTriangle, Ban, CheckCheck, Loader2, RefreshCcw, Search, Wrench } from "lucide-react";
 import PopupConfirmar from "@/components/PopupConfirmar";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import PopupHistoricoOqc, { type FalhaOqcHistorico } from "@/components/PopupHistoricoOqc";
-import { podeConfirmarReparoEmLote, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import PopupReorcamento, { type AparelhoReorcamento } from "@/components/PopupReorcamento";
+import { podeConfirmarReparoEmLote, type ConfiguracaoMaoDeObra, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import { type FaixaMarkup } from "@/lib/bid";
 
 function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -22,6 +24,16 @@ export type AparelhoAgReparo = {
   sku: string | null;
   descricao_completa: string | null;
   validacao_snapshot: DetalheValidacaoOrcamento | null;
+  peca_add_1: string | null;
+  peca_add_2: string | null;
+  peca_add_3: string | null;
+  peca_add_4: string | null;
+  peca_add_5: string | null;
+  custo_peca_add_1: number | null;
+  custo_peca_add_2: number | null;
+  custo_peca_add_3: number | null;
+  custo_peca_add_4: number | null;
+  custo_peca_add_5: number | null;
 };
 
 /** Resumo das reprovações de OQC já sofridas por um aparelho que voltou
@@ -42,12 +54,21 @@ export default function PainelAgReparo({
   topo,
   perfil = null,
   falhasOqc = {},
+  faixasMarkup,
+  icmsPercentual,
+  configMaoDeObra,
   mensagemVazia = "Nenhum aparelho em 6 - Ag. Reparo no momento.",
 }: {
   aparelhos: AparelhoAgReparo[];
   topo: React.ReactNode;
   perfil?: Perfil;
   falhasOqc?: Record<string, FalhaOqcResumo>;
+  /** parâmetros de cálculo (markup, ICMS, mão de obra) usados pelo
+   * pop-up de Reorçamento — buscados uma vez na página (ver
+   * operacional/[slug]/page.tsx), igual já é feito em Ag. Análise. */
+  faixasMarkup: FaixaMarkup[];
+  icmsPercentual: number;
+  configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca">;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
@@ -66,7 +87,8 @@ export default function PainelAgReparo({
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
   const [detalhe, setDetalhe] = useState<AparelhoAgReparo | null>(null);
   const [verHistoricoOqc, setVerHistoricoOqc] = useState<AparelhoAgReparo | null>(null);
-  const [destaqueSaida, setDestaqueSaida] = useState<Record<string, "verde" | "vermelho">>({});
+  const [reorcamentando, setReorcamentando] = useState<AparelhoAgReparo | null>(null);
+  const [destaqueSaida, setDestaqueSaida] = useState<Record<string, "verde" | "vermelho" | "laranja">>({});
   const [saindoAgora, setSaindoAgora] = useState<Set<string>>(new Set());
 
   useEffect(() => setItens(aparelhos), [aparelhos]);
@@ -107,7 +129,7 @@ export default function PainelAgReparo({
     });
   }
 
-  async function animarSaidaDaLista(ids: string[], cor: "verde" | "vermelho") {
+  async function animarSaidaDaLista(ids: string[], cor: "verde" | "vermelho" | "laranja") {
     const idsSet = new Set(ids);
     setSelecionados((atual) => {
       const novo = new Set(atual);
@@ -318,15 +340,24 @@ export default function PainelAgReparo({
                   onClick={() => !destaque && setDetalhe(a)}
                   className="border-t cursor-pointer transition-all duration-300 ease-in hover:bg-[var(--surface2)]"
                   style={{
-                    borderColor: destaque === "verde" ? "#22c55e" : destaque === "vermelho" ? "#ef4444" : "var(--line)",
+                    borderColor:
+                      destaque === "verde"
+                        ? "#22c55e"
+                        : destaque === "vermelho"
+                          ? "#ef4444"
+                          : destaque === "laranja"
+                            ? "#f97316"
+                            : "var(--line)",
                     background:
                       destaque === "verde"
                         ? "rgba(34, 197, 94, 0.22)"
                         : destaque === "vermelho"
                           ? "rgba(239, 68, 68, 0.22)"
-                          : reprovadoNoOqc
-                            ? "#000"
-                            : "var(--surface)",
+                          : destaque === "laranja"
+                            ? "rgba(249, 115, 22, 0.22)"
+                            : reprovadoNoOqc
+                              ? "#000"
+                              : "var(--surface)",
                     opacity: saindo ? 0 : 1,
                     transform: saindo ? "translateX(12px)" : "translateX(0)",
                     pointerEvents: destaque ? "none" : undefined,
@@ -399,6 +430,21 @@ export default function PainelAgReparo({
                           <Wrench size={14} style={{ color: "#9333ea" }} />
                         )}
                         Reparado
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReorcamentando(a)}
+                        disabled={!a.validacao_snapshot}
+                        className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[#f97316] disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ borderColor: "var(--line)", color: "#f97316" }}
+                        title={
+                          a.validacao_snapshot
+                            ? "Pedir reorçamento — peça adicional descoberta durante o reparo"
+                            : "Esse orçamento não tem cálculo de peças confirmado — reorçamento indisponível"
+                        }
+                      >
+                        <RefreshCcw size={14} />
+                        Reorçamento
                       </button>
                       <button
                         type="button"
@@ -488,6 +534,35 @@ export default function PainelAgReparo({
           osReparadora={verHistoricoOqc.os_reparadora}
           historico={falhasOqc[verHistoricoOqc.id]?.historico ?? []}
           onFechar={() => setVerHistoricoOqc(null)}
+        />
+      )}
+
+      {reorcamentando && reorcamentando.validacao_snapshot && (
+        <PopupReorcamento
+          aparelho={
+            {
+              id: reorcamentando.id,
+              trade_allied: reorcamentando.trade_allied,
+              os_reparadora: reorcamentando.os_reparadora,
+              validacao_snapshot: reorcamentando.validacao_snapshot,
+              pecasAddIniciais: [
+                { posicao: "Extra 1", codigo: reorcamentando.peca_add_1, custo: reorcamentando.custo_peca_add_1 },
+                { posicao: "Extra 2", codigo: reorcamentando.peca_add_2, custo: reorcamentando.custo_peca_add_2 },
+                { posicao: "Extra 3", codigo: reorcamentando.peca_add_3, custo: reorcamentando.custo_peca_add_3 },
+                { posicao: "Extra 4", codigo: reorcamentando.peca_add_4, custo: reorcamentando.custo_peca_add_4 },
+                { posicao: "Extra 5", codigo: reorcamentando.peca_add_5, custo: reorcamentando.custo_peca_add_5 },
+              ],
+            } satisfies AparelhoReorcamento
+          }
+          faixasMarkup={faixasMarkup}
+          icmsPercentual={icmsPercentual}
+          configMaoDeObra={configMaoDeObra}
+          onFechar={() => setReorcamentando(null)}
+          onEnviado={() => {
+            const id = reorcamentando.id;
+            setReorcamentando(null);
+            animarSaidaDaLista([id], "laranja");
+          }}
         />
       )}
     </div>
