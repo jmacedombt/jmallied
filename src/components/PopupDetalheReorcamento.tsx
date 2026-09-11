@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock, PackageSearch, Save, X } from "lucide-react";
 import {
   calcularDetalheReorcamento,
@@ -82,10 +82,40 @@ export default function PopupDetalheReorcamento({
   const [confirmando, setConfirmando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [pecaSolucaoMap, setPecaSolucaoMap] = useState<Record<string, string | null>>({});
 
   function editarLinha(indice: number, campo: "codigo" | "custoTexto", valor: string) {
     setLinhas((atual) => atual.map((l, i) => (i === indice ? { ...l, [campo]: valor } : l)));
   }
+
+  // Peça Solução (BID) de cada código digitado — mesmo lookup ao vivo do
+  // PopupReorcamento (tela original em 6 - Ag. Reparo): 400ms depois de
+  // parar de digitar, consulta o BID e mostra a Peça Solução — a mesma
+  // que vai sair na planilha Complementar (reorcamentoEnvio.ts faz essa
+  // busca de novo no momento do envio; isso aqui é só auxílio visual).
+  const codigosPreenchidos = editavel ? linhas.map((l) => l.codigo.trim()).filter(Boolean) : [];
+  useEffect(() => {
+    if (codigosPreenchidos.length === 0) {
+      setPecaSolucaoMap({});
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/bases/bid/consultar-solucao", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ codigos: codigosPreenchidos }),
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (data?.solucoes) setPecaSolucaoMap(data.solucoes);
+      } catch {
+        // silencioso — só um auxílio visual, não trava o preenchimento
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codigosPreenchidos.join("|")]);
 
   const pecasAddValidas: PecaAddEntrada[] = linhas
     .filter((l) => l.codigo.trim() !== "" && l.custoTexto.trim() !== "")
@@ -228,6 +258,7 @@ export default function PopupDetalheReorcamento({
               <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
                 <th className="px-3 py-1.5 font-medium">Posição</th>
                 <th className="px-3 py-1.5 font-medium">Peça Add (código)</th>
+                {editavel && <th className="px-3 py-1.5 font-medium">Peça Solução (BID)</th>}
                 <th className="px-3 py-1.5 font-medium text-right">{editavel ? "Custo Add (GSPN)" : "Custo"}</th>
                 <th className="px-3 py-1.5 font-medium text-right">Venda de Peça</th>
               </tr>
@@ -235,6 +266,8 @@ export default function PopupDetalheReorcamento({
             <tbody>
               {linhas.map((l, i) => {
                 const calculada = detalheExibido.pecas.find((p) => p.posicao === l.posicao);
+                const codigo = l.codigo.trim();
+                const pecaSolucao = codigo ? pecaSolucaoMap[codigo] : undefined;
                 return (
                   <tr key={l.posicao} className="border-t" style={{ borderColor: "var(--line)" }}>
                     <td className="px-3 py-1.5" style={{ color: "var(--muted)" }}>
@@ -251,6 +284,9 @@ export default function PopupDetalheReorcamento({
                             className="w-full rounded-md border px-2 py-1 text-sm outline-none font-mono"
                             style={estiloInput}
                           />
+                        </td>
+                        <td className="px-3 py-1.5 text-xs" style={{ color: !codigo ? "var(--muted)" : pecaSolucao ? "var(--ink)" : "#ea580c" }}>
+                          {!codigo ? "—" : pecaSolucao === undefined ? "buscando..." : pecaSolucao ?? "não cadastrada no BID"}
                         </td>
                         <td className="px-3 py-1 text-right">
                           <input
