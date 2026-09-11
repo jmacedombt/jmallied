@@ -138,7 +138,7 @@ export default function PopupDetalheReorcamento({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }}>
       <div
-        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border shadow-2xl p-6"
+        className="w-full max-w-3xl max-h-[94vh] overflow-y-auto rounded-2xl border shadow-2xl p-5"
         style={{ background: "var(--surface)", borderColor: "var(--line)" }}
       >
         <div className="flex items-center justify-between mb-1">
@@ -157,14 +157,20 @@ export default function PopupDetalheReorcamento({
           </button>
         </div>
 
-        <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
+        <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>
           {aparelho.os_reparadora && <>OS Reparadora {aparelho.os_reparadora} · </>}
           {aparelho.os_care_allied && <>OS Care Allied {aparelho.os_care_allied} · </>}
           {aparelho.modelo_comercial}
+          {aparelho.reorcamento_motivo && (
+            <>
+              {" "}
+              · <span style={{ color: "var(--ink)" }}>Justificativa:</span> {aparelho.reorcamento_motivo}
+            </>
+          )}
         </p>
 
         <div
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 mb-3 text-[11px]"
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 mb-2.5 text-[11px]"
           style={editavel ? { background: "rgba(217, 119, 6, 0.12)", color: "#b45309" } : { background: "rgba(37, 99, 235, 0.1)", color: "#2563eb" }}
         >
           {editavel ? <Clock size={12} /> : <CheckCircle2 size={12} />}
@@ -175,43 +181,34 @@ export default function PopupDetalheReorcamento({
               : "Já enviado pra Allied — só consulta."}
         </div>
 
-        {aparelho.reorcamento_motivo && (
-          <div className="rounded-lg border px-3 py-2 mb-4 text-xs" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
-            <p className="uppercase tracking-wide text-[10px] mb-0.5" style={{ color: "var(--muted)" }}>
-              Justificativa do técnico
-            </p>
-            <p style={{ color: "var(--ink)" }}>{aparelho.reorcamento_motivo}</p>
-          </div>
-        )}
-
         {pecasOriginais.length > 0 && (
           <>
-            <p className="text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
+            <p className="text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>
               Peças do orçamento original
             </p>
-            <div className="rounded-xl border overflow-hidden mb-4" style={{ borderColor: "var(--line)" }}>
+            <div className="rounded-xl border overflow-hidden mb-2.5" style={{ borderColor: "var(--line)" }}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
-                    <th className="px-3 py-2 font-medium">Posição</th>
-                    <th className="px-3 py-2 font-medium">Código</th>
-                    <th className="px-3 py-2 font-medium text-right">Custo</th>
-                    <th className="px-3 py-2 font-medium text-right">Venda de Peça</th>
+                    <th className="px-3 py-1.5 font-medium">Posição</th>
+                    <th className="px-3 py-1.5 font-medium">Código</th>
+                    <th className="px-3 py-1.5 font-medium text-right">Custo</th>
+                    <th className="px-3 py-1.5 font-medium text-right">Venda de Peça</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pecasOriginais.map((p) => (
                     <tr key={p.posicao} className="border-t" style={{ borderColor: "var(--line)" }}>
-                      <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
+                      <td className="px-3 py-1.5" style={{ color: "var(--muted)" }}>
                         {p.posicao}
                       </td>
-                      <td className="px-3 py-2 font-mono" style={{ color: "var(--ink)" }}>
+                      <td className="px-3 py-1.5 font-mono" style={{ color: "var(--ink)" }}>
                         {p.codigo}
                       </td>
-                      <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
+                      <td className="px-3 py-1.5 text-right" style={{ color: "var(--muted)" }}>
                         {formatarReal(p.custo)}
                       </td>
-                      <td className="px-3 py-2 text-right font-medium" style={{ color: "var(--ink)" }}>
+                      <td className="px-3 py-1.5 text-right font-medium" style={{ color: "var(--ink)" }}>
                         {formatarReal(p.vendaPeca)}
                       </td>
                     </tr>
@@ -222,17 +219,17 @@ export default function PopupDetalheReorcamento({
           </>
         )}
 
-        <p className="text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
+        <p className="text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>
           Peças adicionais (Reorçamento)
         </p>
-        <div className="rounded-xl border overflow-hidden mb-4" style={{ borderColor: "var(--line)" }}>
+        <div className="rounded-xl border overflow-hidden mb-2.5" style={{ borderColor: "var(--line)" }}>
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
-                <th className="px-3 py-2 font-medium">Posição</th>
-                <th className="px-3 py-2 font-medium">Peça Add (código)</th>
-                <th className="px-3 py-2 font-medium text-right">{editavel ? "Custo Add (GSPN)" : "Custo"}</th>
-                {!editavel && <th className="px-3 py-2 font-medium text-right">Venda de Peça</th>}
+                <th className="px-3 py-1.5 font-medium">Posição</th>
+                <th className="px-3 py-1.5 font-medium">Peça Add (código)</th>
+                <th className="px-3 py-1.5 font-medium text-right">{editavel ? "Custo Add (GSPN)" : "Custo"}</th>
+                <th className="px-3 py-1.5 font-medium text-right">Venda de Peça</th>
               </tr>
             </thead>
             <tbody>
@@ -240,12 +237,12 @@ export default function PopupDetalheReorcamento({
                 const calculada = detalheExibido.pecas.find((p) => p.posicao === l.posicao);
                 return (
                   <tr key={l.posicao} className="border-t" style={{ borderColor: "var(--line)" }}>
-                    <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
+                    <td className="px-3 py-1.5" style={{ color: "var(--muted)" }}>
                       {l.posicao}
                     </td>
                     {editavel ? (
                       <>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-1">
                           <input
                             type="text"
                             value={l.codigo}
@@ -255,32 +252,35 @@ export default function PopupDetalheReorcamento({
                             style={estiloInput}
                           />
                         </td>
-                        <td className="px-3 py-2 text-right">
+                        <td className="px-3 py-1 text-right">
                           <input
                             type="text"
                             inputMode="decimal"
                             value={l.custoTexto}
                             onChange={(e) => editarLinha(i, "custoTexto", e.target.value)}
                             placeholder="0,00"
-                            className="w-28 rounded-md border px-2 py-1 text-right text-sm outline-none"
+                            className="w-24 rounded-md border px-2 py-1 text-right text-sm outline-none"
                             style={estiloInput}
                           />
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-medium" style={{ color: calculada ? "var(--ink)" : "var(--muted)" }}>
+                          {calculada ? formatarReal(calculada.vendaPeca) : "—"}
                         </td>
                       </>
                     ) : calculada ? (
                       <>
-                        <td className="px-3 py-2 font-mono" style={{ color: "var(--ink)" }}>
+                        <td className="px-3 py-1.5 font-mono" style={{ color: "var(--ink)" }}>
                           {calculada.codigo}
                         </td>
-                        <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
+                        <td className="px-3 py-1.5 text-right" style={{ color: "var(--muted)" }}>
                           {formatarReal(calculada.custo)}
                         </td>
-                        <td className="px-3 py-2 text-right font-medium" style={{ color: "var(--ink)" }}>
+                        <td className="px-3 py-1.5 text-right font-medium" style={{ color: "var(--ink)" }}>
                           {formatarReal(calculada.vendaPeca)}
                         </td>
                       </>
                     ) : (
-                      <td className="px-3 py-2 text-center" colSpan={3} style={{ color: "var(--muted)" }}>
+                      <td className="px-3 py-1.5 text-center" colSpan={3} style={{ color: "var(--muted)" }}>
                         —
                       </td>
                     )}
@@ -291,7 +291,7 @@ export default function PopupDetalheReorcamento({
           </table>
         </div>
 
-        <div className="rounded-xl border p-4 space-y-1.5 text-sm mb-2" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+        <div className="rounded-xl border px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-1 text-sm mb-2" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
           <div className="flex items-center justify-between">
             <span style={{ color: "var(--muted)" }}>Venda de peças (total)</span>
             <strong style={{ color: "var(--ink)" }}>{formatarReal(detalheExibido.vendaTotalPecas)}</strong>
@@ -300,7 +300,7 @@ export default function PopupDetalheReorcamento({
             <span style={{ color: "var(--muted)" }}>Mão de obra ({detalheExibido.quantidadePecas} peça(s))</span>
             <strong style={{ color: "var(--ink)" }}>{formatarReal(detalheExibido.maoDeObra)}</strong>
           </div>
-          <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
+          <div className="flex items-center justify-between">
             <span style={{ color: "var(--ink)" }}>Valor total do reparo</span>
             <strong style={{ color: "var(--accent2)" }}>{formatarReal(detalheExibido.vendaTotalPecas + detalheExibido.maoDeObra)}</strong>
           </div>
@@ -313,7 +313,7 @@ export default function PopupDetalheReorcamento({
         {erro && !confirmando && <p className="text-xs text-red-500 mb-2">{erro}</p>}
 
         {editavel && (
-          <div className="flex items-center justify-end pt-2">
+          <div className="flex items-center justify-end pt-1">
             <button
               type="button"
               onClick={() => setConfirmando(true)}
