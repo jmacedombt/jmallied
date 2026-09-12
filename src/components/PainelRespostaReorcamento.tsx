@@ -9,7 +9,7 @@ import {
   type DetalheValidacaoOrcamento,
   type PecaContraProposta,
 } from "@/lib/orcamentos";
-import { type FaixaMarkup } from "@/lib/bid";
+import { podeImportarBid, type FaixaMarkup } from "@/lib/bid";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import PopupDetalheReorcamento from "@/components/PopupDetalheReorcamento";
@@ -80,6 +80,7 @@ export default function PainelRespostaReorcamento({
   const [erroAprovar, setErroAprovar] = useState<string | null>(null);
 
   const podeEnviar = podeConfirmarAprovacaoOrcamento(perfil);
+  const podeCadastrarBid = podeImportarBid(perfil);
 
   const pendentes = useMemo(() => aparelhos.filter(pendenteDeEnvio), [aparelhos]);
   const resumoPendentes = useMemo(
@@ -274,6 +275,7 @@ export default function PainelRespostaReorcamento({
           faixasMarkup={faixasMarkup}
           icmsPercentual={icmsPercentual}
           configMaoDeObra={configMaoDeObra}
+          podeCadastrarBid={podeCadastrarBid}
           onFechar={() => setDetalheReorcamento(null)}
           onAtualizado={() => {
             setDetalheReorcamento(null);

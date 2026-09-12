@@ -9,7 +9,7 @@ import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import PopupHistoricoOqc, { type FalhaOqcHistorico } from "@/components/PopupHistoricoOqc";
 import PopupReorcamento, { type AparelhoReorcamento } from "@/components/PopupReorcamento";
 import { podeConfirmarReparoEmLote, type ConfiguracaoMaoDeObra, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
-import { type FaixaMarkup } from "@/lib/bid";
+import { podeImportarBid, type FaixaMarkup } from "@/lib/bid";
 
 function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -94,6 +94,7 @@ export default function PainelAgReparo({
   useEffect(() => setItens(aparelhos), [aparelhos]);
 
   const podeLote = podeConfirmarReparoEmLote(perfil);
+  const podeCadastrarBid = podeImportarBid(perfil);
 
   const filtrados = useMemo(() => {
     const os = buscaOs.trim();
@@ -544,6 +545,7 @@ export default function PainelAgReparo({
               id: reorcamentando.id,
               trade_allied: reorcamentando.trade_allied,
               os_reparadora: reorcamentando.os_reparadora,
+              modelo_comercial: reorcamentando.modelo_comercial,
               validacao_snapshot: reorcamentando.validacao_snapshot,
               pecasAddIniciais: [
                 { posicao: "Extra 1", codigo: reorcamentando.peca_add_1, custo: reorcamentando.custo_peca_add_1 },
@@ -557,6 +559,7 @@ export default function PainelAgReparo({
           faixasMarkup={faixasMarkup}
           icmsPercentual={icmsPercentual}
           configMaoDeObra={configMaoDeObra}
+          podeCadastrarBid={podeCadastrarBid}
           onFechar={() => setReorcamentando(null)}
           onEnviado={() => {
             const id = reorcamentando.id;

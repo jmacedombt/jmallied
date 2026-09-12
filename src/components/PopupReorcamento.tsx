@@ -8,9 +8,10 @@ import {
   type DetalheValidacaoOrcamento,
   type PecaAddEntrada,
 } from "@/lib/orcamentos";
-import { type FaixaMarkup } from "@/lib/bid";
+import { type FaixaMarkup, type InfoBidPeca } from "@/lib/bid";
 import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupConfirmar from "@/components/PopupConfirmar";
+import PopupCadastrarPecaBid from "@/components/PopupCadastrarPecaBid";
 
 function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -34,6 +35,7 @@ export type AparelhoReorcamento = {
   id: string;
   trade_allied: string;
   os_reparadora: string | null;
+  modelo_comercial: string | null;
   validacao_snapshot: DetalheValidacaoOrcamento;
   /** valores atuais dos 5 campos peca_add_N / custo_peca_add_N — o
    * técnico edita em cima disso (normalmente vazios nesse ponto, já que
@@ -57,6 +59,7 @@ export default function PopupReorcamento({
   faixasMarkup,
   icmsPercentual,
   configMaoDeObra,
+  podeCadastrarBid,
   onFechar,
   onEnviado,
 }: {
@@ -64,6 +67,10 @@ export default function PopupReorcamento({
   faixasMarkup: FaixaMarkup[];
   icmsPercentual: number;
   configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca">;
+  /** mesma trava de cargo usada em Ag. Análise pra cadastrar peça no BID
+   * (podeImportarBid) — controla se aparece o botão "Cadastrar" quando o
+   * código digitado não é encontrado no BID. */
+  podeCadastrarBid: boolean;
   onFechar: () => void;
   onEnviado: () => void;
 }) {
@@ -80,6 +87,7 @@ export default function PopupReorcamento({
   const [salvando, setSalvando] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [pecaSolucaoMap, setPecaSolucaoMap] = useState<Record<string, string | null>>({});
+  const [cadastrando, setCadastrando] = useState<{ partNumber: string; prefillModelo: string | null } | null>(null);
 
   // Peça Solução (BID) de cada código digitado — mesmo lookup usado nas
   // outras telas (Ag. Análise, Base BID etc.) e no envio da planilha
@@ -274,7 +282,26 @@ export default function PopupReorcamento({
                     />
                   </td>
                   <td className="px-3 py-2 text-xs" style={{ color: !codigo ? "var(--muted)" : pecaSolucao ? "var(--ink)" : "#ea580c" }}>
-                    {!codigo ? "—" : pecaSolucao === undefined ? "buscando..." : pecaSolucao ?? "não cadastrada no BID"}
+                    {!codigo ? (
+                      "—"
+                    ) : pecaSolucao === undefined ? (
+                      "buscando..."
+                    ) : pecaSolucao ? (
+                      pecaSolucao
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        não cadastrada no BID
+                        {podeCadastrarBid && (
+                          <button
+                            type="button"
+                            onClick={() => setCadastrando({ partNumber: codigo, prefillModelo: aparelho.modelo_comercial })}
+                            className="underline font-medium hover:opacity-80"
+                          >
+                            Cadastrar
+                          </button>
+                        )}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <input
@@ -413,6 +440,20 @@ export default function PopupReorcamento({
           </div>
         )}
       </div>
+
+      {cadastrando && (
+        <PopupCadastrarPecaBid
+          partNumber={cadastrando.partNumber}
+          modeloInicial={cadastrando.prefillModelo}
+          faixas={faixasMarkup}
+          icmsPercentual={icmsPercentual}
+          onFechar={() => setCadastrando(null)}
+          onSalvo={(info: InfoBidPeca) => {
+            setPecaSolucaoMap((atual) => ({ ...atual, [cadastrando.partNumber]: info.peca_solucao }));
+            setCadastrando(null);
+          }}
+        />
+      )}
 
       {confirmando && calculado && (
         <PopupConfirmar

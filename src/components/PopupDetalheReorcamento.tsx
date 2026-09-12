@@ -8,9 +8,10 @@ import {
   type DetalheValidacaoOrcamento,
   type PecaAddEntrada,
 } from "@/lib/orcamentos";
-import { type FaixaMarkup } from "@/lib/bid";
+import { type FaixaMarkup, type InfoBidPeca } from "@/lib/bid";
 import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupConfirmar from "@/components/PopupConfirmar";
+import PopupCadastrarPecaBid from "@/components/PopupCadastrarPecaBid";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
 function formatarReal(valor: number | null): string {
@@ -61,6 +62,7 @@ export default function PopupDetalheReorcamento({
   faixasMarkup,
   icmsPercentual,
   configMaoDeObra,
+  podeCadastrarBid,
   onFechar,
   onAtualizado,
 }: {
@@ -68,6 +70,10 @@ export default function PopupDetalheReorcamento({
   faixasMarkup: FaixaMarkup[];
   icmsPercentual: number;
   configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca">;
+  /** mesma trava de cargo usada em Ag. Análise pra cadastrar peça no BID
+   * (podeImportarBid) — controla se aparece o botão "Cadastrar" quando o
+   * código digitado não é encontrado no BID. */
+  podeCadastrarBid: boolean;
   onFechar: () => void;
   onAtualizado: () => void;
 }) {
@@ -83,6 +89,7 @@ export default function PopupDetalheReorcamento({
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [pecaSolucaoMap, setPecaSolucaoMap] = useState<Record<string, string | null>>({});
+  const [cadastrando, setCadastrando] = useState<{ partNumber: string; prefillModelo: string | null } | null>(null);
 
   function editarLinha(indice: number, campo: "codigo" | "custoTexto", valor: string) {
     setLinhas((atual) => atual.map((l, i) => (i === indice ? { ...l, [campo]: valor } : l)));
@@ -286,7 +293,26 @@ export default function PopupDetalheReorcamento({
                           />
                         </td>
                         <td className="px-3 py-1.5 text-xs" style={{ color: !codigo ? "var(--muted)" : pecaSolucao ? "var(--ink)" : "#ea580c" }}>
-                          {!codigo ? "—" : pecaSolucao === undefined ? "buscando..." : pecaSolucao ?? "não cadastrada no BID"}
+                          {!codigo ? (
+                            "—"
+                          ) : pecaSolucao === undefined ? (
+                            "buscando..."
+                          ) : pecaSolucao ? (
+                            pecaSolucao
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5">
+                              não cadastrada no BID
+                              {podeCadastrarBid && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCadastrando({ partNumber: codigo, prefillModelo: aparelho.modelo_comercial })}
+                                  className="underline font-medium hover:opacity-80"
+                                >
+                                  Cadastrar
+                                </button>
+                              )}
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-1 text-right">
                           <input
@@ -364,6 +390,20 @@ export default function PopupDetalheReorcamento({
           </div>
         )}
       </div>
+
+      {cadastrando && (
+        <PopupCadastrarPecaBid
+          partNumber={cadastrando.partNumber}
+          modeloInicial={cadastrando.prefillModelo}
+          faixas={faixasMarkup}
+          icmsPercentual={icmsPercentual}
+          onFechar={() => setCadastrando(null)}
+          onSalvo={(info: InfoBidPeca) => {
+            setPecaSolucaoMap((atual) => ({ ...atual, [cadastrando.partNumber]: info.peca_solucao }));
+            setCadastrando(null);
+          }}
+        />
+      )}
 
       {confirmando && (
         <PopupConfirmar
