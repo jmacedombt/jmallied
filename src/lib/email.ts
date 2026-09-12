@@ -266,6 +266,20 @@ export async function enviarEmailGmail(params: {
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
+    // sem isso, o nodemailer usa os timeouts padrão dele (2min pra
+    // conectar, 10min de socket) — bem maiores que o maxDuration das
+    // rotas de envio (60s). Se o Gmail travar/demorar (rede instável,
+    // limite de envio etc.), a função é MATADA pela Vercel antes desses
+    // timeouts padrão agirem, e quem chamou (persistirEEnviarLote) nunca
+    // recebe o erro pra tratar — o usuário só vê um "Gateway Timeout" cru
+    // da plataforma, sem o aviso normal de "e-mail não enviado" e sem o
+    // registro em orcamento_envios/envios_email. Com um timeout curto
+    // aqui, um Gmail lento vira um erro comum, capturado no try/catch de
+    // persistirEEnviarLote (que já nunca deixa a falha de e-mail travar
+    // o envio) bem dentro do prazo da função.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
     auth: {
       user: params.gmailUser,
       pass: params.gmailSenhaApp,
