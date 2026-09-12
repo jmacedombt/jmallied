@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, Gauge, PackageCheck, ShieldCheck } from "lucide-react";
+import { BarChart3, Gauge, PackageCheck, ShieldCheck, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
@@ -36,6 +36,14 @@ const TILES = [
     icone: ShieldCheck,
     cor: "#dc2626",
     clara: "#f87171",
+  },
+  {
+    href: "/metricas/previsao-recebimento",
+    titulo: "Previsão de Recebimento",
+    descricao: "Mão de Obra e Peças já aprovadas pela Allied em 5 - Ag. Peças, 6 - Ag. Reparo e 7 - Reparo Finalizado — o que vamos receber.",
+    icone: Wallet,
+    cor: "#d97706",
+    clara: "#fbbf24",
   },
 ];
 

@@ -11,6 +11,7 @@ import {
   type CamposPecasOrcamento,
 } from "@/lib/orcamentos";
 import { calcularRTatAoVivo, formatarDias } from "@/lib/metricas";
+import CardValorPrevisao from "@/components/CardValorPrevisao";
 import { type AparelhoAgAbertura } from "@/components/TabelaAgAbertura";
 import PainelAgAbertura from "@/components/PainelAgAbertura";
 import PainelAgTriagem from "@/components/PainelAgTriagem";
@@ -109,6 +110,18 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         {quantidade > 0 && <span style={{ color: "var(--muted)" }}>· {quantidade}</span>}
       </span>
     );
+  }
+
+  // Card "Mão de Obra | Peças" do topo de "5 - Ag. Peças", "6 - Ag.
+  // Reparo" e "7 - Reparo Finalizado" — só nelas o orçamento já foi
+  // aprovado pela Allied, então é o que vamos efetivamente receber (ver
+  // migration 0040_previsao_recebimento.sql e o gráfico em Métricas >
+  // Previsão de Recebimento, que mostra as 3 juntas). Soma só os
+  // aparelhos PARADOS NESSA etapa agora, igual o R-TAT "ao vivo" acima.
+  async function cardPrevisao(statusValor: string) {
+    const { data } = await supabase.rpc("previsao_recebimento_resumo", { p_status: statusValor });
+    const linha = (data ?? [])[0] as { mao_de_obra: number; venda_pecas: number } | undefined;
+    return <CardValorPrevisao maoDeObra={Number(linha?.mao_de_obra ?? 0)} vendaPecas={Number(linha?.venda_pecas ?? 0)} />;
   }
 
   // ALLIED (login externo, só consulta) enxerga qualquer etapa, mas
@@ -532,6 +545,8 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       .order("pedido_peca_feito", { ascending: true })
       .order("updated_at", { ascending: false });
 
+    const cardPrevisaoEl = await cardPrevisao(status.valor);
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelAgPecas
@@ -542,6 +557,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
               {voltar}
               {badgeContador(aparelhos?.length ?? 0)}
               {badgeRTat(aparelhos ?? [])}
+              {cardPrevisaoEl}
             </>
           }
           mensagemVazia="Nenhum aparelho em 5 - Ag. Peças no momento."
@@ -601,6 +617,8 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 0),
     };
 
+    const cardPrevisaoEl = await cardPrevisao(status.valor);
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelAgReparo
@@ -615,6 +633,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
               {voltar}
               {badgeContador(aparelhos?.length ?? 0)}
               {badgeRTat(aparelhos ?? [])}
+              {cardPrevisaoEl}
             </>
           }
           mensagemVazia="Nenhum aparelho em 6 - Ag. Reparo no momento."
@@ -665,6 +684,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     .order("updated_at", { ascending: false });
 
   const etapaNumerada = /^\d/.test(status.valor);
+  const cardPrevisaoEl = status.slug === "7-reparo-finalizado" ? await cardPrevisao(status.valor) : null;
 
   return (
     <AppShell titulo={status.label} perfil={perfil}>
@@ -672,6 +692,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         {voltar}
         {badgeContador(aparelhos?.length ?? 0)}
         {etapaNumerada && badgeRTat(aparelhos ?? [])}
+        {cardPrevisaoEl}
       </div>
       <PainelEtapaSimples
         aparelhos={(aparelhos ?? []) as AparelhoEtapaSimples[]}

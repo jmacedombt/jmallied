@@ -528,3 +528,43 @@ export function serieOqcDoResultado(pontos: PontoPeriodoOqc[], resultado: Result
   const filtrados = pontos.filter((p) => p.resultado === resultado);
   return completarSerie(filtrados, periodos);
 }
+
+// ---- Métricas > Previsão de Recebimento — ver migration
+// 0040_previsao_recebimento.sql ----
+
+/** As 3 etapas em que o orçamento já foi aprovado pela Allied (é o que
+ * vamos efetivamente receber) — mesma ordem/cores usadas no gráfico e
+ * nos cards do topo das 3 telas. Cores validadas (contraste + CVD) com
+ * o script da skill de dataviz, pros dois papéis (Mão de Obra / Peças)
+ * de cada barra. */
+export const STATUS_PREVISAO_RECEBIMENTO = [
+  { valor: "5-ag-pecas", label: "5 - Ag. Peças" },
+  { valor: "6-ag-reparo", label: "6 - Ag. Reparo" },
+  { valor: "7-reparo-finalizado", label: "7 - Reparo Finalizado" },
+] as const;
+
+export const COR_MAO_DE_OBRA = "#2f6fed";
+export const COR_VENDA_PECAS = "#16a34a";
+
+/** Uma linha por etapa, exatamente como volta de
+ * previsao_recebimento_resumo (mao_de_obra/venda_pecas já são a soma
+ * usando o valor VIGENTE de cada aparelho — reorçamento aprovado, senão
+ * contra proposta ajustada, senão validação — ver comentário da
+ * função). */
+export type LinhaPrevisaoRecebimento = {
+  statusOperacional: string;
+  maoDeObra: number;
+  vendaPecas: number;
+  quantidade: number;
+};
+
+/** Preenche com zero as etapas que a RPC não devolveu (nenhum aparelho
+ * parado ali agora) — sem isso o gráfico "sumiria" com a barra da etapa
+ * vazia em vez de mostrar 0, e o card do topo ficaria sem dado quando
+ * chamado só pra aquela etapa. */
+export function completarPrevisaoRecebimento(linhas: LinhaPrevisaoRecebimento[]): LinhaPrevisaoRecebimento[] {
+  const porStatus = new Map(linhas.map((l) => [l.statusOperacional, l]));
+  return STATUS_PREVISAO_RECEBIMENTO.map(
+    (s) => porStatus.get(s.valor) ?? { statusOperacional: s.valor, maoDeObra: 0, vendaPecas: 0, quantidade: 0 }
+  );
+}
