@@ -113,12 +113,15 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
   }
 
   // Card "Mão de Obra | Peças" do topo de "5 - Ag. Peças", "6 - Ag.
-  // Reparo" e "7 - Reparo Finalizado" — só nelas o orçamento já foi
-  // aprovado pela Allied, então é o que vamos efetivamente receber (ver
-  // migration 0040_previsao_recebimento.sql e o gráfico em Métricas >
-  // Previsão de Recebimento, que mostra as 3 juntas). Soma só os
-  // aparelhos PARADOS NESSA etapa agora, igual o R-TAT "ao vivo" acima.
-  async function cardPrevisao(statusValor: string) {
+  // Reparo", "OQC - Controle de Qualidade", "7 - Reparo Finalizado" e
+  // "8 - Orçamento Reprovado" (ver migrations 0040/0041/0042). Nas 4
+  // primeiras é valor já aprovado pela Allied, o que vamos efetivamente
+  // receber (ver também o gráfico em Métricas > Previsão de
+  // Recebimento, que soma 5/6/7). Em "8 - Orçamento Reprovado" é o
+  // valor que foi recusado — variante="reprovado" só troca o texto do
+  // tooltip. Soma só os aparelhos PARADOS NESSA etapa agora, igual o
+  // R-TAT "ao vivo" acima.
+  async function cardPrevisao(statusValor: string, variante: "receber" | "reprovado" = "receber") {
     const { data, error } = await supabase.rpc("previsao_recebimento_resumo", { p_status: statusValor });
     if (error) {
       // não deixa passar em silêncio — sem isso, um erro (ex: a migration
@@ -129,7 +132,13 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       return <CardValorPrevisao maoDeObra={0} vendaPecas={0} indisponivel />;
     }
     const linha = (data ?? [])[0] as { mao_de_obra: number; venda_pecas: number } | undefined;
-    return <CardValorPrevisao maoDeObra={Number(linha?.mao_de_obra ?? 0)} vendaPecas={Number(linha?.venda_pecas ?? 0)} />;
+    return (
+      <CardValorPrevisao
+        maoDeObra={Number(linha?.mao_de_obra ?? 0)}
+        vendaPecas={Number(linha?.venda_pecas ?? 0)}
+        variante={variante}
+      />
+    );
   }
 
   // ALLIED (login externo, só consulta) enxerga qualquer etapa, mas
@@ -522,6 +531,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       multiplicador: Number(f.multiplicador),
     }));
     const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
+    const cardPrevisaoEl = await cardPrevisao(status.valor, "reprovado");
 
     return (
       <AppShell titulo={status.label} perfil={perfil}>
@@ -536,6 +546,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
               {voltar}
               {badgeContador(aparelhos?.length ?? 0)}
               {badgeRTat(aparelhos ?? [])}
+              {cardPrevisaoEl}
             </>
           }
         />
@@ -659,6 +670,8 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       .eq("status_operacional", status.valor)
       .order("updated_at", { ascending: false });
 
+    const cardPrevisaoEl = await cardPrevisao(status.valor);
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelOqc
@@ -668,6 +681,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
             <>
               {voltar}
               {badgeContador(aparelhos?.length ?? 0)}
+              {cardPrevisaoEl}
             </>
           }
           mensagemVazia="Nenhum aparelho em OQC - Controle de Qualidade no momento."
