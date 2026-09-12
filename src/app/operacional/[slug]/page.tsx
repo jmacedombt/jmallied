@@ -119,7 +119,15 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
   // Previsão de Recebimento, que mostra as 3 juntas). Soma só os
   // aparelhos PARADOS NESSA etapa agora, igual o R-TAT "ao vivo" acima.
   async function cardPrevisao(statusValor: string) {
-    const { data } = await supabase.rpc("previsao_recebimento_resumo", { p_status: statusValor });
+    const { data, error } = await supabase.rpc("previsao_recebimento_resumo", { p_status: statusValor });
+    if (error) {
+      // não deixa passar em silêncio — sem isso, um erro (ex: a migration
+      // 0040 ainda não rodou) virava um enganoso "R$ 0,00" na tela, como
+      // se não tivesse nada a receber. Fica registrado no log do servidor
+      // (Vercel > Logs) e a pill mostra "—" em vez do valor.
+      console.error("previsao_recebimento_resumo:", error.message);
+      return <CardValorPrevisao maoDeObra={0} vendaPecas={0} indisponivel />;
+    }
     const linha = (data ?? [])[0] as { mao_de_obra: number; venda_pecas: number } | undefined;
     return <CardValorPrevisao maoDeObra={Number(linha?.mao_de_obra ?? 0)} vendaPecas={Number(linha?.venda_pecas ?? 0)} />;
   }
