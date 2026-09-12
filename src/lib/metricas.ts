@@ -6,7 +6,13 @@
  * aparelho (orcamentos.data_reconhecimento), que é sempre o "dia zero"
  * usado pra calcular R-TAT.
  */
-import { STATUS_OPERACIONAL, STATUS_ORCAMENTO_FECHADOS } from "@/lib/orcamentos";
+import {
+  STATUS_OPERACIONAL,
+  STATUS_ORCAMENTO_FECHADOS,
+  STATUS_AG_PECAS,
+  STATUS_AG_REPARO,
+  STATUS_REPARO_FINALIZADO,
+} from "@/lib/orcamentos";
 
 export type Granularidade = "dia" | "semana" | "mes";
 
@@ -537,10 +543,15 @@ export function serieOqcDoResultado(pontos: PontoPeriodoOqc[], resultado: Result
  * nos cards do topo das 3 telas. Cores validadas (contraste + CVD) com
  * o script da skill de dataviz, pros dois papéis (Mão de Obra / Peças)
  * de cada barra. */
+// "valor" aqui tem que ser exatamente o texto gravado na coluna
+// status_operacional (o mesmo STATUS_AG_PECAS/STATUS_AG_REPARO/
+// STATUS_REPARO_FINALIZADO usado no resto do sistema) — NUNCA o slug da
+// URL (ex: "6-ag-reparo"), que é um valor diferente e só existe no
+// roteamento de operacional/[slug]. Bug corrigido na migration 0041.
 export const STATUS_PREVISAO_RECEBIMENTO = [
-  { valor: "5-ag-pecas", label: "5 - Ag. Peças" },
-  { valor: "6-ag-reparo", label: "6 - Ag. Reparo" },
-  { valor: "7-reparo-finalizado", label: "7 - Reparo Finalizado" },
+  { valor: STATUS_AG_PECAS, label: "5 - Ag. Peças" },
+  { valor: STATUS_AG_REPARO, label: "6 - Ag. Reparo" },
+  { valor: STATUS_REPARO_FINALIZADO, label: "7 - Reparo Finalizado" },
 ] as const;
 
 export const COR_MAO_DE_OBRA = "#2f6fed";
