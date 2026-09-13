@@ -324,6 +324,15 @@ export type CamposPecasOrcamento = {
   peca_add_1: string | null; peca_add_2: string | null; peca_add_3: string | null; peca_add_4: string | null; peca_add_5: string | null;
 };
 
+/** Igual a CamposPecasOrcamento, mas com o custo de cada peça junto —
+ * usado na exportação pro N3 (ver lib/exportN3.ts), que precisa do
+ * VALOR de cada peça, não só o código. */
+export type CamposPecasComCusto = CamposPecasOrcamento & {
+  custo_peca_1: number | null; custo_peca_2: number | null; custo_peca_3: number | null; custo_peca_4: number | null; custo_peca_5: number | null;
+  custo_peca_6: number | null; custo_peca_7: number | null; custo_peca_8: number | null; custo_peca_9: number | null; custo_peca_10: number | null;
+  custo_peca_add_1: number | null; custo_peca_add_2: number | null; custo_peca_add_3: number | null; custo_peca_add_4: number | null; custo_peca_add_5: number | null;
+};
+
 export type DetalheValidacaoOrcamento = {
   quantidadePecas: number;
   /** soma do custo cru de cada peça, direto da Base Peças. */
@@ -353,6 +362,36 @@ export type DetalheValidacaoOrcamento = {
   temPecaSemCusto: boolean;
   pecas: PecaDetalheValidacao[];
 };
+
+/** Campos crus do orçamento usados pra descobrir o valor VIGENTE (Mão
+ * de Obra / Venda de Peças) — mesma prioridade usada em toda a
+ * Previsão de Recebimento (ver migration 0040_previsao_recebimento.sql
+ * e lib/metricas.ts): reorçamento aprovado (se tiver) > contra proposta
+ * ajustada (se tiver) > validação original. Usado no card do topo de
+ * 5/6/OQC/7/8, no gráfico de Métricas > Previsão de Recebimento, e na
+ * exportação pro N3 (ver lib/exportN3.ts). */
+export type CamposValorVigente = {
+  aprovado_reorcamento_em: string | null;
+  reorcamento_detalhe: DetalheValidacaoOrcamento | null;
+  contra_proposta_ajustado: boolean | null;
+  contra_proposta_pecas: unknown[] | null;
+  contra_proposta_mao_de_obra: number | null;
+  validacao_snapshot: DetalheValidacaoOrcamento | null;
+};
+
+export function calcularMaoDeObraVigente(o: CamposValorVigente): number {
+  if (o.aprovado_reorcamento_em && o.reorcamento_detalhe) return o.reorcamento_detalhe.maoDeObra ?? 0;
+  if (o.contra_proposta_ajustado && o.contra_proposta_pecas) return o.contra_proposta_mao_de_obra ?? 0;
+  return o.validacao_snapshot?.maoDeObra ?? 0;
+}
+
+export function calcularVendaPecasVigente(o: CamposValorVigente): number {
+  if (o.aprovado_reorcamento_em && o.reorcamento_detalhe) return o.reorcamento_detalhe.vendaTotalPecas ?? 0;
+  if (o.contra_proposta_ajustado && o.contra_proposta_pecas) {
+    return (o.contra_proposta_pecas as { vendaNova?: number }[]).reduce((soma, p) => soma + (p.vendaNova ?? 0), 0);
+  }
+  return o.validacao_snapshot?.vendaTotalPecas ?? 0;
+}
 
 /**
  * Monta o detalhe de peças de um orçamento pra Validação de Orçamentos:

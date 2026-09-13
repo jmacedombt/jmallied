@@ -9,6 +9,8 @@ import {
   aplicarAjusteManualValidacao,
   STATUS_ETAPAS_ANTERIORES_A_VALIDACAO,
   GRUPO_STATUS_AG_EMISSAO_NF,
+  calcularMaoDeObraVigente,
+  calcularVendaPecasVigente,
   type CamposPecasOrcamento,
 } from "@/lib/orcamentos";
 import { calcularRTatAoVivo, formatarDias } from "@/lib/metricas";
@@ -698,7 +700,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, pre_ordem, data_reconhecimento"
+        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, pre_ordem, nf_remessa_allied, data_reconhecimento, ${COLUNAS_PECAS}, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5, custo_peca_add_1, custo_peca_add_2, custo_peca_add_3, custo_peca_add_4, custo_peca_add_5, reorcamento_detalhe, contra_proposta_ajustado, contra_proposta_pecas, contra_proposta_mao_de_obra, aprovado_reorcamento_em`
       )
       .eq("status_operacional", status.valor)
       .order("updated_at", { ascending: false });
@@ -736,15 +738,34 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pre_ordem, status_operacional, updated_at"
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pre_ordem, status_operacional, nf_remessa_allied, aprovado_reorcamento_em, reorcamento_detalhe, contra_proposta_ajustado, contra_proposta_pecas, contra_proposta_mao_de_obra, validacao_snapshot, updated_at"
       )
       .in("status_operacional", GRUPO_STATUS_AG_EMISSAO_NF)
       .order("updated_at", { ascending: false });
 
+    // Mão de Obra/Venda de Peças já calculadas aqui (valor VIGENTE, mesma
+    // prioridade de toda a Previsão de Recebimento) — o componente client
+    // só recebe os 2 números prontos, sem precisar saber nada de
+    // reorçamento/contra proposta/validação.
+    const itensComValor: AparelhoAgEmissaoNf[] = (aparelhos ?? []).map((a) => ({
+      id: a.id,
+      os_reparadora: a.os_reparadora,
+      trade_allied: a.trade_allied,
+      os_care_allied: a.os_care_allied,
+      modelo_comercial: a.modelo_comercial,
+      sku: a.sku,
+      descricao_completa: a.descricao_completa,
+      pre_ordem: a.pre_ordem,
+      status_operacional: a.status_operacional,
+      nf_remessa_allied: a.nf_remessa_allied,
+      maoDeObra: calcularMaoDeObraVigente(a),
+      vendaPecas: calcularVendaPecasVigente(a),
+    }));
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelAgEmissaoNf
-          aparelhos={(aparelhos ?? []) as AparelhoAgEmissaoNf[]}
+          aparelhos={itensComValor}
           topo={
             <>
               {voltar}

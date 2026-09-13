@@ -8,21 +8,29 @@ import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import PopupBipagemSelecao from "@/components/PopupBipagemSelecao";
 import PopupConfirmar from "@/components/PopupConfirmar";
 import { gerarExcelPreOrdem } from "@/lib/preOrdemExport";
-import { podeEmitirNfEmLote, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import { gerarExcelExportacaoN3, type ItemExportacaoN3 } from "@/lib/exportN3";
+import {
+  podeEmitirNfEmLote,
+  type DetalheValidacaoOrcamento,
+  type CamposPecasComCusto,
+  type CamposValorVigente,
+} from "@/lib/orcamentos";
 
 type Perfil = { cargo: string; is_master: boolean } | null;
 
-export type AparelhoReparoFinalizado = {
-  id: string;
-  os_reparadora: string | null;
-  trade_allied: string;
-  os_care_allied: string | null;
-  modelo_comercial: string | null;
-  sku: string | null;
-  descricao_completa: string | null;
-  validacao_snapshot: DetalheValidacaoOrcamento | null;
-  pre_ordem: string | null;
-};
+export type AparelhoReparoFinalizado = CamposPecasComCusto &
+  CamposValorVigente & {
+    id: string;
+    os_reparadora: string | null;
+    trade_allied: string;
+    os_care_allied: string | null;
+    modelo_comercial: string | null;
+    sku: string | null;
+    descricao_completa: string | null;
+    validacao_snapshot: DetalheValidacaoOrcamento | null;
+    pre_ordem: string | null;
+    nf_remessa_allied: string;
+  };
 
 function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -30,12 +38,16 @@ function esperar(ms: number) {
 
 // Tela de "7 - Reparo Finalizado" — antes usava a tabela genérica
 // PainelEtapaSimples (só consulta + reprovar), agora ganhou tela
-// própria pra ter a coluna Pré Ordem em destaque e o mesmo fluxo de
-// "Emitir NF - Envio de Pré Ordem" de "8 - Orçamento Reprovado":
-// seleção manual ou por bipagem (Trade Allied ou OS Reparadora),
-// exportação da Pré Ordem em Excel, e o botão que gera o Excel e move
-// os selecionados pra "Ag. Emissão de Nota Fiscal" (status
-// "Ag. NF Serviço / Venda / Retorno"). Continua permitindo reprovar
+// própria pra ter a coluna Pré Ordem em destaque e o fluxo de seleção
+// manual ou por bipagem (Trade Allied ou OS Reparadora) + "Exportar
+// para o N3" — que gera o Excel no formato exato que o N3 espera (ver
+// lib/exportN3.ts: DATA_ENCERRAMENTO, SERVICE, PEÇA 1..10/VLR. PEÇA
+// 1..10 com as peças Add encaixadas logo após a última peça normal
+// preenchida) e move os selecionados pra "Ag. Emissão de Nota Fiscal"
+// (status "Ag. NF Serviço / Venda / Retorno"). O botão "Exportar Pré
+// Ordem (Excel)" continua à parte — é só uma conferência rápida da
+// Pré Ordem, sem mexer no status de ninguém (mesmo formato simples de
+// "8 - Orçamento Reprovado"). Continua permitindo reprovar
 // individualmente e abrir o pop-up de peças ao clicar na linha, igual
 // antes.
 export default function PainelReparoFinalizado({
@@ -130,10 +142,7 @@ export default function PainelReparoFinalizado({
         return;
       }
 
-      gerarExcelPreOrdem(
-        itens.filter((a) => ids.includes(a.id)),
-        "Envio_Pre_Ordem"
-      );
+      gerarExcelExportacaoN3(itens.filter((a) => ids.includes(a.id)) as ItemExportacaoN3[]);
 
       setConfirmandoEmissao(false);
       setBipagemAberta(false);
@@ -233,7 +242,7 @@ export default function PainelReparoFinalizado({
               style={{ background: "var(--accent)" }}
             >
               <CheckSquare size={14} />
-              Emitir NF - Envio de Pré Ordem ({selecionados.size})
+              Exportar para o N3 ({selecionados.size})
             </button>
           </div>
         </div>
@@ -375,22 +384,22 @@ export default function PainelReparoFinalizado({
           }}
           emitindo={false}
           erroEmitir={null}
-          rotuloEmitir="Emitir NF - Envio de Pré Ordem"
+          rotuloEmitir="Exportar para o N3"
           onFechar={() => setBipagemAberta(false)}
         />
       )}
 
       {confirmandoEmissao && (
         <PopupConfirmar
-          titulo="Emitir NF - Envio de Pré Ordem"
+          titulo="Exportar para o N3"
           mensagem={
             <>
-              Confirma a emissão da NF dos <strong>{selecionados.size}</strong> aparelho(s) selecionado(s)? Vai gerar o
-              Excel de Pré Ordem e mover todos pra <strong>Ag. Emissão de Nota Fiscal</strong> (status{" "}
+              Confirma a exportação dos <strong>{selecionados.size}</strong> aparelho(s) selecionado(s)? Vai gerar o
+              Excel no formato do N3 e mover todos pra <strong>Ag. Emissão de Nota Fiscal</strong> (status{" "}
               <strong>Ag. NF Serviço / Venda / Retorno</strong>).
             </>
           }
-          rotuloConfirmar="Emitir NF"
+          rotuloConfirmar="Exportar para o N3"
           carregando={emitindo}
           erro={erroEmitir}
           onConfirmar={emitirNf}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import PopupDetalheGrupoNf from "@/components/PopupDetalheGrupoNf";
 import { STATUS_AG_NF_RETORNO_RECUSADOS, STATUS_AG_NF_SERVICO_VENDA_RETORNO } from "@/lib/orcamentos";
 
 export type AparelhoAgEmissaoNf = {
@@ -14,21 +15,130 @@ export type AparelhoAgEmissaoNf = {
   descricao_completa: string | null;
   pre_ordem: string | null;
   status_operacional: string;
+  nf_remessa_allied: string;
+  /** valor VIGENTE (mesma prioridade da Previsão de Recebimento) — já
+   * calculado no servidor, ver operacional/[slug]/page.tsx. */
+  maoDeObra: number;
+  vendaPecas: number;
 };
 
-const TODOS = "__todos__";
-
-const CORES_STATUS: Record<string, { cor: string; fundo: string }> = {
-  [STATUS_AG_NF_RETORNO_RECUSADOS]: { cor: "#f87171", fundo: "rgba(239, 68, 68, 0.14)" },
-  [STATUS_AG_NF_SERVICO_VENDA_RETORNO]: { cor: "#34d399", fundo: "rgba(16, 185, 129, 0.14)" },
+type GrupoNfRemessa = {
+  nfRemessa: string;
+  quantidade: number;
+  maoDeObra: number;
+  vendaPecas: number;
+  itens: AparelhoAgEmissaoNf[];
 };
+
+function agruparPorNfRemessa(itens: AparelhoAgEmissaoNf[]): GrupoNfRemessa[] {
+  const mapa = new Map<string, GrupoNfRemessa>();
+  for (const a of itens) {
+    const chave = a.nf_remessa_allied || "—";
+    const atual = mapa.get(chave) ?? { nfRemessa: chave, quantidade: 0, maoDeObra: 0, vendaPecas: 0, itens: [] };
+    atual.quantidade += 1;
+    atual.maoDeObra += a.maoDeObra;
+    atual.vendaPecas += a.vendaPecas;
+    atual.itens.push(a);
+    mapa.set(chave, atual);
+  }
+  return Array.from(mapa.values()).sort((a, b) => b.nfRemessa.localeCompare(a.nfRemessa, "pt-BR", { numeric: true }));
+}
+
+function formatarReal(valor: number): string {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function TabelaGrupos({
+  titulo,
+  cor,
+  grupos,
+  onAbrirDetalhe,
+}: {
+  titulo: string;
+  cor: string;
+  grupos: GrupoNfRemessa[];
+  onAbrirDetalhe: (grupo: GrupoNfRemessa) => void;
+}) {
+  const totalQuantidade = grupos.reduce((soma, g) => soma + g.quantidade, 0);
+  const totalMaoDeObra = grupos.reduce((soma, g) => soma + g.maoDeObra, 0);
+  const totalVendaPecas = grupos.reduce((soma, g) => soma + g.vendaPecas, 0);
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--ink)" }}>
+        <span className="inline-block w-2 h-2 rounded-full" style={{ background: cor }} />
+        {titulo}
+      </p>
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
+              <th className="px-4 py-2.5 font-medium">NF Remessa</th>
+              <th className="px-4 py-2.5 font-medium">Quantidade</th>
+              <th className="px-4 py-2.5 font-medium text-right">Mão de Obra</th>
+              <th className="px-4 py-2.5 font-medium text-right">Venda Peças</th>
+              <th className="px-4 py-2.5 font-medium w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {grupos.map((g) => (
+              <tr
+                key={g.nfRemessa}
+                onClick={() => onAbrirDetalhe(g)}
+                className="border-t cursor-pointer transition hover:bg-[var(--surface2)]"
+                style={{ borderColor: "var(--line)", background: "var(--surface)" }}
+                title="Clique pra ver os orçamentos dessa NF Remessa"
+              >
+                <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
+                  {g.nfRemessa}
+                </td>
+                <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
+                  {g.quantidade}
+                </td>
+                <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
+                  {formatarReal(g.maoDeObra)}
+                </td>
+                <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
+                  {formatarReal(g.vendaPecas)}
+                </td>
+                <td className="px-4 py-2.5 text-right" style={{ color: "var(--muted)" }}>
+                  <ChevronRight size={14} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t font-semibold" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+              <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
+                Total
+              </td>
+              <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
+                {totalQuantidade}
+              </td>
+              <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
+                {formatarReal(totalMaoDeObra)}
+              </td>
+              <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
+                {formatarReal(totalVendaPecas)}
+              </td>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 // Tela "Ag. Emissão de Nota Fiscal" — junta os aparelhos que saíram de
-// "7 - Reparo Finalizado" (status "Ag. NF Serviço / Venda / Retorno") e
-// de "8 - Orçamento Reprovado" (status "Ag. NF Retorno (Recusados)")
-// depois do "Emitir NF - Envio de Pré Ordem" de cada etapa. Ainda é só
-// consulta — o filtro de Status deixa ver os 2 juntos ou só um dos
-// dois. Coluna Pré Ordem em destaque, igual nas 2 telas de origem.
+// "7 - Reparo Finalizado" (Aprovados, status "Ag. NF Serviço / Venda /
+// Retorno") e de "8 - Orçamento Reprovado" (Recusados, status
+// "Ag. NF Retorno (Recusados)"), mas SEPARADOS em 2 blocos (só quando
+// tem aparelho dos dois grupos ao mesmo tempo — se só tiver de um,
+// mostra só aquele). Dentro de cada bloco, primeiro resume por NF
+// Remessa (quantidade + Mão de Obra + Venda Peças vigentes, somadas);
+// clicar numa NF Remessa (ou na Quantidade) abre o detalhe dos
+// orçamentos daquele lote.
 export default function PainelAgEmissaoNf({
   aparelhos,
   topo,
@@ -38,141 +148,55 @@ export default function PainelAgEmissaoNf({
   topo: React.ReactNode;
   mensagemVazia?: string;
 }) {
-  const [buscaOs, setBuscaOs] = useState("");
-  const [buscaTrade, setBuscaTrade] = useState("");
-  const [statusEscolhido, setStatusEscolhido] = useState(TODOS);
+  const [detalheGrupo, setDetalheGrupo] = useState<GrupoNfRemessa | null>(null);
 
-  const filtrados = useMemo(() => {
-    const os = buscaOs.trim();
-    const trade = buscaTrade.trim().toLowerCase();
-    return aparelhos.filter((a) => {
-      if (statusEscolhido !== TODOS && a.status_operacional !== statusEscolhido) return false;
-      if (os && !(a.os_reparadora ?? "").includes(os)) return false;
-      if (trade && !a.trade_allied.toLowerCase().includes(trade)) return false;
-      return true;
-    });
-  }, [aparelhos, buscaOs, buscaTrade, statusEscolhido]);
+  const aprovados = useMemo(
+    () => aparelhos.filter((a) => a.status_operacional === STATUS_AG_NF_SERVICO_VENDA_RETORNO),
+    [aparelhos]
+  );
+  const recusados = useMemo(
+    () => aparelhos.filter((a) => a.status_operacional === STATUS_AG_NF_RETORNO_RECUSADOS),
+    [aparelhos]
+  );
+
+  const gruposAprovados = useMemo(() => agruparPorNfRemessa(aprovados), [aprovados]);
+  const gruposRecusados = useMemo(() => agruparPorNfRemessa(recusados), [recusados]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
-        <div className="flex items-center flex-wrap [&>*]:!mb-0">{topo}</div>
+    <div className="space-y-6">
+      <div className="flex items-center flex-wrap">{topo}</div>
 
-        <div className="flex items-center flex-wrap gap-2">
-          <select
-            value={statusEscolhido}
-            onChange={(e) => setStatusEscolhido(e.target.value)}
-            className="px-3 py-1.5 rounded-lg border text-xs"
-            style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
-            aria-label="Filtrar por Status"
-          >
-            <option value={TODOS}>Todos os status</option>
-            <option value={STATUS_AG_NF_SERVICO_VENDA_RETORNO}>{STATUS_AG_NF_SERVICO_VENDA_RETORNO}</option>
-            <option value={STATUS_AG_NF_RETORNO_RECUSADOS}>{STATUS_AG_NF_RETORNO_RECUSADOS}</option>
-          </select>
-          <div className="relative">
-            <Search
-              size={13}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-              style={{ color: "var(--muted)" }}
-            />
-            <input
-              type="text"
-              value={buscaOs}
-              onChange={(e) => setBuscaOs(e.target.value)}
-              placeholder="Buscar por OS Reparadora"
-              className="pl-7 pr-3 py-1.5 rounded-lg border text-xs w-48"
-              style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
-            />
-          </div>
-          <div className="relative">
-            <Search
-              size={13}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-              style={{ color: "var(--muted)" }}
-            />
-            <input
-              type="text"
-              value={buscaTrade}
-              onChange={(e) => setBuscaTrade(e.target.value)}
-              placeholder="Buscar por Trade Allied"
-              className="pl-7 pr-3 py-1.5 rounded-lg border text-xs w-48"
-              style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
-            />
-          </div>
-        </div>
-      </div>
+      {aparelhos.length === 0 && (
+        <p className="text-sm py-8 text-center rounded-xl border" style={{ color: "var(--muted)", borderColor: "var(--line)" }}>
+          {mensagemVazia}
+        </p>
+      )}
 
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
-              <th className="px-4 py-2.5 font-medium">OS Reparadora</th>
-              <th className="px-4 py-2.5 font-medium">Trade Allied</th>
-              <th className="px-4 py-2.5 font-medium">OS Care Allied</th>
-              <th className="px-4 py-2.5 font-medium">Modelo comercial</th>
-              <th className="px-4 py-2.5 font-medium">SKU</th>
-              <th className="px-4 py-2.5 font-medium">Descrição</th>
-              <th className="px-4 py-2.5 font-medium" style={{ background: "rgba(250, 204, 21, 0.14)" }}>
-                Pré Ordem
-              </th>
-              <th className="px-4 py-2.5 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtrados.map((a) => {
-              const corStatus = CORES_STATUS[a.status_operacional];
-              return (
-                <tr
-                  key={a.id}
-                  className="border-t"
-                  style={{ borderColor: "var(--line)", background: "var(--surface)" }}
-                >
-                  <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
-                    {a.os_reparadora || "—"}
-                  </td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
-                    {a.trade_allied}
-                  </td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
-                    {a.os_care_allied}
-                  </td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
-                    {a.modelo_comercial}
-                  </td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
-                    {a.sku}
-                  </td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }} title={a.descricao_completa ?? ""}>
-                    {(a.descricao_completa ?? "").split(" ")[0]}
-                  </td>
-                  <td
-                    className="px-4 py-2.5 font-semibold"
-                    style={{ background: "rgba(250, 204, 21, 0.14)", color: "var(--ink)" }}
-                  >
-                    {a.pre_ordem || "—"}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <span
-                      className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap"
-                      style={{ background: corStatus?.fundo ?? "var(--surface2)", color: corStatus?.cor ?? "var(--muted)" }}
-                    >
-                      {a.status_operacional}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-            {filtrados.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
-                  {aparelhos.length === 0 ? mensagemVazia : "Nenhum aparelho encontrado com esse filtro."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {gruposAprovados.length > 0 && (
+        <TabelaGrupos
+          titulo="Aprovados — vindos de 7 - Reparo Finalizado"
+          cor="#34d399"
+          grupos={gruposAprovados}
+          onAbrirDetalhe={setDetalheGrupo}
+        />
+      )}
+
+      {gruposRecusados.length > 0 && (
+        <TabelaGrupos
+          titulo="Recusados — vindos de 8 - Orçamento Reprovado"
+          cor="#f87171"
+          grupos={gruposRecusados}
+          onAbrirDetalhe={setDetalheGrupo}
+        />
+      )}
+
+      {detalheGrupo && (
+        <PopupDetalheGrupoNf
+          nfRemessa={detalheGrupo.nfRemessa}
+          itens={detalheGrupo.itens}
+          onFechar={() => setDetalheGrupo(null)}
+        />
+      )}
     </div>
   );
 }
