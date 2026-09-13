@@ -8,6 +8,7 @@ import {
   calcularDetalheValidacao,
   aplicarAjusteManualValidacao,
   STATUS_ETAPAS_ANTERIORES_A_VALIDACAO,
+  GRUPO_STATUS_AG_EMISSAO_NF,
   type CamposPecasOrcamento,
 } from "@/lib/orcamentos";
 import { calcularRTatAoVivo, formatarDias } from "@/lib/metricas";
@@ -24,6 +25,8 @@ import PainelRespostaReorcamento, { type AparelhoRespostaReorcamento } from "@/c
 import PainelAgPecas, { type AparelhoAgPecas } from "@/components/PainelAgPecas";
 import PainelAgReparo, { type AparelhoAgReparo, type FalhaOqcResumo } from "@/components/PainelAgReparo";
 import PainelOqc, { type AparelhoOqcLista } from "@/components/PainelOqc";
+import PainelReparoFinalizado, { type AparelhoReparoFinalizado } from "@/components/PainelReparoFinalizado";
+import PainelAgEmissaoNf, { type AparelhoAgEmissaoNf } from "@/components/PainelAgEmissaoNf";
 import PainelEtapaSimples, { type AparelhoEtapaSimples } from "@/components/PainelEtapaSimples";
 import PainelOperacionalAllied from "@/components/PainelOperacionalAllied";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
@@ -506,7 +509,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, motivo_reprova, reprovado_em, data_reconhecimento, usuarios:reprovado_por (nome, sobrenome), ${COLUNAS_PECAS}`
+        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pre_ordem, motivo_reprova, reprovado_em, data_reconhecimento, usuarios:reprovado_por (nome, sobrenome), ${COLUNAS_PECAS}`
       )
       .eq("status_operacional", status.valor)
       .order("reprovado_em", { ascending: false, nullsFirst: false });
@@ -537,6 +540,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelOrcamentoReprovado
           aparelhos={listaAparelhos}
+          perfil={perfil}
           precosBidIniciais={precosBid}
           faixas={faixas}
           icmsPercentual={icmsPercentual}
@@ -690,13 +694,76 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
-  // etapas ainda sem tela própria (7 e Produto Entregue — "3",
-  // "Ag. Contra Proposta", "4", "5", "6" e "OQC - Controle de Qualidade"
-  // já ganharam tela própria acima) — só a lista, com o ícone de
-  // reprovar em todas menos Produto Entregue (não faz sentido reprovar
-  // um orçamento já entregue), clique na linha abrindo o pop-up de
-  // atendimento/peças, e o card R-TAT só nas que têm número ("7 - ..." —
-  // Produto Entregue não tem número no valor).
+  if (status.slug === "7-reparo-finalizado") {
+    const { data: aparelhos } = await supabase
+      .from("orcamentos")
+      .select(
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, pre_ordem, data_reconhecimento"
+      )
+      .eq("status_operacional", status.valor)
+      .order("updated_at", { ascending: false });
+
+    const cardPrevisaoEl = await cardPrevisao(status.valor);
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <PainelReparoFinalizado
+          aparelhos={(aparelhos ?? []) as AparelhoReparoFinalizado[]}
+          perfil={perfil}
+          topo={
+            <>
+              {voltar}
+              {badgeContador(aparelhos?.length ?? 0)}
+              {badgeRTat(aparelhos ?? [])}
+              {cardPrevisaoEl}
+            </>
+          }
+          mensagemVazia="Nenhum aparelho em 7 - Reparo Finalizado no momento."
+        />
+      </AppShell>
+    );
+  }
+
+  // "Ag. Emissão de Nota Fiscal" — 1 tela só, mas junta 2
+  // status_operacional REAIS diferentes (ver GRUPO_STATUS_AG_EMISSAO_NF
+  // em lib/orcamentos.ts): quem veio de "7 - Reparo Finalizado" (status
+  // "Ag. NF Serviço / Venda / Retorno") e quem veio de "8 - Orçamento
+  // Reprovado" (status "Ag. NF Retorno (Recusados)"). Por isso usa
+  // `.in(...)` em vez do `.eq("status_operacional", status.valor)` das
+  // outras telas — "status.valor" aqui é só o rótulo da tela, nunca é
+  // gravado de fato em nenhuma linha.
+  if (status.slug === "ag-emissao-nf") {
+    const { data: aparelhos } = await supabase
+      .from("orcamentos")
+      .select(
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pre_ordem, status_operacional, updated_at"
+      )
+      .in("status_operacional", GRUPO_STATUS_AG_EMISSAO_NF)
+      .order("updated_at", { ascending: false });
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <PainelAgEmissaoNf
+          aparelhos={(aparelhos ?? []) as AparelhoAgEmissaoNf[]}
+          topo={
+            <>
+              {voltar}
+              {badgeContador(aparelhos?.length ?? 0)}
+            </>
+          }
+          mensagemVazia="Nenhum aparelho aguardando emissão de Nota Fiscal no momento."
+        />
+      </AppShell>
+    );
+  }
+
+  // etapas ainda sem tela própria (Produto Entregue — "3",
+  // "Ag. Contra Proposta", "4", "5", "6", "OQC - Controle de Qualidade",
+  // "7" e "Ag. Emissão de Nota Fiscal" já ganharam tela própria acima) —
+  // só a lista, com o ícone de reprovar (não faz sentido reprovar um
+  // orçamento já entregue, e Produto Entregue é a única que ainda cai
+  // aqui hoje), clique na linha abrindo o pop-up de atendimento/peças, e
+  // o card R-TAT só nas que têm número no valor.
   const { data: aparelhos } = await supabase
     .from("orcamentos")
     .select(
@@ -706,7 +773,6 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     .order("updated_at", { ascending: false });
 
   const etapaNumerada = /^\d/.test(status.valor);
-  const cardPrevisaoEl = status.slug === "7-reparo-finalizado" ? await cardPrevisao(status.valor) : null;
 
   return (
     <AppShell titulo={status.label} perfil={perfil}>
@@ -714,7 +780,6 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         {voltar}
         {badgeContador(aparelhos?.length ?? 0)}
         {etapaNumerada && badgeRTat(aparelhos ?? [])}
-        {cardPrevisaoEl}
       </div>
       <PainelEtapaSimples
         aparelhos={(aparelhos ?? []) as AparelhoEtapaSimples[]}

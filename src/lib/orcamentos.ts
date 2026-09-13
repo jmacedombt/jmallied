@@ -162,6 +162,18 @@ export const STATUS_OPERACIONAL = [
   { valor: "OQC - Controle de Qualidade", slug: "oqc-controle-qualidade", label: "OQC - Controle de Qualidade" },
   { valor: "7 - Reparo Finalizado", slug: "7-reparo-finalizado", label: "7 - Reparo Finalizado" },
   { valor: "8 - Orçamento Reprovado", slug: "8-orcamento-reprovado", label: "8 - Orçamento Reprovado" },
+  // sem número, inserida entre "8" e "Produto Entregue" — mesmo motivo
+  // das outras etapas sem número acima. Diferente das demais, essa
+  // etapa/tela agrupa 2 status_operacional REAIS diferentes (nunca o
+  // texto "Ag. Emissão de Nota Fiscal" em si, que só existe aqui como
+  // rótulo da tela): STATUS_AG_NF_RETORNO_RECUSADOS (quando o aparelho
+  // vem do "8 - Orçamento Reprovado") e STATUS_AG_NF_SERVICO_VENDA_RETORNO
+  // (quando vem do "7 - Reparo Finalizado") — ver PainelAgEmissaoNf.tsx
+  // e o filtro de Status dentro da tela. Qualquer lugar que precise
+  // contar/filtrar essa etapa tem que tratar esse slug à parte (ver
+  // operacional/page.tsx e operacional/[slug]/page.tsx), nunca comparar
+  // direto com "valor" abaixo.
+  { valor: "Ag. Emissão de Nota Fiscal", slug: "ag-emissao-nf", label: "Ag. Emissão de Nota Fiscal" },
   { valor: "Produto Entregue", slug: "produto-entregue", label: "Produto Entregue" },
 ] as const;
 
@@ -186,6 +198,15 @@ export const STATUS_AG_REPARO = STATUS_OPERACIONAL.find((s) => s.slug === "6-ag-
 export const STATUS_OQC = STATUS_OPERACIONAL.find((s) => s.slug === "oqc-controle-qualidade")!.valor;
 export const STATUS_REPARO_FINALIZADO = STATUS_OPERACIONAL.find((s) => s.slug === "7-reparo-finalizado")!.valor;
 export const STATUS_ORCAMENTO_REPROVADO = STATUS_OPERACIONAL.find((s) => s.slug === "8-orcamento-reprovado")!.valor;
+
+// Os 2 status REAIS que vivem dentro da etapa/tela "Ag. Emissão de Nota
+// Fiscal" (slug "ag-emissao-nf") — não vêm de STATUS_OPERACIONAL.find()
+// porque o "valor" daquela entrada é só um rótulo de tela, nunca gravado
+// de fato em orcamentos.status_operacional (ver comentário ao lado da
+// entrada em STATUS_OPERACIONAL acima).
+export const STATUS_AG_NF_RETORNO_RECUSADOS = "Ag. NF Retorno (Recusados)";
+export const STATUS_AG_NF_SERVICO_VENDA_RETORNO = "Ag. NF Serviço / Venda / Retorno";
+export const GRUPO_STATUS_AG_EMISSAO_NF = [STATUS_AG_NF_RETORNO_RECUSADOS, STATUS_AG_NF_SERVICO_VENDA_RETORNO] as const;
 
 // etapas anteriores a "2 - Ag. Análise" (inclusive) — usado pra travar
 // "Confirmar Envio" em Validação de Orçamentos até TODO aparelho do
@@ -484,6 +505,10 @@ export const podeConfirmarReparoEmLote = podeConfirmarAnaliseEmLote;
 // idem pra "OQC - Controle de Qualidade" (marcar PASS/FAIL em lote) —
 // cadastro individual continua liberado pra qualquer um.
 export const podeConfirmarOqcEmLote = podeConfirmarAnaliseEmLote;
+// idem pra "Emitir NF - Envio de Pré Ordem" em "7 - Reparo Finalizado" e
+// "8 - Orçamento Reprovado" (gera o Excel de Pré Ordem e move os
+// selecionados pra "Ag. Emissão de Nota Fiscal").
+export const podeEmitirNfEmLote = podeConfirmarAnaliseEmLote;
 
 // ---- Contra Proposta (Ag. Contra Proposta) — ajuste peça a peça ----
 // (ver migration 0033, PopupPecasContraProposta.tsx, PainelContraProposta.tsx)

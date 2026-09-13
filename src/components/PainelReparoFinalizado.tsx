@@ -2,72 +2,59 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckSquare, Download, ScanBarcode, Search } from "lucide-react";
-import PopupPecasOrcamento, { type AparelhoComPecas } from "@/components/PopupPecasOrcamento";
+import { Ban, CheckSquare, Download, ScanBarcode, Search } from "lucide-react";
+import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
+import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import PopupBipagemSelecao from "@/components/PopupBipagemSelecao";
 import PopupConfirmar from "@/components/PopupConfirmar";
 import { gerarExcelPreOrdem } from "@/lib/preOrdemExport";
-import { podeEmitirNfEmLote } from "@/lib/orcamentos";
-import { formatarDataHoraBrasilia } from "@/lib/tempo";
-import { type FaixaMarkup, type InfoBidPeca } from "@/lib/bid";
+import { podeEmitirNfEmLote, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
 
-type Usuario = { nome: string; sobrenome: string } | { nome: string; sobrenome: string }[] | null;
 type Perfil = { cargo: string; is_master: boolean } | null;
 
-export type AparelhoReprovado = AparelhoComPecas & {
+export type AparelhoReparoFinalizado = {
   id: string;
+  os_reparadora: string | null;
+  trade_allied: string;
   os_care_allied: string | null;
   modelo_comercial: string | null;
   sku: string | null;
   descricao_completa: string | null;
+  validacao_snapshot: DetalheValidacaoOrcamento | null;
   pre_ordem: string | null;
-  motivo_reprova: string | null;
-  reprovado_em: string | null;
-  usuarios: Usuario;
 };
-
-function nomeUsuario(usuarios: Usuario): string | null {
-  const u = Array.isArray(usuarios) ? usuarios[0] : usuarios;
-  return u ? `${u.nome} ${u.sobrenome}` : null;
-}
 
 function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Tela de "8 - Orçamento Reprovado" — mesmo formato/campos de busca e
-// tabela da tela "2 - Ag. Análise" (ver PainelAgAnalise.tsx), com a
-// justificativa e quem/quando reprovou no lugar da coluna de Ação (aqui
-// já não tem mais ação de reprovar/reparo — a ação agora é escolher
-// quem já teve a Pré Ordem enviada pra emissão de NF, ver "Emitir NF -
-// Envio de Pré Ordem" abaixo). Coluna Pré Ordem com fundo em destaque
-// (pedido explícito — é a informação que mais importa nessa tela pra
-// quem vai emitir a nota fiscal de retorno).
-export default function PainelOrcamentoReprovado({
+// Tela de "7 - Reparo Finalizado" — antes usava a tabela genérica
+// PainelEtapaSimples (só consulta + reprovar), agora ganhou tela
+// própria pra ter a coluna Pré Ordem em destaque e o mesmo fluxo de
+// "Emitir NF - Envio de Pré Ordem" de "8 - Orçamento Reprovado":
+// seleção manual ou por bipagem (Trade Allied ou OS Reparadora),
+// exportação da Pré Ordem em Excel, e o botão que gera o Excel e move
+// os selecionados pra "Ag. Emissão de Nota Fiscal" (status
+// "Ag. NF Serviço / Venda / Retorno"). Continua permitindo reprovar
+// individualmente e abrir o pop-up de peças ao clicar na linha, igual
+// antes.
+export default function PainelReparoFinalizado({
   aparelhos,
   topo,
   perfil = null,
-  precosBidIniciais = {},
-  faixas = [],
-  icmsPercentual = 0,
-  podeCadastrarBid = false,
-  mensagemVazia = "Nenhum orçamento reprovado no momento.",
+  mensagemVazia = "Nenhum aparelho em 7 - Reparo Finalizado no momento.",
 }: {
-  aparelhos: AparelhoReprovado[];
+  aparelhos: AparelhoReparoFinalizado[];
   topo: React.ReactNode;
   perfil?: Perfil;
-  precosBidIniciais?: Record<string, InfoBidPeca>;
-  faixas?: FaixaMarkup[];
-  icmsPercentual?: number;
-  podeCadastrarBid?: boolean;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
   const [itens, setItens] = useState(aparelhos);
-  const [precosBid, setPrecosBid] = useState(precosBidIniciais);
   const [buscaOs, setBuscaOs] = useState("");
   const [buscaTrade, setBuscaTrade] = useState("");
-  const [detalhe, setDetalhe] = useState<AparelhoReprovado | null>(null);
+  const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
+  const [detalhe, setDetalhe] = useState<AparelhoReparoFinalizado | null>(null);
 
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [bipagemAberta, setBipagemAberta] = useState(false);
@@ -119,7 +106,7 @@ export default function PainelOrcamentoReprovado({
 
   function exportarSelecionadosExcel() {
     const escolhidos = itens.filter((a) => selecionados.has(a.id));
-    gerarExcelPreOrdem(escolhidos, "Pre_Ordem_Orcamento_Reprovado");
+    gerarExcelPreOrdem(escolhidos, "Pre_Ordem_Reparo_Finalizado");
   }
 
   async function emitirNf() {
@@ -130,7 +117,7 @@ export default function PainelOrcamentoReprovado({
     setErroEmitir(null);
 
     try {
-      const res = await fetch("/api/operacional/orcamentos/emitir-nf-retorno-recusados-em-massa", {
+      const res = await fetch("/api/operacional/orcamentos/emitir-nf-servico-venda-retorno-em-massa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids }),
@@ -143,7 +130,6 @@ export default function PainelOrcamentoReprovado({
         return;
       }
 
-      // gera o Excel com o que tinha antes de sumir da lista
       gerarExcelPreOrdem(
         itens.filter((a) => ids.includes(a.id)),
         "Envio_Pre_Ordem"
@@ -276,8 +262,7 @@ export default function PainelOrcamentoReprovado({
               <th className="px-4 py-2.5 font-medium" style={{ background: "rgba(250, 204, 21, 0.14)" }}>
                 Pré Ordem
               </th>
-              <th className="px-4 py-2.5 font-medium">Motivo</th>
-              <th className="px-4 py-2.5 font-medium">Reprovado em</th>
+              <th className="px-4 py-2.5 font-medium text-right">Ação</th>
             </tr>
           </thead>
           <tbody>
@@ -297,7 +282,7 @@ export default function PainelOrcamentoReprovado({
                     transform: saindo ? "translateX(12px)" : "translateX(0)",
                     pointerEvents: destaque ? "none" : undefined,
                   }}
-                  title="Clique pra ver as peças lançadas nesse orçamento"
+                  title="Clique pra ver as peças e valores desse atendimento"
                 >
                   {podeLote && (
                     <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -333,18 +318,16 @@ export default function PainelOrcamentoReprovado({
                   >
                     {a.pre_ordem || "—"}
                   </td>
-                  <td className="px-4 py-2.5" style={{ color: "#ef4444" }} title={a.motivo_reprova ?? ""}>
-                    {a.motivo_reprova || "—"}
-                  </td>
-                  <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: "var(--muted)" }}>
-                    {a.reprovado_em ? (
-                      <>
-                        {formatarDataHoraBrasilia(a.reprovado_em)}
-                        {nomeUsuario(a.usuarios) && <> · {nomeUsuario(a.usuarios)}</>}
-                      </>
-                    ) : (
-                      "—"
-                    )}
+                  <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
+                      title="Reprovar orçamento"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
+                      style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                    >
+                      <Ban size={15} />
+                    </button>
                   </td>
                 </tr>
               );
@@ -352,11 +335,11 @@ export default function PainelOrcamentoReprovado({
             {filtrados.length === 0 && (
               <tr>
                 <td
-                  colSpan={podeLote ? 10 : 9}
+                  colSpan={podeLote ? 9 : 8}
                   className="px-4 py-8 text-center"
                   style={{ color: "var(--muted)", background: "var(--surface)" }}
                 >
-                  {itens.length === 0 ? mensagemVazia : "Nenhum orçamento encontrado com essa busca."}
+                  {itens.length === 0 ? mensagemVazia : "Nenhum aparelho encontrado com essa busca."}
                 </td>
               </tr>
             )}
@@ -365,20 +348,21 @@ export default function PainelOrcamentoReprovado({
       </div>
 
       <p className="text-xs" style={{ color: "var(--muted)" }}>
-        Clique numa linha pra ver as peças lançadas nesse orçamento.
+        Clique numa linha pra ver as peças e valores desse atendimento.
       </p>
 
-      {detalhe && (
-        <PopupPecasOrcamento
-          aparelho={detalhe}
-          precosBid={precosBid}
-          faixas={faixas}
-          icmsPercentual={icmsPercentual}
-          podeCadastrar={podeCadastrarBid}
-          onPecaAtualizada={(info) => setPrecosBid((atual) => ({ ...atual, [info.part_number]: info }))}
-          onFechar={() => setDetalhe(null)}
+      {reprovando && (
+        <PopupReprovarOrcamento
+          aparelho={reprovando}
+          onFechar={() => setReprovando(null)}
+          onReprovado={() => {
+            setReprovando(null);
+            router.refresh();
+          }}
         />
       )}
+
+      {detalhe && <PopupAtendimentoPecas aparelho={detalhe} onFechar={() => setDetalhe(null)} />}
 
       {bipagemAberta && (
         <PopupBipagemSelecao
@@ -403,7 +387,7 @@ export default function PainelOrcamentoReprovado({
             <>
               Confirma a emissão da NF dos <strong>{selecionados.size}</strong> aparelho(s) selecionado(s)? Vai gerar o
               Excel de Pré Ordem e mover todos pra <strong>Ag. Emissão de Nota Fiscal</strong> (status{" "}
-              <strong>Ag. NF Retorno (Recusados)</strong>).
+              <strong>Ag. NF Serviço / Venda / Retorno</strong>).
             </>
           }
           rotuloConfirmar="Emitir NF"

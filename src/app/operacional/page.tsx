@@ -12,12 +12,13 @@ import {
   ShieldCheck,
   BadgeCheck,
   CircleX,
+  Receipt,
   PackageCheck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
-import { STATUS_OPERACIONAL } from "@/lib/orcamentos";
+import { STATUS_OPERACIONAL, GRUPO_STATUS_AG_EMISSAO_NF } from "@/lib/orcamentos";
 
 const ICONES: Record<string, typeof Inbox> = {
   "ag-abertura": Inbox,
@@ -32,6 +33,7 @@ const ICONES: Record<string, typeof Inbox> = {
   "oqc-controle-qualidade": ShieldCheck,
   "7-reparo-finalizado": BadgeCheck,
   "8-orcamento-reprovado": CircleX,
+  "ag-emissao-nf": Receipt,
   "produto-entregue": PackageCheck,
 };
 
@@ -51,6 +53,7 @@ const CORES: Record<string, { cor: string; clara: string }> = {
   "oqc-controle-qualidade": { cor: "#4f46e5", clara: "#818cf8" },
   "7-reparo-finalizado": { cor: "#059669", clara: "#34d399" },
   "8-orcamento-reprovado": { cor: "#dc2626", clara: "#f87171" },
+  "ag-emissao-nf": { cor: "#0ea5e9", clara: "#7dd3fc" },
   "produto-entregue": { cor: "#0d9488", clara: "#2dd4bf" },
 };
 
@@ -81,12 +84,23 @@ export default async function OperacionalPage() {
     mapaContagens.set(c.status_operacional, Number(c.quantidade));
   }
 
+  // "Ag. Emissão de Nota Fiscal" é 1 card/tela só, mas soma 2
+  // status_operacional REAIS diferentes (ver GRUPO_STATUS_AG_EMISSAO_NF
+  // em lib/orcamentos.ts) — por isso não dá pra usar direto
+  // mapaContagens.get(status.valor) igual as outras etapas.
+  function quantidadeDoStatus(status: (typeof STATUS_OPERACIONAL)[number]): number {
+    if (status.slug === "ag-emissao-nf") {
+      return GRUPO_STATUS_AG_EMISSAO_NF.reduce((soma, v) => soma + (mapaContagens.get(v) ?? 0), 0);
+    }
+    return mapaContagens.get(status.valor) ?? 0;
+  }
+
   // total usado como base do percentual de cada card — sem "Produto
   // Entregue", que só acumula pra sempre e, com o tempo, dominaria a
   // conta e esconderia como o volume ATUAL está distribuído nas etapas
   // ainda em andamento.
   const totalPipelineAtivo = STATUS_OPERACIONAL.filter((s) => s.slug !== "produto-entregue").reduce(
-    (soma, s) => soma + (mapaContagens.get(s.valor) ?? 0),
+    (soma, s) => soma + quantidadeDoStatus(s),
     0
   );
 
@@ -100,7 +114,7 @@ export default async function OperacionalPage() {
         {STATUS_OPERACIONAL.map((status) => {
           const Icone = ICONES[status.slug];
           const cores = CORES[status.slug];
-          const quantidade = mapaContagens.get(status.valor) ?? 0;
+          const quantidade = quantidadeDoStatus(status);
           const percentual =
             status.slug === "produto-entregue" || totalPipelineAtivo === 0 ? null : (quantidade / totalPipelineAtivo) * 100;
           return (
@@ -123,7 +137,10 @@ export default async function OperacionalPage() {
               <div className="flex items-center gap-3 mb-2">
                 <Icone size={26} strokeWidth={2} style={{ color: cores.cor }} />
                 <span className="text-2xl font-bold leading-none" style={{ color: "var(--ink)" }}>
-                  <ContadorAoVivo status={status.valor} contagemInicial={quantidade} />
+                  <ContadorAoVivo
+                    status={status.slug === "ag-emissao-nf" ? GRUPO_STATUS_AG_EMISSAO_NF : status.valor}
+                    contagemInicial={quantidade}
+                  />
                 </span>
               </div>
               <p className="text-[13px] font-medium leading-snug" style={{ color: "var(--muted)" }}>
