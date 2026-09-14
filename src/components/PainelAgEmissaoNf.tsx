@@ -1,26 +1,34 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, FileSpreadsheet } from "lucide-react";
 import PopupDetalheGrupoNf from "@/components/PopupDetalheGrupoNf";
-import { STATUS_AG_NF_RETORNO_RECUSADOS, STATUS_AG_NF_SERVICO_VENDA_RETORNO } from "@/lib/orcamentos";
+import {
+  STATUS_AG_NF_RETORNO_RECUSADOS,
+  STATUS_AG_NF_SERVICO_VENDA_RETORNO,
+  type CamposPecasComCusto,
+  type CamposValorVigente,
+} from "@/lib/orcamentos";
+import { gerarExcelExportacaoN3, type ItemExportacaoN3 } from "@/lib/exportN3";
+import { gerarExcelPreOrdem } from "@/lib/preOrdemExport";
 
-export type AparelhoAgEmissaoNf = {
-  id: string;
-  os_reparadora: string | null;
-  trade_allied: string;
-  os_care_allied: string | null;
-  modelo_comercial: string | null;
-  sku: string | null;
-  descricao_completa: string | null;
-  pre_ordem: string | null;
-  status_operacional: string;
-  nf_remessa_allied: string;
-  /** valor VIGENTE (mesma prioridade da Previsão de Recebimento) — já
-   * calculado no servidor, ver operacional/[slug]/page.tsx. */
-  maoDeObra: number;
-  vendaPecas: number;
-};
+export type AparelhoAgEmissaoNf = CamposPecasComCusto &
+  CamposValorVigente & {
+    id: string;
+    os_reparadora: string | null;
+    trade_allied: string;
+    os_care_allied: string | null;
+    modelo_comercial: string | null;
+    sku: string | null;
+    descricao_completa: string | null;
+    pre_ordem: string | null;
+    status_operacional: string;
+    nf_remessa_allied: string;
+    /** valor VIGENTE (mesma prioridade da Previsão de Recebimento) — já
+     * calculado no servidor, ver operacional/[slug]/page.tsx. */
+    maoDeObra: number;
+    vendaPecas: number;
+  };
 
 type GrupoNfRemessa = {
   nfRemessa: string;
@@ -53,11 +61,15 @@ function TabelaGrupos({
   cor,
   grupos,
   onAbrirDetalhe,
+  onExportar,
+  rotuloExportar = "Exportar",
 }: {
   titulo: string;
   cor: string;
   grupos: GrupoNfRemessa[];
   onAbrirDetalhe: (grupo: GrupoNfRemessa) => void;
+  onExportar: (grupo: GrupoNfRemessa) => void;
+  rotuloExportar?: string;
 }) {
   const totalQuantidade = grupos.reduce((soma, g) => soma + g.quantidade, 0);
   const totalMaoDeObra = grupos.reduce((soma, g) => soma + g.maoDeObra, 0);
@@ -77,6 +89,7 @@ function TabelaGrupos({
               <th className="px-4 py-2.5 font-medium">Quantidade</th>
               <th className="px-4 py-2.5 font-medium text-right">Mão de Obra</th>
               <th className="px-4 py-2.5 font-medium text-right">Venda Peças</th>
+              <th className="px-4 py-2.5 font-medium" />
               <th className="px-4 py-2.5 font-medium w-8" />
             </tr>
           </thead>
@@ -101,6 +114,21 @@ function TabelaGrupos({
                 <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
                   {formatarReal(g.vendaPecas)}
                 </td>
+                <td className="px-4 py-2.5 text-right">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onExportar(g);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition hover:bg-[var(--surface2)]"
+                    style={{ borderColor: "var(--line)", color: "var(--ink)" }}
+                    title={rotuloExportar}
+                  >
+                    <FileSpreadsheet size={13} />
+                    {rotuloExportar}
+                  </button>
+                </td>
                 <td className="px-4 py-2.5 text-right" style={{ color: "var(--muted)" }}>
                   <ChevronRight size={14} />
                 </td>
@@ -121,6 +149,7 @@ function TabelaGrupos({
               <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
                 {formatarReal(totalVendaPecas)}
               </td>
+              <td />
               <td />
             </tr>
           </tfoot>
@@ -178,6 +207,7 @@ export default function PainelAgEmissaoNf({
           cor="#34d399"
           grupos={gruposAprovados}
           onAbrirDetalhe={setDetalheGrupo}
+          onExportar={(g) => gerarExcelExportacaoN3(g.itens as ItemExportacaoN3[])}
         />
       )}
 
@@ -187,6 +217,7 @@ export default function PainelAgEmissaoNf({
           cor="#f87171"
           grupos={gruposRecusados}
           onAbrirDetalhe={setDetalheGrupo}
+          onExportar={(g) => gerarExcelPreOrdem(g.itens, `NF_${g.nfRemessa}_Recusados`)}
         />
       )}
 
