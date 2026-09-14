@@ -7,7 +7,6 @@ import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/Po
 import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import PopupBipagemSelecao from "@/components/PopupBipagemSelecao";
 import PopupConfirmar from "@/components/PopupConfirmar";
-import { gerarExcelPreOrdem } from "@/lib/preOrdemExport";
 import { gerarExcelExportacaoN3, type ItemExportacaoN3 } from "@/lib/exportN3";
 import {
   podeEmitirNfEmLote,
@@ -118,7 +117,7 @@ export default function PainelReparoFinalizado({
 
   function exportarSelecionadosExcel() {
     const escolhidos = itens.filter((a) => selecionados.has(a.id));
-    gerarExcelPreOrdem(escolhidos, "Pre_Ordem_Reparo_Finalizado");
+    gerarExcelExportacaoN3(escolhidos as ItemExportacaoN3[]);
   }
 
   async function emitirNf() {
