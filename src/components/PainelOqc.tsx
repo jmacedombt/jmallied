@@ -8,8 +8,8 @@ import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/Po
 import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import PopupOqcFail, { type AparelhoOqc } from "@/components/PopupOqcFail";
 import PopupOqcFailLote from "@/components/PopupOqcFailLote";
-import { podeConfirmarOqcEmLote, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
-import { operacionalRestrito } from "@/lib/usuarios";
+import { podeConfirmarOqcEmLote, STATUS_OQC, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import { temFuncaoCompletaNaEtapa } from "@/lib/usuarios";
 
 function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -69,8 +69,11 @@ export default function PainelOqc({
   useEffect(() => setItens(aparelhos), [aparelhos]);
 
   const podeLote = podeConfirmarOqcEmLote(perfil);
-  // Operacional (sem is_master) só tem função em Ag. Abertura.
-  const apenasVisualizacao = operacionalRestrito(perfil);
+  // Operacional (sem is_master) só tem função em Ag. Abertura — aqui fica
+  // só consulta. Triagem/OQC é o oposto: função completa é bem aqui
+  // (junto com 1 - Ag. Triagem) — ver ETAPAS_LIBERADAS_POR_CARGO_RESTRITO
+  // em lib/usuarios.ts.
+  const apenasVisualizacao = !temFuncaoCompletaNaEtapa(perfil, STATUS_OQC);
 
   const filtrados = useMemo(() => {
     const os = buscaOs.trim();

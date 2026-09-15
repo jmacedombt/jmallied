@@ -40,6 +40,7 @@ export const CARGOS = [
   "Técnico",
   "Estoque",
   "Operacional",
+  "Triagem/OQC",
   "ALLIED",
 ] as const;
 

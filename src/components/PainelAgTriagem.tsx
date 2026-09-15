@@ -5,7 +5,8 @@ import { ArrowRightCircle } from "lucide-react";
 import TabelaAgAbertura, { type AparelhoAgAbertura, type TabelaAgAberturaHandle } from "@/components/TabelaAgAbertura";
 import PopupBipagemTriagem from "@/components/PopupBipagemTriagem";
 import PopupConfirmar from "@/components/PopupConfirmar";
-import { operacionalRestrito } from "@/lib/usuarios";
+import { temFuncaoCompletaNaEtapa } from "@/lib/usuarios";
+import { STATUS_AG_TRIAGEM } from "@/lib/orcamentos";
 
 type Perfil = { cargo: string; is_master: boolean } | null;
 
@@ -19,7 +20,10 @@ type Perfil = { cargo: string; is_master: boolean } | null;
 // (e em qualquer outra etapa do Painel) fica só consulta: sem popup de
 // bipagem/impressão, sem seleção em massa, e a tabela reaproveitada
 // (TabelaAgAbertura) entra em modo somenteLeitura (sem editar OS
-// Reparadora nem Reprovar).
+// Reparadora nem Reprovar). Cargo Triagem/OQC é o oposto: função
+// completa É AQUI (junto com OQC), então tem tudo isso liberado mesmo
+// sem is_master — ver ETAPAS_LIBERADAS_POR_CARGO_RESTRITO em
+// lib/usuarios.ts.
 export default function PainelAgTriagem({
   aparelhos,
   mensagemVazia,
@@ -29,7 +33,7 @@ export default function PainelAgTriagem({
   mensagemVazia?: string;
   perfil?: Perfil;
 }) {
-  const apenasVisualizacao = operacionalRestrito(perfil);
+  const apenasVisualizacao = !temFuncaoCompletaNaEtapa(perfil, STATUS_AG_TRIAGEM);
   const tabelaRef = useRef<TabelaAgAberturaHandle>(null);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [confirmando, setConfirmando] = useState(false);

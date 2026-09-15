@@ -609,9 +609,22 @@ export const podeConfirmarAprovacaoOrcamento = podeConfirmarAnaliseEmLote;
 export const podeConfirmarPedidoPecaEmLote = podeConfirmarAnaliseEmLote;
 export const podeConfirmarChegadaPecaEmLote = podeConfirmarAnaliseEmLote;
 export const podeConfirmarReparoEmLote = podeConfirmarAnaliseEmLote;
-// idem pra "OQC - Controle de Qualidade" (marcar PASS/FAIL em lote) —
-// cadastro individual continua liberado pra qualquer um.
-export const podeConfirmarOqcEmLote = podeConfirmarAnaliseEmLote;
+
+// "OQC - Controle de Qualidade" (marcar PASS/FAIL em lote) é a ÚNICA
+// dessas ações que também libera pro cargo "Triagem/OQC" — esse cargo
+// tem função completa (incluindo lote) só em "1 - Ag. Triagem" e aqui
+// (ver ETAPAS_LIBERADAS_POR_CARGO_RESTRITO em lib/usuarios.ts); nas
+// demais telas de lote acima ele continua só-consulta, por isso essa
+// função NÃO pode mais ser um alias direto de podeConfirmarAnaliseEmLote
+// (senão o cargo ganharia lote em TODAS elas de uma vez). Cadastro
+// individual continua liberado pra qualquer um que não seja só-consulta.
+const CARGOS_OQC_LOTE_EXTRA = ["Triagem/OQC"] as const;
+
+export function podeConfirmarOqcEmLote(perfil: { cargo: string; is_master: boolean } | null): boolean {
+  if (podeConfirmarAnaliseEmLote(perfil)) return true;
+  if (!perfil) return false;
+  return (CARGOS_OQC_LOTE_EXTRA as readonly string[]).includes(perfil.cargo);
+}
 // idem pra "Emitir NF - Envio de Pré Ordem" em "7 - Reparo Finalizado" e
 // "8 - Orçamento Reprovado" (gera o Excel de Pré Ordem e move os
 // selecionados pra "Ag. Emissão de Nota Fiscal").

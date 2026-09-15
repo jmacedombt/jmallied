@@ -28,6 +28,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  ShieldPlus,
   SlidersHorizontal,
   Tags,
   TrendingUp,
@@ -147,6 +148,7 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
     itens: [
       { href: "/usuarios", label: "Usuários", icone: Users },
       { href: "/manutencao", label: "Manutenção do Banco", icone: HardDrive },
+      { href: "/sistema/cargos", label: "Cargos", icone: ShieldPlus },
     ],
   },
 ];
@@ -181,12 +183,15 @@ const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
   },
 ];
 
-// Menu do cargo Operacional (sem is_master) — quem digita a OS
-// Reparadora em Ag. Abertura: só Painel (Backlog e Reconhecimento Lote
-// saem do menu) e Impressão. Nada de Bases, Configurações nem Sistema —
-// o middleware barra essas páginas mesmo digitando a URL direto (ver
-// PREFIXOS_BLOQUEADOS_OPERACIONAL em middleware.ts). Métricas já fica de
-// fora sozinho, porque esse cargo não passa em podeConfirmarAnaliseEmLote.
+// Menu dos cargos restritos por etapa — Operacional (sem is_master, quem
+// digita a OS Reparadora em Ag. Abertura) e Triagem/OQC (função completa
+// só em 1 - Ag. Triagem e OQC - Controle de Qualidade, ver
+// ETAPAS_LIBERADAS_POR_CARGO_RESTRITO em lib/usuarios.ts): só Painel
+// (Backlog e Reconhecimento Lote saem do menu) e Impressão. Nada de
+// Bases, Configurações nem Sistema — o middleware barra essas páginas
+// mesmo digitando a URL direto (ver PREFIXOS_BLOQUEADOS_OPERACIONAL em
+// lib/usuarios.ts). Métricas já fica de fora sozinho, porque nenhum dos
+// 2 cargos passa em podeConfirmarAnaliseEmLote.
 const GRUPOS_MENU_OPERACIONAL: GrupoMenu[] = [
   {
     id: "operacional",

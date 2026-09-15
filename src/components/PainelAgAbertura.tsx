@@ -14,9 +14,12 @@ import {
 } from "lucide-react";
 import TabelaAgAbertura, { type AparelhoAgAbertura, type TabelaAgAberturaHandle } from "@/components/TabelaAgAbertura";
 import { createClient } from "@/lib/supabase/client";
-import { calcularBlocosAgAbertura, corUsuarioAbertura } from "@/lib/orcamentos";
+import { calcularBlocosAgAbertura, corUsuarioAbertura, STATUS_AG_ABERTURA } from "@/lib/orcamentos";
+import { temFuncaoCompletaNaEtapa } from "@/lib/usuarios";
 
 export type UsuarioOperacionalAbertura = { id: string; nome: string; sobrenome: string };
+
+type Perfil = { cargo: string; is_master: boolean } | null;
 
 type ItemEncontrado = {
   id: string;
@@ -38,12 +41,21 @@ type Analise = {
 // Allied -> OS Reparadora) junto com a tabela, já que o preenchimento
 // em massa precisa "falar" com as linhas da tabela pra fazer o efeito
 // de ir marcando uma por uma de verde conforme processa.
+//
+// Historicamente essa é a ÚNICA tela do Painel que nunca restringia
+// ninguém — é onde o cargo Operacional tem função completa. O cargo
+// Triagem/OQC inverte isso: função completa só em 1 - Ag. Triagem e OQC,
+// então AQUI ele fica só consulta (sem upload de planilha, tabela em
+// modo somenteLeitura) — ver ETAPAS_LIBERADAS_POR_CARGO_RESTRITO em
+// lib/usuarios.ts. Pra qualquer outro cargo (incluindo Operacional),
+// `perfil` não muda nada — continua função completa, como sempre foi.
 export default function PainelAgAbertura({
   aparelhos,
   mensagemVazia,
   topo,
   usuariosOperacional = [],
   selecaoInicial = [],
+  perfil = null,
 }: {
   aparelhos: AparelhoAgAbertura[];
   mensagemVazia?: string;
@@ -55,7 +67,9 @@ export default function PainelAgAbertura({
   usuariosOperacional?: UsuarioOperacionalAbertura[];
   /** quem já está marcado quando a página carrega (vem do servidor). */
   selecaoInicial?: string[];
+  perfil?: Perfil;
 }) {
+  const apenasVisualizacao = !temFuncaoCompletaNaEtapa(perfil, STATUS_AG_ABERTURA);
   const tabelaRef = useRef<TabelaAgAberturaHandle>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -204,7 +218,7 @@ export default function PainelAgAbertura({
       <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
         <div className="flex items-center flex-wrap gap-2 [&>*]:!mb-0">
           {topo}
-          {usuariosOperacional.length > 0 && (
+          {!apenasVisualizacao && usuariosOperacional.length > 0 && (
             <div className="flex items-center flex-wrap gap-1.5" title="Marque quem da equipe está digitando agora, pra dividir e colorir as pendências entre vocês">
               {usuariosOperacional.map((u) => {
                 const cor = corUsuarioAbertura(usuariosOperacional, u.id);
@@ -231,58 +245,60 @@ export default function PainelAgAbertura({
           )}
         </div>
 
-        <div className="flex items-center flex-wrap gap-1.5" title="Preencher OS Reparadora em massa via planilha">
-          <FileSpreadsheet size={14} className="mr-0.5 shrink-0" style={{ color: "var(--accent2)" }} />
-          <a
-            href="/api/operacional/ag-abertura/modelo-planilha"
-            title="Baixar modelo (.xlsx)"
-            className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition hover:border-[var(--accent2)]"
-            style={{ borderColor: "var(--line)", color: "var(--ink)" }}
-          >
-            <Download size={13} />
-            Modelo
-          </a>
+        {!apenasVisualizacao && (
+          <div className="flex items-center flex-wrap gap-1.5" title="Preencher OS Reparadora em massa via planilha">
+            <FileSpreadsheet size={14} className="mr-0.5 shrink-0" style={{ color: "var(--accent2)" }} />
+            <a
+              href="/api/operacional/ag-abertura/modelo-planilha"
+              title="Baixar modelo (.xlsx)"
+              className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition hover:border-[var(--accent2)]"
+              style={{ borderColor: "var(--line)", color: "var(--ink)" }}
+            >
+              <Download size={13} />
+              Modelo
+            </a>
 
-          <label
-            title={nomeArquivo || "Escolher planilha preenchida"}
-            className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs cursor-pointer transition hover:border-[var(--accent2)] max-w-[9rem] sm:max-w-[12rem]"
-            style={{ borderColor: "var(--line)", color: "var(--ink)" }}
-          >
-            <UploadCloud size={13} className="shrink-0" />
-            <span className="truncate">{nomeArquivo || "Escolher planilha"}</span>
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              onChange={(e) => {
-                setNomeArquivo(e.target.files?.[0]?.name ?? null);
-                setAnalise(null);
-                setErroAnalise(null);
-              }}
-            />
-          </label>
+            <label
+              title={nomeArquivo || "Escolher planilha preenchida"}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs cursor-pointer transition hover:border-[var(--accent2)] max-w-[9rem] sm:max-w-[12rem]"
+              style={{ borderColor: "var(--line)", color: "var(--ink)" }}
+            >
+              <UploadCloud size={13} className="shrink-0" />
+              <span className="truncate">{nomeArquivo || "Escolher planilha"}</span>
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={(e) => {
+                  setNomeArquivo(e.target.files?.[0]?.name ?? null);
+                  setAnalise(null);
+                  setErroAnalise(null);
+                }}
+              />
+            </label>
 
-          <button
-            type="button"
-            onClick={analisarArquivo}
-            disabled={!nomeArquivo || analisando}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent2)] disabled:opacity-60 text-white text-xs font-medium px-3 py-1.5 transition"
-            style={{ boxShadow: "0 0 20px var(--accent-glow)" }}
-          >
-            {analisando && <Loader2 size={12} className="animate-spin" />}
-            {analisando ? "Analisando..." : "Analisar"}
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={analisarArquivo}
+              disabled={!nomeArquivo || analisando}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent2)] disabled:opacity-60 text-white text-xs font-medium px-3 py-1.5 transition"
+              style={{ boxShadow: "0 0 20px var(--accent-glow)" }}
+            >
+              {analisando && <Loader2 size={12} className="animate-spin" />}
+              {analisando ? "Analisando..." : "Analisar"}
+            </button>
+          </div>
+        )}
       </div>
 
-      {erroAnalise && (
+      {!apenasVisualizacao && erroAnalise && (
         <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
           {erroAnalise}
         </p>
       )}
 
-      {analise && (
+      {!apenasVisualizacao && analise && (
         <PopupConfirmarAnalise
           analise={analise}
           processando={processando}
@@ -291,7 +307,13 @@ export default function PainelAgAbertura({
         />
       )}
 
-      <TabelaAgAbertura ref={tabelaRef} aparelhos={aparelhos} mensagemVazia={mensagemVazia} corPorId={corPorId} />
+      <TabelaAgAbertura
+        ref={tabelaRef}
+        aparelhos={aparelhos}
+        mensagemVazia={mensagemVazia}
+        corPorId={corPorId}
+        somenteLeitura={apenasVisualizacao}
+      />
     </div>
   );
 }

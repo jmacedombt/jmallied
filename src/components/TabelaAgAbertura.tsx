@@ -89,11 +89,13 @@ const TabelaAgAbertura = forwardRef<
      * cuidar dele — ver calcularBlocosAgAbertura em lib/orcamentos.ts e
      * PainelAgAbertura.tsx. Sem entrada = linha sem cor de equipe. */
     corPorId?: Record<string, string>;
-    /** true quando essa tabela está sendo usada FORA de Ag. Abertura (por
-     * enquanto só em 1 - Ag. Triagem, ver PainelAgTriagem.tsx) por um
-     * cargo Operacional sem is_master — nesse caso a OS Reparadora vira
-     * só leitura (sem input/lápis/salvar) e o botão Reprovar some. Nunca
-     * usado (fica false) na tela de Ag. Abertura em si. */
+    /** true quando quem está vendo essa tabela não tem função completa
+     * nessa etapa — a OS Reparadora vira só leitura (sem input/lápis/
+     * salvar) e o botão Reprovar some. Dois casos: cargo Operacional sem
+     * is_master em 1 - Ag. Triagem (ver PainelAgTriagem.tsx), e cargo
+     * Triagem/OQC sem is_master na própria Ag. Abertura (ver
+     * PainelAgAbertura.tsx) — o espelho um do outro, ver
+     * ETAPAS_LIBERADAS_POR_CARGO_RESTRITO em lib/usuarios.ts. */
     somenteLeitura?: boolean;
   }
 >(function TabelaAgAbertura(

@@ -3,7 +3,7 @@
  * editar cadastro, resetar senha e bloquear/desbloquear login.
  */
 
-import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
+import { podeConfirmarAnaliseEmLote, STATUS_AG_ABERTURA, STATUS_AG_TRIAGEM, STATUS_OQC } from "@/lib/orcamentos";
 
 // cargos que podem gerenciar outros usuários (Administrador = is_master, tratado à parte)
 export const CARGOS_GESTAO_USUARIOS = ["Gerente", "Diretor"] as const;
@@ -41,23 +41,67 @@ export function podeVerVolumetriaOuOrcamentos(perfil: { cargo: string; is_master
 }
 
 /**
- * Operacional (quem digita a OS Reparadora em Ag. Abertura) só enxerga
- * o Painel Operacional (Ag. Abertura com função completa; as demais
- * etapas do painel só pra consulta — já garantido pelas próprias telas,
- * que só liberam ação em lote pra Supervisor/Gerente/Diretor/Master) e
- * Impressão Avulsa. is_master sempre passa por cima disso (Administrador
- * nunca fica restrito, mesmo com cargo "Operacional").
+ * Cargos cujo acesso ao Operacional é restrito a um SUBCONJUNTO de
+ * etapas — em qualquer outra etapa do Painel, só consulta (sem nenhuma
+ * ação). is_master sempre passa por cima disso (Administrador nunca fica
+ * restrito, seja qual for o cargo).
+ *
+ * - "Operacional" (quem digita a OS Reparadora): função completa só em
+ *   Ag. Abertura — ver PainelAgAbertura.tsx, a única tela que nunca
+ *   restringe ninguém, justamente por causa dessa exceção.
+ * - "Triagem/OQC" (novo cargo — pedido explícito): função completa só em
+ *   "1 - Ag. Triagem" e "OQC - Controle de Qualidade" (incluindo ações
+ *   em lote nas 2), inclusive Ag. Abertura fica só consulta pra esse
+ *   cargo — o espelho de Operacional.
+ *
+ * Os dois cargos enxergam o mesmo menu restrito (só Painel Operacional +
+ * Impressão Avulsa — ver GRUPOS_MENU_OPERACIONAL em AppShell.tsx) e
+ * ficam de fora de Bases/Configurações/Sistema/Métricas/Backlog/
+ * Reconhecimento de Lote mesmo digitando a URL direto (ver
+ * rotaBloqueadaParaOperacional abaixo).
  */
+export const ETAPAS_LIBERADAS_POR_CARGO_RESTRITO: Record<string, readonly string[]> = {
+  Operacional: [STATUS_AG_ABERTURA],
+  "Triagem/OQC": [STATUS_AG_TRIAGEM, STATUS_OQC],
+};
+
+/** true = esse cargo é um dos restritos por etapa acima (Operacional ou
+ * Triagem/OQC, sem is_master) — usado pra decidir o menu (AppShell.tsx)
+ * e travar rota (middleware.ts). Pra saber se tem função completa numa
+ * etapa ESPECÍFICA, use temFuncaoCompletaNaEtapa abaixo. */
 export function operacionalRestrito(perfil: { cargo: string; is_master: boolean } | null): boolean {
-  return perfil?.cargo === "Operacional" && !perfil.is_master;
+  if (!perfil || perfil.is_master) return false;
+  return perfil.cargo in ETAPAS_LIBERADAS_POR_CARGO_RESTRITO;
 }
 
-// Prefixos de página fora do alcance do cargo Operacional — usado tanto
-// no middleware.ts (bloqueia a rota mesmo digitando a URL) quanto no
-// Dashboard (esconde o card, pra não mostrar um atalho que só vai voltar
-// pro Painel). Backlog e Reconhecimento Lote ficam fora do menu, mas
-// continuam abertos pra quem já tem permissão (ex: cargo ALLIED tem seu
-// próprio Backlog liberado, tratado à parte no middleware).
+/**
+ * Dentro de uma etapa específica do Operacional (Ag. Abertura, 1 - Ag.
+ * Triagem ou OQC - Controle de Qualidade — as 3 telas onde a resposta
+ * pode variar por cargo), esse usuário tem função completa (true) ou só
+ * consulta (false)? Quem não é um cargo restrito por etapa (Supervisor,
+ * Gerente, Diretor, Técnico, Estoque, is_master) sempre tem função
+ * completa onde quer que chegue — por isso não precisa ser chamada fora
+ * dessas 3 telas: nas demais, `operacionalRestrito` sozinho já responde
+ * igual pros 2 cargos hoje (sempre só consulta).
+ */
+export function temFuncaoCompletaNaEtapa(
+  perfil: { cargo: string; is_master: boolean } | null,
+  statusValor: string
+): boolean {
+  if (!operacionalRestrito(perfil)) return true;
+  const etapasLiberadas = ETAPAS_LIBERADAS_POR_CARGO_RESTRITO[perfil!.cargo] ?? [];
+  return etapasLiberadas.includes(statusValor);
+}
+
+// Prefixos de página fora do alcance dos cargos restritos por etapa
+// (Operacional e Triagem/OQC) — usado tanto no middleware.ts (bloqueia a
+// rota mesmo digitando a URL) quanto no Dashboard (esconde o card, pra
+// não mostrar um atalho que só vai voltar pro Painel). Backlog e
+// Reconhecimento Lote ficam fora do menu, mas continuam abertos pra quem
+// já tem permissão (ex: cargo ALLIED tem seu próprio Backlog liberado,
+// tratado à parte no middleware). "/sistema" cobre tanto a capa quanto
+// qualquer submenu dela (Usuários e Manutenção do Banco vivem em rotas
+// próprias fora de "/sistema/...", por isso continuam listados à parte).
 export const PREFIXOS_BLOQUEADOS_OPERACIONAL = [
   "/operacional/backlog",
   "/operacional/reconhecimento-lote",
@@ -65,6 +109,7 @@ export const PREFIXOS_BLOQUEADOS_OPERACIONAL = [
   "/configuracoes",
   "/usuarios",
   "/manutencao",
+  "/sistema",
 ] as const;
 
 export function rotaBloqueadaParaOperacional(path: string): boolean {

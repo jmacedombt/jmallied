@@ -221,6 +221,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
             mensagemVazia="Nenhum aparelho aguardando abertura no momento."
             usuariosOperacional={usuariosOperacional ?? []}
             selecaoInicial={(selecaoAtual ?? []).map((s) => s.usuario_id)}
+            perfil={perfil}
             topo={
               <>
                 {voltar}

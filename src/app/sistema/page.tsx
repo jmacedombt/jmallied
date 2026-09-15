@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { HardDrive, Users } from "lucide-react";
+import { HardDrive, ShieldPlus, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 
@@ -19,6 +19,14 @@ const TILES = [
     icone: HardDrive,
     cor: "#dc2626",
     clara: "#f87171",
+  },
+  {
+    href: "/sistema/cargos",
+    titulo: "Cargos",
+    descricao: "Cargos em uso hoje, os módulos que cada um acessa, e cadastro pra registrar um cargo novo.",
+    icone: ShieldPlus,
+    cor: "#7c3aed",
+    clara: "#a78bfa",
   },
 ];
 
