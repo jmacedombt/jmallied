@@ -9,6 +9,8 @@ import {
   aplicarAjusteManualValidacao,
   STATUS_ETAPAS_ANTERIORES_A_VALIDACAO,
   GRUPO_STATUS_AG_EMISSAO_NF,
+  STATUS_AG_NF_SERVICO_VENDA_RETORNO,
+  STATUS_AG_NF_RETORNO_RECUSADOS,
   calcularMaoDeObraVigente,
   calcularVendaPecasVigente,
   type CamposPecasOrcamento,
@@ -153,7 +155,13 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
   // security definer e nunca seleciona nenhuma coluna de custo/BID —
   // proteção de banco, não só de tela (ver migration 0035_cargo_allied.sql).
   if (isAllied(perfil)) {
-    const aparelhos = await buscarAparelhosAllied(supabase, status.valor);
+    // "Ag. Emissão de Nota Fiscal" é a única etapa que junta 2
+    // status_operacional REAIS diferentes (ver comentário de
+    // GRUPO_STATUS_AG_EMISSAO_NF acima) — status.valor sozinho nunca bate
+    // com nenhuma linha, então busca as 2 e organiza em blocos separados
+    // (Aprovados / Recusados), igual a tela interna PainelAgEmissaoNf.
+    const ehEmissaoNf = status.slug === "ag-emissao-nf";
+    const aparelhos = await buscarAparelhosAllied(supabase, ehEmissaoNf ? [...GRUPO_STATUS_AG_EMISSAO_NF] : status.valor);
     const etapaNumerada = /^\d/.test(status.valor);
     return (
       <AppShell titulo={status.label} perfil={perfil}>
@@ -162,7 +170,18 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
           {badgeContador(aparelhos.length)}
           {etapaNumerada && badgeRTat(aparelhos)}
         </div>
-        <PainelOperacionalAllied aparelhos={aparelhos} mensagemVazia="Nenhum aparelho nessa etapa ainda." />
+        <PainelOperacionalAllied
+          aparelhos={aparelhos}
+          mensagemVazia="Nenhum aparelho nessa etapa ainda."
+          agrupar={
+            ehEmissaoNf
+              ? [
+                  { status: STATUS_AG_NF_SERVICO_VENDA_RETORNO, titulo: "Aprovados — vindos de 7 - Reparo Finalizado", cor: "#34d399" },
+                  { status: STATUS_AG_NF_RETORNO_RECUSADOS, titulo: "Recusados — vindos de 8 - Orçamento Reprovado", cor: "#f87171" },
+                ]
+              : undefined
+          }
+        />
       </AppShell>
     );
   }

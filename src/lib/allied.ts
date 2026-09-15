@@ -39,11 +39,26 @@ export type AparelhoOperacionalAllied = {
 
 /** Lista os aparelhos de uma etapa (ou de todas, se `statusOperacional`
  * vier vazio) pra um login ALLIED — nunca traz custo/BID, só o valor de
- * venda (o que cobramos) e a mão de obra cobrada. */
+ * venda (o que cobramos) e a mão de obra cobrada.
+ *
+ * Aceita também uma LISTA de status — necessário pra "Ag. Emissão de
+ * Nota Fiscal", a única etapa que na verdade junta 2 status_operacional
+ * REAIS diferentes (ver GRUPO_STATUS_AG_EMISSAO_NF em lib/orcamentos.ts;
+ * o "status.valor" dessa etapa é só o rótulo da tela, nunca é gravado de
+ * fato em nenhuma linha) — a RPC orcamentos_allied_listar só filtra por
+ * um status por chamada, então nesse caso ela é chamada uma vez por
+ * status e o resultado é combinado aqui. Sem isso, passar o rótulo
+ * composto direto pra RPC não batia com nenhuma linha e a tela ficava
+ * sempre vazia pro ALLIED.
+ */
 export async function buscarAparelhosAllied(
   supabase: SupabaseClient,
-  statusOperacional?: string | null
+  statusOperacional?: string | string[] | null
 ): Promise<AparelhoOperacionalAllied[]> {
+  if (Array.isArray(statusOperacional)) {
+    const resultados = await Promise.all(statusOperacional.map((status) => buscarAparelhosAllied(supabase, status)));
+    return resultados.flat();
+  }
   const { data, error } = await supabase.rpc("orcamentos_allied_listar", {
     p_status: statusOperacional ?? null,
   });
