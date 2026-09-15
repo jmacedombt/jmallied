@@ -5,19 +5,31 @@ import { ArrowRightCircle } from "lucide-react";
 import TabelaAgAbertura, { type AparelhoAgAbertura, type TabelaAgAberturaHandle } from "@/components/TabelaAgAbertura";
 import PopupBipagemTriagem from "@/components/PopupBipagemTriagem";
 import PopupConfirmar from "@/components/PopupConfirmar";
+import { operacionalRestrito } from "@/lib/usuarios";
+
+type Perfil = { cargo: string; is_master: boolean } | null;
 
 // Tela de Ag. Triagem: o popup de bipar um por um (que já existia) é o
 // único lugar que imprime etiqueta. A seleção em massa na tabela (com
 // "selecionar todos") NÃO imprime nada — só avança de uma vez os
 // aparelhos marcados pra 2 - Ag. Análise, pra liberar o lote sem
 // disparar dezenas de impressões de uma vez.
+//
+// Cargo Operacional (sem is_master) só tem função em Ag. Abertura — aqui
+// (e em qualquer outra etapa do Painel) fica só consulta: sem popup de
+// bipagem/impressão, sem seleção em massa, e a tabela reaproveitada
+// (TabelaAgAbertura) entra em modo somenteLeitura (sem editar OS
+// Reparadora nem Reprovar).
 export default function PainelAgTriagem({
   aparelhos,
   mensagemVazia,
+  perfil = null,
 }: {
   aparelhos: AparelhoAgAbertura[];
   mensagemVazia?: string;
+  perfil?: Perfil;
 }) {
+  const apenasVisualizacao = operacionalRestrito(perfil);
   const tabelaRef = useRef<TabelaAgAberturaHandle>(null);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [confirmando, setConfirmando] = useState(false);
@@ -65,9 +77,9 @@ export default function PainelAgTriagem({
 
   return (
     <div className="space-y-3">
-      <PopupBipagemTriagem />
+      {!apenasVisualizacao && <PopupBipagemTriagem />}
 
-      {selecionados.size > 0 && (
+      {!apenasVisualizacao && selecionados.size > 0 && (
         <button
           type="button"
           onClick={() => setConfirmando(true)}
@@ -83,13 +95,14 @@ export default function PainelAgTriagem({
         ref={tabelaRef}
         aparelhos={aparelhos}
         mensagemVazia={mensagemVazia}
-        selecionavel
+        selecionavel={!apenasVisualizacao}
         selecionados={selecionados}
         aoAlternarSelecao={alternarSelecao}
         aoAlternarTodos={alternarTodos}
+        somenteLeitura={apenasVisualizacao}
       />
 
-      {confirmando && (
+      {!apenasVisualizacao && confirmando && (
         <PopupConfirmar
           titulo="Avançar para Ag. Análise"
           carregando={processando}

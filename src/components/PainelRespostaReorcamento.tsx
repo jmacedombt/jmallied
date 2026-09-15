@@ -15,6 +15,7 @@ import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import PopupDetalheReorcamento from "@/components/PopupDetalheReorcamento";
 import PopupEnviarReorcamento from "@/components/PopupEnviarReorcamento";
 import PopupConfirmar from "@/components/PopupConfirmar";
+import { operacionalRestrito } from "@/lib/usuarios";
 
 export type AparelhoRespostaReorcamento = {
   id: string;
@@ -81,6 +82,8 @@ export default function PainelRespostaReorcamento({
 
   const podeEnviar = podeConfirmarAprovacaoOrcamento(perfil);
   const podeCadastrarBid = podeImportarBid(perfil);
+  // Operacional (sem is_master) só tem função em Ag. Abertura.
+  const apenasVisualizacao = operacionalRestrito(perfil);
 
   const pendentes = useMemo(() => aparelhos.filter(pendenteDeEnvio), [aparelhos]);
   const resumoPendentes = useMemo(
@@ -200,28 +203,30 @@ export default function PainelRespostaReorcamento({
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="inline-flex items-center gap-1.5">
-                      {!pendente && (
+                    {!apenasVisualizacao && (
+                      <div className="inline-flex items-center gap-1.5">
+                        {!pendente && (
+                          <button
+                            type="button"
+                            onClick={() => setAprovando(a)}
+                            title="Aprovar orçamento"
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#22c55e]"
+                            style={{ borderColor: "var(--line)", color: "#22c55e" }}
+                          >
+                            <CheckCircle2 size={15} />
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => setAprovando(a)}
-                          title="Aprovar orçamento"
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#22c55e]"
-                          style={{ borderColor: "var(--line)", color: "#22c55e" }}
+                          onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
+                          title="Reprovar orçamento"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
+                          style={{ borderColor: "var(--line)", color: "#ef4444" }}
                         >
-                          <CheckCircle2 size={15} />
+                          <Ban size={15} />
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
-                        title="Reprovar orçamento"
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
-                        style={{ borderColor: "var(--line)", color: "#ef4444" }}
-                      >
-                        <Ban size={15} />
-                      </button>
-                    </div>
+                      </div>
+                    )}
                   </td>
                 </tr>
               );
@@ -276,6 +281,7 @@ export default function PainelRespostaReorcamento({
           icmsPercentual={icmsPercentual}
           configMaoDeObra={configMaoDeObra}
           podeCadastrarBid={podeCadastrarBid}
+          podeEditar={!apenasVisualizacao}
           onFechar={() => setDetalheReorcamento(null)}
           onAtualizado={() => {
             setDetalheReorcamento(null);

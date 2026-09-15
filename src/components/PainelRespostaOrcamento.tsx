@@ -7,6 +7,7 @@ import { CORES_RESULTADO_APROVACAO, podeConfirmarAprovacaoOrcamento, type Result
 import PopupUploadAprovacao from "@/components/PopupUploadAprovacao";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupConfirmar from "@/components/PopupConfirmar";
+import { operacionalRestrito } from "@/lib/usuarios";
 
 export type AparelhoRespostaOrcamento = {
   id: string;
@@ -71,6 +72,8 @@ export default function PainelRespostaOrcamento({
   const [destacarConfirmar, setDestacarConfirmar] = useState(false);
 
   const podeConfirmar = podeConfirmarAprovacaoOrcamento(perfil);
+  // Operacional (sem is_master) só tem função em Ag. Abertura.
+  const apenasVisualizacao = operacionalRestrito(perfil);
 
   const contagens = useMemo(() => {
     const total = aparelhos.length;
@@ -241,15 +244,17 @@ export default function PainelRespostaOrcamento({
                     <BadgeResultado resultado={a.resultado_aprovacao_allied} />
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <button
-                      type="button"
-                      onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
-                      title="Reprovar orçamento manualmente"
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
-                      style={{ borderColor: "var(--line)", color: "#ef4444" }}
-                    >
-                      <Ban size={15} />
-                    </button>
+                    {!apenasVisualizacao && (
+                      <button
+                        type="button"
+                        onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
+                        title="Reprovar orçamento manualmente"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
+                        style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                      >
+                        <Ban size={15} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

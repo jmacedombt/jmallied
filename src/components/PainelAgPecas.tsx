@@ -6,6 +6,7 @@ import { Ban, CheckCheck, Clock, Gauge, Loader2, PackageCheck, Search, ShoppingC
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import { podeConfirmarChegadaPecaEmLote, podeConfirmarPedidoPecaEmLote, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import { operacionalRestrito } from "@/lib/usuarios";
 
 function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -62,6 +63,8 @@ export default function PainelAgPecas({
 
   const podeLotePedido = podeConfirmarPedidoPecaEmLote(perfil);
   const podeLoteChegada = podeConfirmarChegadaPecaEmLote(perfil);
+  // Operacional (sem is_master) só tem função em Ag. Abertura.
+  const apenasVisualizacao = operacionalRestrito(perfil);
 
   const filtrados = useMemo(() => {
     const os = buscaOs.trim();
@@ -464,6 +467,7 @@ export default function PainelAgPecas({
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                    {!apenasVisualizacao && (
                     <div className="inline-flex items-center gap-1.5">
                       {!a.pedido_peca_feito ? (
                         <button
@@ -512,6 +516,7 @@ export default function PainelAgPecas({
                         <Ban size={15} />
                       </button>
                     </div>
+                    )}
                   </td>
                 </tr>
               );

@@ -63,6 +63,7 @@ export default function PopupDetalheReorcamento({
   icmsPercentual,
   configMaoDeObra,
   podeCadastrarBid,
+  podeEditar = true,
   onFechar,
   onAtualizado,
 }: {
@@ -74,10 +75,14 @@ export default function PopupDetalheReorcamento({
    * (podeImportarBid) — controla se aparece o botão "Cadastrar" quando o
    * código digitado não é encontrado no BID. */
   podeCadastrarBid: boolean;
+  /** false pra quem só pode consultar (ex: cargo Operacional fora de Ag.
+   * Abertura) — trava a edição das peças adicionais mesmo se o
+   * reorçamento ainda não foi enviado pra Allied. */
+  podeEditar?: boolean;
   onFechar: () => void;
   onAtualizado: () => void;
 }) {
-  const editavel = !aparelho.reorcamento_enviado_em && aparelho.validacao_snapshot != null;
+  const editavel = !aparelho.reorcamento_enviado_em && aparelho.validacao_snapshot != null && podeEditar;
 
   const [linhas, setLinhas] = useState<LinhaForm[]>(
     POSICOES.map((posicao) => {

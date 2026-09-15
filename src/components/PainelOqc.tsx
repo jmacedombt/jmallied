@@ -9,6 +9,7 @@ import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import PopupOqcFail, { type AparelhoOqc } from "@/components/PopupOqcFail";
 import PopupOqcFailLote from "@/components/PopupOqcFailLote";
 import { podeConfirmarOqcEmLote, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import { operacionalRestrito } from "@/lib/usuarios";
 
 function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,6 +69,8 @@ export default function PainelOqc({
   useEffect(() => setItens(aparelhos), [aparelhos]);
 
   const podeLote = podeConfirmarOqcEmLote(perfil);
+  // Operacional (sem is_master) só tem função em Ag. Abertura.
+  const apenasVisualizacao = operacionalRestrito(perfil);
 
   const filtrados = useMemo(() => {
     const os = buscaOs.trim();
@@ -388,45 +391,47 @@ export default function PainelOqc({
                     {(a.descricao_completa ?? "").split(" ")[0]}
                   </td>
                   <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="inline-flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFalhando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })
-                        }
-                        disabled={processandoId === a.id}
-                        title="OQC FAIL — reprovar no controle de qualidade"
-                        className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[#ef4444] disabled:opacity-60"
-                        style={{ borderColor: "var(--line)", color: "#ef4444" }}
-                      >
-                        <XCircle size={14} />
-                        FAIL
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmandoPass(a)}
-                        disabled={processandoId === a.id}
-                        className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[#16a34a] disabled:opacity-60"
-                        style={{ borderColor: "var(--line)", color: "#16a34a" }}
-                        title="OQC PASS — aprovar no controle de qualidade"
-                      >
-                        {processandoId === a.id ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <CheckCircle2 size={14} />
-                        )}
-                        PASS
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
-                        title="Reprovar orçamento"
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444] shrink-0"
-                        style={{ borderColor: "var(--line)", color: "#ef4444" }}
-                      >
-                        <Ban size={15} />
-                      </button>
-                    </div>
+                    {!apenasVisualizacao && (
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFalhando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })
+                          }
+                          disabled={processandoId === a.id}
+                          title="OQC FAIL — reprovar no controle de qualidade"
+                          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[#ef4444] disabled:opacity-60"
+                          style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                        >
+                          <XCircle size={14} />
+                          FAIL
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmandoPass(a)}
+                          disabled={processandoId === a.id}
+                          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[#16a34a] disabled:opacity-60"
+                          style={{ borderColor: "var(--line)", color: "#16a34a" }}
+                          title="OQC PASS — aprovar no controle de qualidade"
+                        >
+                          {processandoId === a.id ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <CheckCircle2 size={14} />
+                          )}
+                          PASS
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
+                          title="Reprovar orçamento"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444] shrink-0"
+                          style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                        >
+                          <Ban size={15} />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               );

@@ -14,6 +14,7 @@ import {
   type CamposPecasComCusto,
   type CamposValorVigente,
 } from "@/lib/orcamentos";
+import { operacionalRestrito } from "@/lib/usuarios";
 
 type Perfil = { cargo: string; is_master: boolean } | null;
 
@@ -76,6 +77,8 @@ export default function PainelReparoFinalizado({
   const [saindoAgora, setSaindoAgora] = useState<Set<string>>(new Set());
 
   const podeLote = podeEmitirNfEmLote(perfil);
+  // Operacional (sem is_master) só tem função em Ag. Abertura.
+  const apenasVisualizacao = operacionalRestrito(perfil);
 
   const filtrados = useMemo(() => {
     const os = buscaOs.trim();
@@ -327,15 +330,17 @@ export default function PainelReparoFinalizado({
                     {a.pre_ordem || "—"}
                   </td>
                   <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
-                      title="Reprovar orçamento"
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
-                      style={{ borderColor: "var(--line)", color: "#ef4444" }}
-                    >
-                      <Ban size={15} />
-                    </button>
+                    {!apenasVisualizacao && (
+                      <button
+                        type="button"
+                        onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
+                        title="Reprovar orçamento"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
+                        style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                      >
+                        <Ban size={15} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

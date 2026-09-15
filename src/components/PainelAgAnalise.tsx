@@ -9,6 +9,7 @@ import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/Po
 import PopupReprovarOrcamentoLote from "@/components/PopupReprovarOrcamentoLote";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
 import { podeImportarBid, type FaixaMarkup, type InfoBidPeca } from "@/lib/bid";
+import { operacionalRestrito } from "@/lib/usuarios";
 
 function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -115,6 +116,10 @@ export default function PainelAgAnalise({
 
   const podeLote = podeConfirmarAnaliseEmLote(perfil);
   const podeCadastrarBid = podeImportarBid(perfil);
+  // Operacional (sem is_master) só tem função em Ag. Abertura — aqui é
+  // só consulta, mesmo pra ação individual (que nenhum outro cargo tem
+  // travada hoje).
+  const apenasVisualizacao = operacionalRestrito(perfil);
 
   const filtrados = useMemo(() => {
     const os = buscaOs.trim();
@@ -517,32 +522,34 @@ export default function PainelAgAnalise({
                     {(a.descricao_completa ?? "").split(" ")[0]}
                   </td>
                   <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="inline-flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setConfirmando(a)}
-                        disabled={processandoId === a.id}
-                        className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[var(--accent2)] disabled:opacity-60"
-                        style={{ borderColor: "var(--line)", color: "var(--ink)" }}
-                        title="Confirmar que a análise foi realizada"
-                      >
-                        {processandoId === a.id ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <ClipboardCheck size={14} style={{ color: "#14b8a6" }} />
-                        )}
-                        Análise realizada
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
-                        title="Reprovar orçamento"
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444] shrink-0"
-                        style={{ borderColor: "var(--line)", color: "#ef4444" }}
-                      >
-                        <Ban size={15} />
-                      </button>
-                    </div>
+                    {!apenasVisualizacao && (
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmando(a)}
+                          disabled={processandoId === a.id}
+                          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[var(--accent2)] disabled:opacity-60"
+                          style={{ borderColor: "var(--line)", color: "var(--ink)" }}
+                          title="Confirmar que a análise foi realizada"
+                        >
+                          {processandoId === a.id ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <ClipboardCheck size={14} style={{ color: "#14b8a6" }} />
+                          )}
+                          Análise realizada
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
+                          title="Reprovar orçamento"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444] shrink-0"
+                          style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                        >
+                          <Ban size={15} />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               );

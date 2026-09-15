@@ -30,6 +30,7 @@ import CelulaLucroPercentual, { corPercentualLucro } from "@/components/CelulaLu
 import PopupDetalheCard, { type BaseCalculoResumo, type LinhaDetalheCard } from "@/components/PopupDetalheCard";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupAviso from "@/components/PopupAviso";
+import { operacionalRestrito } from "@/lib/usuarios";
 
 export type AparelhoValidacao = AparelhoValidacaoDetalhe & {
   id: string;
@@ -233,6 +234,8 @@ export default function PainelValidacaoOrcamentos({
 
   const podeCadastrarPeca = podeImportarBasePecas(perfil);
   const podeConfirmarLote = podeConfirmarAnaliseEmLote(perfil);
+  // Operacional (sem is_master) só tem função em Ag. Abertura.
+  const apenasVisualizacao = operacionalRestrito(perfil);
 
   // se o pop-up de um aparelho estiver aberto e a lista atualizar (depois
   // de cadastrar peça, confirmar sem peça, ou o lote avançar), re-aponta
@@ -652,15 +655,17 @@ export default function PainelValidacaoOrcamentos({
                     <CelulaLucroPercentual percLucroTotal={a.percLucroTotal} />
                   </td>
                   <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
-                      title="Reprovar orçamento"
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
-                      style={{ borderColor: "var(--line)", color: "#ef4444" }}
-                    >
-                      <Ban size={15} />
-                    </button>
+                    {!apenasVisualizacao && (
+                      <button
+                        type="button"
+                        onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
+                        title="Reprovar orçamento"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
+                        style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                      >
+                        <Ban size={15} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

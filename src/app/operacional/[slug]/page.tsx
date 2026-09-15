@@ -223,6 +223,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         <PainelAgTriagem
           aparelhos={(aparelhos ?? []) as AparelhoAgAbertura[]}
           mensagemVazia="Nenhum aparelho em Ag. Triagem no momento."
+          perfil={perfil}
         />
       </AppShell>
     );
@@ -816,6 +817,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       <PainelEtapaSimples
         aparelhos={(aparelhos ?? []) as AparelhoEtapaSimples[]}
         permiteReprovar={status.slug !== "produto-entregue"}
+        perfil={perfil}
         mensagemVazia="Nenhum aparelho nessa etapa ainda."
       />
       <p className="text-xs mt-3" style={{ color: "var(--muted)" }}>

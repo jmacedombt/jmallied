@@ -40,10 +40,15 @@ export type AparelhoContraProposta = {
 // ajustado (flag azul na lista).
 export default function PopupPecasContraProposta({
   aparelho,
+  podeEditar = true,
   onAtualizado,
   onFechar,
 }: {
   aparelho: AparelhoContraProposta;
+  /** false pra quem só pode consultar (ex: cargo Operacional fora de Ag.
+   * Abertura) — os campos viram texto e o botão "Confirmar alteração"
+   * some. */
+  podeEditar?: boolean;
   onAtualizado: () => void;
   onFechar: () => void;
 }) {
@@ -163,14 +168,18 @@ export default function PopupPecasContraProposta({
                       {formatarReal(p.vendaOriginal)}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={textosVenda[i]}
-                        onChange={(e) => aoEditarPeca(i, e.target.value)}
-                        className="rounded-md border px-2 py-1 text-right text-sm outline-none"
-                        style={estiloInput}
-                      />
+                      {podeEditar ? (
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={textosVenda[i]}
+                          onChange={(e) => aoEditarPeca(i, e.target.value)}
+                          className="rounded-md border px-2 py-1 text-right text-sm outline-none"
+                          style={estiloInput}
+                        />
+                      ) : (
+                        <span style={{ color: "var(--ink)" }}>{formatarReal(p.vendaNova)}</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -197,14 +206,18 @@ export default function PopupPecasContraProposta({
           </div>
           <div className="flex items-center justify-between">
             <span style={{ color: "var(--muted)" }}>Mão de obra</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={textoMaoDeObra}
-              onChange={(e) => aoEditarMaoDeObra(e.target.value)}
-              className="rounded-md border px-2 py-1 text-right text-sm outline-none"
-              style={estiloInput}
-            />
+            {podeEditar ? (
+              <input
+                type="text"
+                inputMode="decimal"
+                value={textoMaoDeObra}
+                onChange={(e) => aoEditarMaoDeObra(e.target.value)}
+                className="rounded-md border px-2 py-1 text-right text-sm outline-none"
+                style={estiloInput}
+              />
+            ) : (
+              <strong style={{ color: "var(--ink)" }}>{formatarReal(maoDeObra)}</strong>
+            )}
           </div>
           <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
             <span style={{ color: "var(--ink)" }}>Lucro Total</span>
@@ -217,17 +230,19 @@ export default function PopupPecasContraProposta({
 
           {erro && !confirmando && <p className="text-xs text-red-500 pt-1">{erro}</p>}
 
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setConfirmando(true)}
-              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium text-white transition"
-              style={{ background: "var(--accent)", boxShadow: "0 0 30px var(--accent-glow)" }}
-            >
-              <Save size={13} />
-              Confirmar alteração
-            </button>
-          </div>
+          {podeEditar && (
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmando(true)}
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium text-white transition"
+                style={{ background: "var(--accent)", boxShadow: "0 0 30px var(--accent-glow)" }}
+              >
+                <Save size={13} />
+                Confirmar alteração
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

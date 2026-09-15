@@ -6,6 +6,7 @@ import { CheckCircle2, Clock, Send } from "lucide-react";
 import { podeConfirmarAprovacaoOrcamento, calcularResumoContraProposta, type PecaContraProposta } from "@/lib/orcamentos";
 import PopupPecasContraProposta from "@/components/PopupPecasContraProposta";
 import PopupEnviarContraProposta from "@/components/PopupEnviarContraProposta";
+import { operacionalRestrito } from "@/lib/usuarios";
 
 export type AparelhoContraPropostaLista = {
   id: string;
@@ -42,6 +43,10 @@ export default function PainelContraProposta({
   const [mostrarEnvio, setMostrarEnvio] = useState(false);
 
   const podeAjustar = podeConfirmarAprovacaoOrcamento(perfil);
+  // Operacional (sem is_master) só tem função em Ag. Abertura — clicar
+  // numa linha aqui ainda abre o pop-up (pra poder ver o registro), mas
+  // sem poder editar nem confirmar nada.
+  const apenasVisualizacao = operacionalRestrito(perfil);
 
   useEffect(() => {
     if (!editando) return;
@@ -207,6 +212,7 @@ export default function PainelContraProposta({
             maoDeObraInicial: Number(editando.contra_proposta_mao_de_obra ?? 0),
             jaAjustado: editando.contra_proposta_ajustado,
           }}
+          podeEditar={!apenasVisualizacao}
           onAtualizado={() => {
             setEditando(null);
             router.refresh();

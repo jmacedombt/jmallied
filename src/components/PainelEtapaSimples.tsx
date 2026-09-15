@@ -6,6 +6,9 @@ import { Ban } from "lucide-react";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import { type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import { operacionalRestrito } from "@/lib/usuarios";
+
+type Perfil = { cargo: string; is_master: boolean } | null;
 
 export type AparelhoEtapaSimples = {
   id: string;
@@ -28,15 +31,22 @@ export type AparelhoEtapaSimples = {
 export default function PainelEtapaSimples({
   aparelhos,
   permiteReprovar,
+  perfil = null,
   mensagemVazia = "Nenhum aparelho nessa etapa ainda.",
 }: {
   aparelhos: AparelhoEtapaSimples[];
   permiteReprovar: boolean;
+  perfil?: Perfil;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
   const [detalhe, setDetalhe] = useState<AparelhoEtapaSimples | null>(null);
+
+  // Operacional (sem is_master) só tem função em Ag. Abertura — aqui é
+  // sempre só consulta, mesmo quando `permiteReprovar` é true pra outros
+  // cargos.
+  const mostrarAcao = permiteReprovar && !operacionalRestrito(perfil);
 
   return (
     <>
@@ -50,7 +60,7 @@ export default function PainelEtapaSimples({
               <th className="px-4 py-2.5 font-medium">Modelo comercial</th>
               <th className="px-4 py-2.5 font-medium">SKU</th>
               <th className="px-4 py-2.5 font-medium">Descrição</th>
-              {permiteReprovar && <th className="px-4 py-2.5 font-medium text-right">Ação</th>}
+              {mostrarAcao && <th className="px-4 py-2.5 font-medium text-right">Ação</th>}
             </tr>
           </thead>
           <tbody>
@@ -80,7 +90,7 @@ export default function PainelEtapaSimples({
                 <td className="px-4 py-2.5" style={{ color: "var(--muted)" }} title={a.descricao_completa ?? ""}>
                   {(a.descricao_completa ?? "").split(" ")[0]}
                 </td>
-                {permiteReprovar && (
+                {mostrarAcao && (
                   <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
@@ -98,7 +108,7 @@ export default function PainelEtapaSimples({
             {aparelhos.length === 0 && (
               <tr>
                 <td
-                  colSpan={permiteReprovar ? 7 : 6}
+                  colSpan={mostrarAcao ? 7 : 6}
                   className="px-4 py-8 text-center"
                   style={{ color: "var(--muted)", background: "var(--surface)" }}
                 >

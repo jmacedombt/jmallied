@@ -89,6 +89,12 @@ const TabelaAgAbertura = forwardRef<
      * cuidar dele — ver calcularBlocosAgAbertura em lib/orcamentos.ts e
      * PainelAgAbertura.tsx. Sem entrada = linha sem cor de equipe. */
     corPorId?: Record<string, string>;
+    /** true quando essa tabela está sendo usada FORA de Ag. Abertura (por
+     * enquanto só em 1 - Ag. Triagem, ver PainelAgTriagem.tsx) por um
+     * cargo Operacional sem is_master — nesse caso a OS Reparadora vira
+     * só leitura (sem input/lápis/salvar) e o botão Reprovar some. Nunca
+     * usado (fica false) na tela de Ag. Abertura em si. */
+    somenteLeitura?: boolean;
   }
 >(function TabelaAgAbertura(
   {
@@ -99,6 +105,7 @@ const TabelaAgAbertura = forwardRef<
     aoAlternarSelecao,
     aoAlternarTodos,
     corPorId,
+    somenteLeitura,
   },
   ref
 ) {
@@ -288,12 +295,14 @@ const TabelaAgAbertura = forwardRef<
               >
                 Descrição Completa
               </th>
-              <th
-                className="sticky top-0 z-10 px-4 py-2.5 font-medium text-right"
-                style={{ background: "var(--surface2)", color: "var(--muted)" }}
-              >
-                Ação
-              </th>
+              {!somenteLeitura && (
+                <th
+                  className="sticky top-0 z-10 px-4 py-2.5 font-medium text-right"
+                  style={{ background: "var(--surface2)", color: "var(--muted)" }}
+                >
+                  Ação
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -366,6 +375,10 @@ const TabelaAgAbertura = forwardRef<
                     ) : revertido ? (
                       <span className="inline-flex items-center gap-1.5 text-amber-500 font-medium">
                         <RotateCcw size={14} /> Voltou p/ Ag. Abertura
+                      </span>
+                    ) : somenteLeitura ? (
+                      <span className="font-mono" style={{ color: a.os_reparadora ? "var(--ink)" : "var(--muted)" }}>
+                        {a.os_reparadora || "—"}
                       </span>
                     ) : (
                       <div>
@@ -445,22 +458,24 @@ const TabelaAgAbertura = forwardRef<
                       />
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
-                      title="Reprovar orçamento"
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
-                      style={{ borderColor: "var(--line)", color: "#ef4444" }}
-                    >
-                      <Ban size={15} />
-                    </button>
-                  </td>
+                  {!somenteLeitura && (
+                    <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => setReprovando({ id: a.id, trade_allied: a.trade_allied, os_reparadora: a.os_reparadora })}
+                        title="Reprovar orçamento"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
+                        style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                      >
+                        <Ban size={15} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
 
                 {aberto && (
                   <tr style={{ background: "var(--surface2)" }}>
-                    <td colSpan={selecionavel ? 9 : 8} className="px-4 py-4">
+                    <td colSpan={(selecionavel ? 8 : 7) + (somenteLeitura ? 0 : 1)} className="px-4 py-4">
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-xs">
                         <div>
                           <p className="uppercase tracking-wide mb-0.5" style={{ color: "var(--muted)" }}>
