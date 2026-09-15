@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
-import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
+import { podeVerVolumetriaOuOrcamentos } from "@/lib/usuarios";
 import {
   granularidadeValida,
   dataIsoValida,
@@ -46,7 +46,7 @@ export default async function VolumetriaPage({
     </Link>
   );
 
-  if (!podeConfirmarAnaliseEmLote(perfil)) {
+  if (!podeVerVolumetriaOuOrcamentos(perfil)) {
     return (
       <AppShell titulo="Volumetria" perfil={perfil}>
         {voltar}

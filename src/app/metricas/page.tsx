@@ -2,7 +2,7 @@ import Link from "next/link";
 import { BarChart3, Gauge, PackageCheck, ShieldCheck, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
-import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
+import { isAllied, podeVerVolumetriaOuOrcamentos } from "@/lib/usuarios";
 
 const TILES = [
   {
@@ -40,7 +40,7 @@ const TILES = [
   {
     href: "/metricas/previsao-recebimento",
     titulo: "Previsão de Recebimento",
-    descricao: "Mão de Obra e Peças já aprovadas pela Allied em 5 - Ag. Peças, 6 - Ag. Reparo e 7 - Reparo Finalizado — o que vamos receber.",
+    descricao: "Mão de Obra e Peças já aprovadas pela Allied, de 5 - Ag. Peças até Ag. Emissão de NF — o que vamos receber.",
     icone: Wallet,
     cor: "#d97706",
     clara: "#fbbf24",
@@ -63,7 +63,7 @@ export default async function MetricasPage() {
     perfil = data;
   }
 
-  if (!podeConfirmarAnaliseEmLote(perfil)) {
+  if (!podeVerVolumetriaOuOrcamentos(perfil)) {
     return (
       <AppShell titulo="Métricas" perfil={perfil}>
         <p className="text-sm" style={{ color: "var(--muted)" }}>
@@ -72,6 +72,13 @@ export default async function MetricasPage() {
       </AppShell>
     );
   }
+
+  // ALLIED só enxerga os 2 cards liberados (Volumetria e Orçamentos) —
+  // as outras 3 telas continuam bloqueadas mesmo pela URL direto (ver
+  // middleware.ts).
+  const tilesVisiveis = isAllied(perfil)
+    ? TILES.filter((t) => t.href === "/metricas/volumetria" || t.href === "/metricas/orcamentos")
+    : TILES;
 
   return (
     <AppShell
@@ -84,7 +91,7 @@ export default async function MetricasPage() {
       </p>
 
       <div className="grid sm:grid-cols-2 gap-4 max-w-3xl">
-        {TILES.map((tile) => {
+        {tilesVisiveis.map((tile) => {
           const Icone = tile.icone;
           return (
             <Link

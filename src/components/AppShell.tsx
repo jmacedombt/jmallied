@@ -32,6 +32,7 @@ import {
   Tags,
   TrendingUp,
   Users,
+  Wallet,
   Wrench,
   X,
 } from "lucide-react";
@@ -84,6 +85,11 @@ const GRUPO_METRICAS: GrupoMenu = {
     { href: "/metricas/rtat", label: "R-TAT", icone: LineChart },
     { href: "/metricas/orcamentos", label: "Orçamentos", icone: PackageCheck },
     { href: "/metricas/oqc", label: "OQC", icone: ShieldCheck },
+    // faltava esse item — a página (/metricas/previsao-recebimento) já
+    // existia e funcionava normal, só nunca tinha entrado na lista do
+    // menu lateral (só dava pra chegar nela pelo card na capa de
+    // Métricas). Corrigido aqui, logo depois de "OQC".
+    { href: "/metricas/previsao-recebimento", label: "Previsão de Recebimento", icone: Wallet },
   ],
 };
 
@@ -145,11 +151,14 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
   },
 ];
 
-// Menu do cargo ALLIED (login externo, só consulta): só Painel e
-// Backlog — nada de Reconhecimento Lote (ação), nem qualquer outro
-// grupo (Bases/BID, Métricas, Configurações, Usuários, Manutenção,
-// Impressão ficam totalmente fora, mesmo digitando a URL: o middleware
-// barra o acesso a essas páginas independente do menu mostrar ou não).
+// Menu do cargo ALLIED (login externo, só consulta): Painel, Backlog, e
+// agora também Métricas > Volumetria e Métricas > Orçamentos (pedido
+// explícito — ver função podeVerVolumetriaOuOrcamentos em
+// lib/orcamentos.ts). Nenhum outro submenu de Métricas (R-TAT, OQC,
+// Previsão de Recebimento) nem qualquer outro grupo (Bases/BID,
+// Configurações, Usuários, Manutenção, Impressão) — tudo isso fica
+// fora, mesmo digitando a URL: o middleware barra o acesso
+// independente do menu mostrar ou não.
 const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
   {
     id: "operacional",
@@ -158,6 +167,16 @@ const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
     itens: [
       { href: "/operacional", label: "Painel", icone: LayoutGrid },
       { href: "/operacional/backlog", label: "Backlog", icone: ClipboardList },
+    ],
+  },
+  {
+    id: "metricas",
+    label: "Métricas",
+    icone: LineChart,
+    hrefGrupo: "/metricas",
+    itens: [
+      { href: "/metricas/volumetria", label: "Volumetria", icone: LayoutGrid },
+      { href: "/metricas/orcamentos", label: "Orçamentos", icone: PackageCheck },
     ],
   },
 ];

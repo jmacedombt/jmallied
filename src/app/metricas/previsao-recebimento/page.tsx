@@ -37,7 +37,7 @@ export default async function MetricasPrevisaoRecebimentoPage() {
       href="/metricas"
       title="Voltar para Métricas"
       aria-label="Voltar para Métricas"
-      className="botao-voltar-brilho relative inline-flex items-center justify-center w-11 h-11 rounded-full mb-3 transition-transform hover:scale-110 active:scale-100"
+      className="botao-voltar-brilho relative inline-flex items-center justify-center w-11 h-11 rounded-full mb-2 transition-transform hover:scale-110 active:scale-100"
     >
       <ArrowLeft size={20} strokeWidth={2.5} style={{ color: "var(--accent2)", filter: "drop-shadow(0 0 5px var(--accent2))" }} />
     </Link>
@@ -75,7 +75,7 @@ export default async function MetricasPrevisaoRecebimentoPage() {
   return (
     <AppShell
       titulo="Previsão de Recebimento"
-      tituloInfo="Mão de Obra + Venda de Peças dos aparelhos em 5 - Ag. Peças, 6 - Ag. Reparo e 7 - Reparo Finalizado — as 3 etapas em que o orçamento já foi aprovado pela Allied, então é o que vamos efetivamente receber por eles. Usa o valor vigente de cada aparelho (Reorçamento aprovado, senão Contra Proposta ajustada, senão o valor original da Validação)."
+      tituloInfo="Mão de Obra + Venda de Peças dos aparelhos em 5 - Ag. Peças, 6 - Ag. Reparo, OQC - Controle de Qualidade, 7 - Reparo Finalizado e Ag. Emissão de NF (já aprovada) — todas as etapas em que o orçamento já foi aprovado pela Allied, então é o que vamos efetivamente receber por eles. Fica de fora o valor de orçamento reprovado (não é dinheiro a receber, só informativo) e Produto Entregue (dinheiro já recebido). Usa o valor vigente de cada aparelho (Reorçamento aprovado, senão Contra Proposta ajustada, senão o valor original da Validação)."
       perfil={perfil}
     >
       {voltar}
@@ -85,19 +85,19 @@ export default async function MetricasPrevisaoRecebimentoPage() {
           Não foi possível carregar a métrica: {error.message}
         </p>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* hero — o número que a tela lidera, único por tela (ver skill de dataviz) */}
           <div
-            className="rounded-xl border p-5"
+            className="rounded-xl border p-4"
             style={{
               background: "linear-gradient(155deg, var(--surface2), var(--surface))",
               borderColor: "var(--line)",
             }}
           >
-            <p className="text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
-              Total previsto a receber (5 + 6 + 7)
+            <p className="text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>
+              Total previsto a receber
             </p>
-            <p className="text-4xl font-bold mb-3" style={{ color: "var(--ink)", fontSize: 40 }}>
+            <p className="text-4xl font-bold mb-2" style={{ color: "var(--ink)", fontSize: 36 }}>
               {formatarReal(totalGeral)}
             </p>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
@@ -117,7 +117,7 @@ export default async function MetricasPrevisaoRecebimentoPage() {
             </div>
           </div>
 
-          <GraficoPrevisaoRecebimento itens={itens} />
+          <GraficoPrevisaoRecebimento itens={itens} altura={260} />
 
           {/* tabela — mesmo dado do gráfico, sempre acessível sem precisar do hover */}
           <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>

@@ -11,7 +11,9 @@ import {
   STATUS_ORCAMENTO_FECHADOS,
   STATUS_AG_PECAS,
   STATUS_AG_REPARO,
+  STATUS_OQC,
   STATUS_REPARO_FINALIZADO,
+  STATUS_AG_NF_SERVICO_VENDA_RETORNO,
 } from "@/lib/orcamentos";
 
 export type Granularidade = "dia" | "semana" | "mes";
@@ -538,20 +540,30 @@ export function serieOqcDoResultado(pontos: PontoPeriodoOqc[], resultado: Result
 // ---- Métricas > Previsão de Recebimento — ver migration
 // 0040_previsao_recebimento.sql ----
 
-/** As 3 etapas em que o orçamento já foi aprovado pela Allied (é o que
- * vamos efetivamente receber) — mesma ordem/cores usadas no gráfico e
- * nos cards do topo das 3 telas. Cores validadas (contraste + CVD) com
- * o script da skill de dataviz, pros dois papéis (Mão de Obra / Peças)
- * de cada barra. */
+/** Todas as etapas depois de "5 - Ag. Peças" em que o orçamento já foi
+ * aprovado pela Allied (é o que vamos efetivamente receber) — mesma
+ * ordem/cores usadas no gráfico e no card "Total previsto a receber" do
+ * topo da tela agregada. Cores validadas (contraste + CVD) com o script
+ * da skill de dataviz, pros dois papéis (Mão de Obra / Peças) de cada
+ * barra.
+ *
+ * Ficam de fora de propósito: "8 - Orçamento Reprovado" e "Ag. NF
+ * Retorno (Recusados)" — esse valor não é dinheiro a receber, só
+ * informativo (mesma decisão já documentada na migration 0042) — e
+ * "Produto Entregue", a última etapa, onde o dinheiro já foi recebido
+ * (deixa de ser "previsão"). */
 // "valor" aqui tem que ser exatamente o texto gravado na coluna
 // status_operacional (o mesmo STATUS_AG_PECAS/STATUS_AG_REPARO/
-// STATUS_REPARO_FINALIZADO usado no resto do sistema) — NUNCA o slug da
-// URL (ex: "6-ag-reparo"), que é um valor diferente e só existe no
-// roteamento de operacional/[slug]. Bug corrigido na migration 0041.
+// STATUS_OQC/STATUS_REPARO_FINALIZADO/STATUS_AG_NF_SERVICO_VENDA_RETORNO
+// usado no resto do sistema) — NUNCA o slug da URL (ex: "6-ag-reparo"),
+// que é um valor diferente e só existe no roteamento de
+// operacional/[slug]. Bug corrigido na migration 0041.
 export const STATUS_PREVISAO_RECEBIMENTO = [
   { valor: STATUS_AG_PECAS, label: "5 - Ag. Peças" },
   { valor: STATUS_AG_REPARO, label: "6 - Ag. Reparo" },
+  { valor: STATUS_OQC, label: "OQC - Controle de Qualidade" },
   { valor: STATUS_REPARO_FINALIZADO, label: "7 - Reparo Finalizado" },
+  { valor: STATUS_AG_NF_SERVICO_VENDA_RETORNO, label: "Ag. Emissão de NF" },
 ] as const;
 
 export const COR_MAO_DE_OBRA = "#2f6fed";

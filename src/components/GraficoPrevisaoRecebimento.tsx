@@ -15,15 +15,37 @@ function formatarCompacto(valor: number): string {
   return formatarReal(valor);
 }
 
+/** Quebra o nome da etapa em até 2 linhas pra caber na largura da coluna
+ * sem invadir a coluna vizinha — o "sobreposição" que a tela tinha antes
+ * era o rótulo de etapas mais longas (ex: "OQC - Controle de Qualidade")
+ * estourando em cima do rótulo do card ao lado assim que o número de
+ * etapas cresceu de 3 pra 5. */
+function quebrarLabel(label: string, maxCaracteres: number): string[] {
+  const palavras = label.split(" ");
+  const linhas: string[] = [];
+  let atual = "";
+  for (const palavra of palavras) {
+    const tentativa = atual ? `${atual} ${palavra}` : palavra;
+    if (tentativa.length > maxCaracteres && atual) {
+      linhas.push(atual);
+      atual = palavra;
+    } else {
+      atual = tentativa;
+    }
+  }
+  if (atual) linhas.push(atual);
+  return linhas.slice(0, 2);
+}
+
 // viewBox em unidades abstratas — mesmo esquema de GraficoLinhaGradiente.tsx,
 // esticado a 100% da largura via preserveAspectRatio="none".
 const VIEWBOX_LARGURA = 900;
 const PADDING_LADO = 40;
 const PADDING_TOPO = 40; // espaço pro total acima da barra mais alta
-const ALTURA_EIXO = 34; // espaço pro rótulo da etapa embaixo
-const LARGURA_BARRA = 108;
+const ALTURA_EIXO = 42; // espaço pro rótulo da etapa embaixo (até 2 linhas)
+const LARGURA_BARRA_MAX = 108;
 const GAP_SEGMENTO = 3; // "surface gap" entre Mão de Obra e Peças na mesma barra
-const RAIO_TOPO = 4;
+const RAIO_TOPO = 5;
 
 /** Caminho de um segmento com o topo arredondado e a base reta — usado
  * só no segmento que está no TOPO da pilha (o "data-end" de verdade);
@@ -34,12 +56,17 @@ function caminhoTopoArredondado(x: number, yTopo: number, yBase: number, largura
 }
 
 /**
- * Barras verticais empilhadas — uma por etapa (5, 6, 7), cada uma
- * dividida em Mão de Obra (base) + Venda de Peças (topo), com o total
- * da etapa escrito acima. Mesma técnica (SVG à mão, sem lib) de
- * GraficoLinhaGradiente/GraficoPecasPorPeriodo, pra manter a mesma cara
- * dos outros gráficos do sistema. Paleta validada (contraste + CVD) —
- * ver STATUS_PREVISAO_RECEBIMENTO em lib/metricas.ts.
+ * Barras verticais empilhadas — uma por etapa (5, 6, OQC, 7, Ag.
+ * Emissão de NF), cada uma dividida em Mão de Obra (base) + Venda de
+ * Peças (topo), com o total da etapa escrito acima. A largura da barra
+ * acompanha o espaço disponível por coluna (nunca fixa) — com poucas
+ * etapas ela fica no tamanho máximo, com mais etapas ela encolhe pra
+ * sempre sobrar respiro entre uma coluna e a próxima, sem sobreposição.
+ * Mesma técnica (SVG à mão, sem lib) de GraficoLinhaGradiente/
+ * GraficoPecasPorPeriodo, pra manter a mesma cara dos outros gráficos do
+ * sistema — com um sombreamento suave nas barras pra dar profundidade.
+ * Paleta validada (contraste + CVD) — ver STATUS_PREVISAO_RECEBIMENTO em
+ * lib/metricas.ts.
  */
 export default function GraficoPrevisaoRecebimento({
   itens,
@@ -59,6 +86,8 @@ export default function GraficoPrevisaoRecebimento({
   const n = itens.length;
   const largura = VIEWBOX_LARGURA - PADDING_LADO * 2;
   const passo = n > 1 ? largura / n : largura;
+  const larguraBarra = Math.min(LARGURA_BARRA_MAX, passo * 0.56);
+  const maxCaracteresLabel = Math.max(10, Math.floor(passo / 7));
 
   const semDados = itens.every((i) => i.maoDeObra === 0 && i.vendaPecas === 0);
 
@@ -83,7 +112,7 @@ export default function GraficoPrevisaoRecebimento({
 
       {semDados ? (
         <p className="text-sm py-10 text-center" style={{ color: "var(--muted)" }}>
-          Nenhum aparelho aprovado em 5, 6 ou 7 no momento.
+          Nenhum aparelho aprovado nessas etapas no momento.
         </p>
       ) : (
         <svg
@@ -94,6 +123,12 @@ export default function GraficoPrevisaoRecebimento({
           role="img"
           aria-label="Mão de Obra e Peças previstas por etapa"
         >
+          <defs>
+            <filter id="sombraBarraPrevisao" x="-30%" y="-30%" width="160%" height="160%">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#000000" floodOpacity="0.28" />
+            </filter>
+          </defs>
+
           {/* linha de base (eixo) — hairline recessivo */}
           <line
             x1={PADDING_LADO}
@@ -107,7 +142,7 @@ export default function GraficoPrevisaoRecebimento({
           {itens.map((item, i) => {
             const total = item.maoDeObra + item.vendaPecas;
             const centroX = PADDING_LADO + passo * i + passo / 2;
-            const x = centroX - LARGURA_BARRA / 2;
+            const x = centroX - larguraBarra / 2;
 
             const alturaTotal = (total / maiorTotal) * alturaPlot;
             const alturaMaoDeObra = total > 0 ? (item.maoDeObra / total) * alturaTotal : 0;
@@ -121,6 +156,7 @@ export default function GraficoPrevisaoRecebimento({
 
             const emHover = hover === i;
             const opacidadeOutros = hover !== null && !emHover ? 0.45 : 1;
+            const linhasLabel = quebrarLabel(item.label, maxCaracteresLabel);
 
             return (
               <g
@@ -137,41 +173,30 @@ export default function GraficoPrevisaoRecebimento({
                 {/* área de detecção do hover, cobrindo a coluna inteira (maior que a barra) */}
                 <rect x={PADDING_LADO + passo * i} y={0} width={passo} height={altura} fill="transparent" />
 
-                {/* trilho (track) — mostra a escala mesmo pra etapa com 0 */}
-                <rect
-                  x={x}
-                  y={PADDING_TOPO}
-                  width={LARGURA_BARRA}
-                  height={alturaPlot}
-                  rx={4}
-                  fill="var(--surface2)"
-                  opacity={opacidadeOutros}
-                />
+                <g opacity={opacidadeOutros} style={{ filter: "url(#sombraBarraPrevisao)" }}>
+                  {/* trilho (track) — mostra a escala mesmo pra etapa com 0 */}
+                  <rect x={x} y={PADDING_TOPO} width={larguraBarra} height={alturaPlot} rx={RAIO_TOPO} fill="var(--surface2)" />
 
-                {/* segmento Peças (venda) — sempre o topo da pilha quando presente,
-                    então é ele que carrega a ponta arredondada ("data-end"). */}
-                {alturaPecas > 0 && (
-                  <path
-                    d={caminhoTopoArredondado(x, yTopoPecas, yTopoPecas + alturaPecas, LARGURA_BARRA, RAIO_TOPO)}
-                    fill={COR_VENDA_PECAS}
-                    opacity={opacidadeOutros}
-                  />
-                )}
-
-                {/* segmento Mão de Obra — nasce da baseline (base sempre reta). Só
-                    ganha o topo arredondado quando é o único segmento (sem Peças
-                    em cima); com os dois presentes, o topo fica reto — a separação
-                    visual é o "surface gap", nunca dois arredondados encostados. */}
-                {alturaMaoDeObra > 0 &&
-                  (temGap ? (
-                    <rect x={x} y={yTopoMaoDeObra} width={LARGURA_BARRA} height={alturaMaoDeObra} fill={COR_MAO_DE_OBRA} opacity={opacidadeOutros} />
-                  ) : (
+                  {/* segmento Peças (venda) — sempre o topo da pilha quando presente,
+                      então é ele que carrega a ponta arredondada ("data-end"). */}
+                  {alturaPecas > 0 && (
                     <path
-                      d={caminhoTopoArredondado(x, yTopoMaoDeObra, baseline, LARGURA_BARRA, RAIO_TOPO)}
-                      fill={COR_MAO_DE_OBRA}
-                      opacity={opacidadeOutros}
+                      d={caminhoTopoArredondado(x, yTopoPecas, yTopoPecas + alturaPecas, larguraBarra, RAIO_TOPO)}
+                      fill={COR_VENDA_PECAS}
                     />
-                  ))}
+                  )}
+
+                  {/* segmento Mão de Obra — nasce da baseline (base sempre reta). Só
+                      ganha o topo arredondado quando é o único segmento (sem Peças
+                      em cima); com os dois presentes, o topo fica reto — a separação
+                      visual é o "surface gap", nunca dois arredondados encostados. */}
+                  {alturaMaoDeObra > 0 &&
+                    (temGap ? (
+                      <rect x={x} y={yTopoMaoDeObra} width={larguraBarra} height={alturaMaoDeObra} fill={COR_MAO_DE_OBRA} />
+                    ) : (
+                      <path d={caminhoTopoArredondado(x, yTopoMaoDeObra, baseline, larguraBarra, RAIO_TOPO)} fill={COR_MAO_DE_OBRA} />
+                    ))}
+                </g>
 
                 {/* total no topo da barra (label seletivo — só o total, não os 2 segmentos) */}
                 <text
@@ -181,13 +206,25 @@ export default function GraficoPrevisaoRecebimento({
                   fontSize={emHover ? 15 : 14}
                   fontWeight={700}
                   fill="var(--ink)"
+                  opacity={opacidadeOutros}
                 >
                   {formatarCompacto(total)}
                 </text>
 
-                {/* rótulo da etapa embaixo */}
-                <text x={centroX} y={baseline + ALTURA_EIXO - 10} textAnchor="middle" fontSize="13" fontWeight={600} fill="var(--muted)">
-                  {item.label}
+                {/* rótulo da etapa embaixo — quebrado em até 2 linhas pra nunca
+                    invadir a coluna vizinha */}
+                <text x={centroX} textAnchor="middle" fontSize="12.5" fontWeight={600} fill="var(--muted)" opacity={opacidadeOutros}>
+                  {linhasLabel.length === 1 ? (
+                    <tspan x={centroX} y={baseline + ALTURA_EIXO - 14}>
+                      {linhasLabel[0]}
+                    </tspan>
+                  ) : (
+                    linhasLabel.map((linha, idx) => (
+                      <tspan key={linha} x={centroX} y={baseline + ALTURA_EIXO - 26 + idx * 14}>
+                        {linha}
+                      </tspan>
+                    ))
+                  )}
                 </text>
 
                 {/* tooltip ao hover/foco — os 2 valores + total, texto sempre em tokens de texto */}

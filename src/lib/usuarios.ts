@@ -3,6 +3,8 @@
  * editar cadastro, resetar senha e bloquear/desbloquear login.
  */
 
+import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
+
 // cargos que podem gerenciar outros usuários (Administrador = is_master, tratado à parte)
 export const CARGOS_GESTAO_USUARIOS = ["Gerente", "Diretor"] as const;
 
@@ -22,6 +24,20 @@ export function podeGerenciarUsuarios(perfil: { cargo: string; is_master: boolea
  */
 export function isAllied(perfil: { cargo: string } | null): boolean {
   return perfil?.cargo === "ALLIED";
+}
+
+/**
+ * ALLIED também tem acesso a 2 submenus de Métricas — Volumetria e
+ * Orçamentos (pedido explícito) — além de quem já podia ver Métricas
+ * (mesmo cargo que confirma envio de lote, ver podeConfirmarAnaliseEmLote).
+ * Nenhuma das duas telas mostra custo/BID (só contagens, venda de peça e
+ * mão de obra — o mesmo nível de detalhe que orcamentos_allied_listar já
+ * expõe), então não fere a regra de nunca mostrar custo pro ALLIED. As
+ * outras 3 telas de Métricas (R-TAT, OQC, Previsão de Recebimento)
+ * continuam fora do alcance do ALLIED.
+ */
+export function podeVerVolumetriaOuOrcamentos(perfil: { cargo: string; is_master: boolean } | null): boolean {
+  return isAllied(perfil) || podeConfirmarAnaliseEmLote(perfil);
 }
 
 /**

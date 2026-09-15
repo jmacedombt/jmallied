@@ -18,9 +18,15 @@ const SLUGS_OPERACIONAL_ALLIED = STATUS_OPERACIONAL.map((s) => s.slug);
 // tem problema nenhum em liberar (ver route.ts dessa rota).
 const APIS_PERMITIDAS_ALLIED = ["/api/operacional/backlog/exportar-allied"];
 
+// páginas de Métricas liberadas pro ALLIED (pedido explícito) — só a
+// capa (/metricas, com os cards) e essas 2 telas; R-TAT, OQC e Previsão
+// de Recebimento continuam de fora mesmo entrando pela URL direto.
+const ROTAS_METRICAS_ALLIED = ["/metricas", "/metricas/volumetria", "/metricas/orcamentos"];
+
 function rotaPermitidaParaAllied(path: string): boolean {
   if (path === "/operacional") return true;
   if (path === "/operacional/backlog" || path.startsWith("/operacional/backlog/")) return true;
+  if (ROTAS_METRICAS_ALLIED.some((rota) => path === rota || path.startsWith(`${rota}/`))) return true;
   return SLUGS_OPERACIONAL_ALLIED.some(
     (slug) => path === `/operacional/${slug}` || path.startsWith(`/operacional/${slug}/`)
   );

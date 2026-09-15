@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
-import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
+import { podeVerVolumetriaOuOrcamentos } from "@/lib/usuarios";
 import { dataIsoValida, intervaloPadraoDias, type LinhaResultadoOrcamento, type LinhaResultadoPeca } from "@/lib/metricas";
 import FiltroPeriodoSimples from "@/components/FiltroPeriodoSimples";
 import PainelMetricasOrcamentos from "@/components/PainelMetricasOrcamentos";
@@ -44,7 +44,7 @@ export default async function MetricasOrcamentosPage({
     </Link>
   );
 
-  if (!podeConfirmarAnaliseEmLote(perfil)) {
+  if (!podeVerVolumetriaOuOrcamentos(perfil)) {
     return (
       <AppShell titulo="Orçamentos" perfil={perfil}>
         {voltar}
