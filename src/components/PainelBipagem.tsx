@@ -19,8 +19,23 @@ export default function PainelBipagem({ modo }: { modo: TipoBipagem }) {
   const router = useRouter();
   const [codigo, setCodigo] = useState("");
   const [processando, setProcessando] = useState(false);
+  const [naFila, setNaFila] = useState(0);
   const [historico, setHistorico] = useState<LinhaHistorico[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Fila de códigos bipados. O leitor físico manda o Enter sozinho logo
+  // depois de cada código, bem mais rápido do que o ciclo completo de uma
+  // bipagem (localizar -> imprimir -> confirmar, tudo indo e voltando do
+  // servidor). Antes, uma bipagem que chegasse enquanto a anterior ainda
+  // estava em andamento era simplesmente descartada (e o campo ainda
+  // ficava desabilitado nesse intervalo, então nem dava pra digitar) —
+  // era isso que fazia bipar em sequência rápida "perder" aparelhos no
+  // meio do caminho. Agora cada bipagem entra numa fila e todas são
+  // processadas uma atrás da outra, na ordem, sem perder nenhuma — e o
+  // campo nunca fica desabilitado, então dá pra continuar bipando sem
+  // parar.
+  const filaRef = useRef<string[]>([]);
+  const processandoRef = useRef(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -33,32 +48,43 @@ export default function PainelBipagem({ modo }: { modo: TipoBipagem }) {
     ]);
   }
 
-  async function aoBipar(e?: React.FormEvent) {
+  async function processarFila() {
+    if (processandoRef.current) return;
+    processandoRef.current = true;
+    setProcessando(true);
+    while (filaRef.current.length > 0) {
+      const valor = filaRef.current.shift()!;
+      setNaFila(filaRef.current.length);
+      try {
+        const resultado = await processarBipagem(valor, modo);
+        registrar(resultado.ok, resultado.mensagem);
+        if (resultado.ok && modo === "triagem") {
+          router.refresh();
+        }
+      } catch {
+        registrar(false, "Erro inesperado — confira sua conexão e tente novamente.");
+      }
+    }
+    processandoRef.current = false;
+    setProcessando(false);
+    inputRef.current?.focus();
+  }
+
+  function aoBipar(e?: React.FormEvent) {
     e?.preventDefault();
     const valor = codigo.trim();
     setCodigo("");
-    if (!valor || processando) return;
-
-    setProcessando(true);
-    try {
-      const resultado = await processarBipagem(valor, modo);
-      registrar(resultado.ok, resultado.mensagem);
-      if (resultado.ok && modo === "triagem") {
-        router.refresh();
-      }
-    } catch {
-      registrar(false, "Erro inesperado — confira sua conexão e tente novamente.");
-    } finally {
-      setProcessando(false);
-      inputRef.current?.focus();
-    }
+    if (!valor) return;
+    filaRef.current.push(valor);
+    setNaFila(filaRef.current.length);
+    processarFila();
   }
 
   return (
     <div>
       <form onSubmit={aoBipar} className="mb-5">
         <label className="block text-xs mb-1.5" style={{ color: "var(--muted)" }}>
-          Bipe ou digite o código Trade Allied e aperte Enter
+          Bipe o código Trade Allied — pode ir bipando um atrás do outro, sem esperar terminar o anterior
         </label>
         <div className="relative">
           <ScanBarcode size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "var(--muted)" }} />
@@ -69,14 +95,18 @@ export default function PainelBipagem({ modo }: { modo: TipoBipagem }) {
             onChange={(e) => setCodigo(e.target.value)}
             placeholder="Trade Allied..."
             autoFocus
-            disabled={processando}
-            className="w-full rounded-lg border pl-11 pr-4 py-3.5 text-lg text-center outline-none focus:border-[var(--accent2)] focus:ring-1 focus:ring-[var(--accent2)] transition bg-[var(--surface2)] border-[var(--line)] disabled:opacity-60"
+            className="w-full rounded-lg border pl-11 pr-4 py-3.5 text-lg text-center outline-none focus:border-[var(--accent2)] focus:ring-1 focus:ring-[var(--accent2)] transition bg-[var(--surface2)] border-[var(--line)]"
             style={{ color: "var(--ink)" }}
           />
           {processando && (
             <Loader2 size={18} className="absolute right-3.5 top-1/2 -translate-y-1/2 animate-spin" style={{ color: "var(--accent2)" }} />
           )}
         </div>
+        {naFila > 0 && (
+          <p className="text-[11px] mt-1.5" style={{ color: "var(--accent2)" }}>
+            {naFila} bipagem(ns) na fila, processando...
+          </p>
+        )}
       </form>
 
       <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>
