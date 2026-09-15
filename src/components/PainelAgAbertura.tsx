@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -13,6 +13,10 @@ import {
   XCircle,
 } from "lucide-react";
 import TabelaAgAbertura, { type AparelhoAgAbertura, type TabelaAgAberturaHandle } from "@/components/TabelaAgAbertura";
+import { createClient } from "@/lib/supabase/client";
+import { calcularBlocosAgAbertura, corUsuarioAbertura } from "@/lib/orcamentos";
+
+export type UsuarioOperacionalAbertura = { id: string; nome: string; sobrenome: string };
 
 type ItemEncontrado = {
   id: string;
@@ -38,11 +42,19 @@ export default function PainelAgAbertura({
   aparelhos,
   mensagemVazia,
   topo,
+  usuariosOperacional = [],
+  selecaoInicial = [],
 }: {
   aparelhos: AparelhoAgAbertura[];
   mensagemVazia?: string;
   /** botão "voltar" + badge de contagem, renderizados na mesma linha da barra de upload */
   topo?: React.ReactNode;
+  /** usuários com cargo "Operacional" (ativos), já em ordem alfabética —
+   * define tanto a lista de nomes clicáveis quanto a cor fixa de cada
+   * um (ver corUsuarioAbertura em lib/orcamentos.ts). */
+  usuariosOperacional?: UsuarioOperacionalAbertura[];
+  /** quem já está marcado quando a página carrega (vem do servidor). */
+  selecaoInicial?: string[];
 }) {
   const tabelaRef = useRef<TabelaAgAberturaHandle>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,6 +64,81 @@ export default function PainelAgAbertura({
   const [erroAnalise, setErroAnalise] = useState<string | null>(null);
   const [analise, setAnalise] = useState<Analise | null>(null);
   const [processando, setProcessando] = useState(false);
+
+  // ---- divisão de cores entre a equipe Operacional (compartilhada) ----
+  const [selecionados, setSelecionados] = useState<string[]>(selecaoInicial);
+
+  useEffect(() => {
+    setSelecionados(selecaoInicial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selecaoInicial.join(",")]);
+
+  // Realtime: qualquer marcação/desmarcação feita em outro computador
+  // (ou por outro usuário na mesma tela) chega aqui na hora, sem
+  // precisar dar reload — mesmo padrão de ContadorAoVivo.tsx.
+  useEffect(() => {
+    const supabase = createClient();
+    const canal = supabase
+      .channel("ag-abertura-selecao-usuarios")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "ag_abertura_selecao_usuarios" },
+        (payload) => {
+          const id = (payload.new as { usuario_id: string } | null)?.usuario_id;
+          if (!id) return;
+          setSelecionados((atual) => (atual.includes(id) ? atual : [...atual, id]));
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "ag_abertura_selecao_usuarios" },
+        (payload) => {
+          const id = (payload.old as { usuario_id: string } | null)?.usuario_id;
+          if (!id) return;
+          setSelecionados((atual) => atual.filter((x) => x !== id));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(canal);
+    };
+  }, []);
+
+  async function alternarUsuario(usuarioId: string) {
+    const marcado = selecionados.includes(usuarioId);
+    // otimista: já reflete na tela, sem esperar a resposta do servidor
+    setSelecionados((atual) => (marcado ? atual.filter((x) => x !== usuarioId) : [...atual, usuarioId]));
+
+    try {
+      const res = await fetch("/api/operacional/ag-abertura/selecao-usuarios", {
+        method: marcado ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usuario_id: usuarioId }),
+      });
+      if (!res.ok) {
+        setSelecionados((atual) => (marcado ? [...atual, usuarioId] : atual.filter((x) => x !== usuarioId)));
+      }
+    } catch {
+      setSelecionados((atual) => (marcado ? [...atual, usuarioId] : atual.filter((x) => x !== usuarioId)));
+    }
+  }
+
+  // ordem alfabética (a mesma de usuariosOperacional) entre só os
+  // marcados — define quem fica com o 1º bloco, o 2º, etc.
+  const usuariosSelecionadosEmOrdem = useMemo(
+    () => usuariosOperacional.filter((u) => selecionados.includes(u.id)),
+    [usuariosOperacional, selecionados]
+  );
+
+  const corPorId = useMemo(() => {
+    const blocos = calcularBlocosAgAbertura(aparelhos, usuariosSelecionadosEmOrdem);
+    const mapa: Record<string, string> = {};
+    for (const [aparelhoId, usuarioId] of blocos) {
+      mapa[aparelhoId] = corUsuarioAbertura(usuariosOperacional, usuarioId);
+    }
+    return mapa;
+  }, [aparelhos, usuariosSelecionadosEmOrdem, usuariosOperacional]);
 
   async function analisarArquivo() {
     const arquivo = inputRef.current?.files?.[0];
@@ -115,7 +202,34 @@ export default function PainelAgAbertura({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
-        <div className="flex items-center flex-wrap [&>*]:!mb-0">{topo}</div>
+        <div className="flex items-center flex-wrap gap-2 [&>*]:!mb-0">
+          {topo}
+          {usuariosOperacional.length > 0 && (
+            <div className="flex items-center flex-wrap gap-1.5" title="Marque quem da equipe está digitando agora, pra dividir e colorir as pendências entre vocês">
+              {usuariosOperacional.map((u) => {
+                const cor = corUsuarioAbertura(usuariosOperacional, u.id);
+                const marcado = selecionados.includes(u.id);
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => alternarUsuario(u.id)}
+                    title={marcado ? `${u.nome} está marcado — clique pra desmarcar` : `Marcar ${u.nome} na divisão`}
+                    className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition"
+                    style={
+                      marcado
+                        ? { background: cor, borderColor: cor, color: "#fff" }
+                        : { borderColor: "var(--line)", color: "var(--muted)", background: "var(--surface)" }
+                    }
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: marcado ? "#fff" : cor }} />
+                    {u.nome}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <div className="flex items-center flex-wrap gap-1.5" title="Preencher OS Reparadora em massa via planilha">
           <FileSpreadsheet size={14} className="mr-0.5 shrink-0" style={{ color: "var(--accent2)" }} />
@@ -177,7 +291,7 @@ export default function PainelAgAbertura({
         />
       )}
 
-      <TabelaAgAbertura ref={tabelaRef} aparelhos={aparelhos} mensagemVazia={mensagemVazia} />
+      <TabelaAgAbertura ref={tabelaRef} aparelhos={aparelhos} mensagemVazia={mensagemVazia} corPorId={corPorId} />
     </div>
   );
 }

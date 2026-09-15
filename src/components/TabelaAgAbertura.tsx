@@ -3,11 +3,14 @@
 import { Fragment, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Ban, Copy, Save, Pencil, Check, RotateCcw, Loader2, X } from "lucide-react";
-import { deriveImeiReparadora, osReparadoraValida } from "@/lib/orcamentos";
+import { deriveImeiReparadora, hexParaRgba, osReparadoraValida } from "@/lib/orcamentos";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 
 export type AparelhoAgAbertura = {
   id: string;
+  /** número local da tela (1, 2, 3...) — só identificação, ver
+   * migration 0044 e PainelAgAbertura.tsx. */
+  numero_sequencial_abertura: number | null;
   os_reparadora: string | null;
   data_reconhecimento: string | null;
   os_care_allied: string | null;
@@ -82,9 +85,21 @@ const TabelaAgAbertura = forwardRef<
     selecionados?: Set<string>;
     aoAlternarSelecao?: (id: string) => void;
     aoAlternarTodos?: () => void;
+    /** aparelho.id -> cor ("#rrggbb") do usuário Operacional marcado pra
+     * cuidar dele — ver calcularBlocosAgAbertura em lib/orcamentos.ts e
+     * PainelAgAbertura.tsx. Sem entrada = linha sem cor de equipe. */
+    corPorId?: Record<string, string>;
   }
 >(function TabelaAgAbertura(
-  { aparelhos, mensagemVazia = "Nenhum aparelho aguardando abertura no momento.", selecionavel, selecionados, aoAlternarSelecao, aoAlternarTodos },
+  {
+    aparelhos,
+    mensagemVazia = "Nenhum aparelho aguardando abertura no momento.",
+    selecionavel,
+    selecionados,
+    aoAlternarSelecao,
+    aoAlternarTodos,
+    corPorId,
+  },
   ref
 ) {
   const router = useRouter();
@@ -231,6 +246,13 @@ const TabelaAgAbertura = forwardRef<
                 </th>
               )}
               <th
+                className="sticky top-0 z-10 px-4 py-2.5 font-medium w-12 text-right"
+                style={{ background: "var(--surface2)", color: "var(--muted)" }}
+                title="Número local dessa tela — só pra identificação, não é o id do sistema"
+              >
+                Nº
+              </th>
+              <th
                 className="sticky top-0 z-10 px-4 py-2.5 font-medium w-64"
                 style={{ background: "var(--surface2)", color: "var(--muted)" }}
               >
@@ -284,6 +306,9 @@ const TabelaAgAbertura = forwardRef<
             const imeiAllied = deriveImeiReparadora(a.imei_allied) ?? "";
             const descricaoPrimeiraPalavra = (a.descricao_completa ?? "").split(" ")[0];
 
+            const corEquipe = corPorId?.[a.id];
+            const semDestaqueDeAcao = !processandoLote && !salvo && !revertido;
+
             const defeitos = Array.from({ length: 10 }, (_, i) => {
               const desc = a[`descricao_defeito_${i + 1}` as keyof AparelhoAgAbertura] as string | null;
               const peca = a[`peca_defeito_${i + 1}` as keyof AparelhoAgAbertura] as string | null;
@@ -303,7 +328,10 @@ const TabelaAgAbertura = forwardRef<
                         ? "rgba(34,197,94,0.14)"
                         : revertido
                           ? "rgba(245,158,11,0.14)"
-                          : "var(--surface)",
+                          : corEquipe
+                            ? hexParaRgba(corEquipe, 0.14)
+                            : "var(--surface)",
+                    borderLeft: corEquipe && semDestaqueDeAcao ? `3px solid ${corEquipe}` : undefined,
                     opacity: saindoAgora ? 0 : 1,
                     transform: saindoAgora ? "translateX(12px)" : "translateX(0)",
                   }}
@@ -319,6 +347,13 @@ const TabelaAgAbertura = forwardRef<
                       />
                     </td>
                   )}
+                  <td
+                    className="px-4 py-2.5 text-right font-mono text-xs"
+                    style={{ color: "var(--muted)" }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {a.numero_sequencial_abertura ?? "—"}
+                  </td>
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                     {processandoLote ? (
                       <span className="inline-flex items-center gap-1.5" style={{ color: "var(--accent2)" }}>
@@ -425,7 +460,7 @@ const TabelaAgAbertura = forwardRef<
 
                 {aberto && (
                   <tr style={{ background: "var(--surface2)" }}>
-                    <td colSpan={selecionavel ? 8 : 7} className="px-4 py-4">
+                    <td colSpan={selecionavel ? 9 : 8} className="px-4 py-4">
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-xs">
                         <div>
                           <p className="uppercase tracking-wide mb-0.5" style={{ color: "var(--muted)" }}>

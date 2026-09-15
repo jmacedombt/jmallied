@@ -168,20 +168,40 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
   }
 
   if (status.slug === "ag-abertura" || status.slug === "1-ag-triagem") {
-    const { data: aparelhos } = await supabase
+    const query = supabase
       .from("orcamentos")
       .select(
-        "id, os_reparadora, data_reconhecimento, os_care_allied, trade_allied, imei_allied, descricao_completa, modelo_comercial, descricao_defeito_1, descricao_defeito_2, descricao_defeito_3, descricao_defeito_4, descricao_defeito_5, descricao_defeito_6, descricao_defeito_7, descricao_defeito_8, descricao_defeito_9, descricao_defeito_10, peca_defeito_1, peca_defeito_2, peca_defeito_3, peca_defeito_4, peca_defeito_5, peca_defeito_6, peca_defeito_7, peca_defeito_8, peca_defeito_9, peca_defeito_10"
+        "id, numero_sequencial_abertura, os_reparadora, data_reconhecimento, os_care_allied, trade_allied, imei_allied, descricao_completa, modelo_comercial, descricao_defeito_1, descricao_defeito_2, descricao_defeito_3, descricao_defeito_4, descricao_defeito_5, descricao_defeito_6, descricao_defeito_7, descricao_defeito_8, descricao_defeito_9, descricao_defeito_10, peca_defeito_1, peca_defeito_2, peca_defeito_3, peca_defeito_4, peca_defeito_5, peca_defeito_6, peca_defeito_7, peca_defeito_8, peca_defeito_9, peca_defeito_10"
       )
-      .eq("status_operacional", status.valor)
-      .order(status.slug === "ag-abertura" ? "created_at" : "os_reparadora_definida_em", { ascending: true });
+      .eq("status_operacional", status.valor);
+
+    const { data: aparelhos } =
+      status.slug === "ag-abertura"
+        ? await query.order("numero_sequencial_abertura", { ascending: true, nullsFirst: false }).order("created_at", { ascending: true })
+        : await query.order("os_reparadora_definida_em", { ascending: true });
 
     if (status.slug === "ag-abertura") {
+      // usuários Operacional ativos (pra lista de nomes clicáveis) + quem
+      // já está marcado agora na divisão de cores (ver migration 0044) —
+      // só carregado nessa etapa, ninguém mais usa isso.
+      const [{ data: usuariosOperacional }, { data: selecaoAtual }] = await Promise.all([
+        supabase
+          .from("usuarios")
+          .select("id, nome, sobrenome")
+          .eq("cargo", "Operacional")
+          .is("bloqueado_em", null)
+          .order("nome", { ascending: true })
+          .order("sobrenome", { ascending: true }),
+        supabase.from("ag_abertura_selecao_usuarios").select("usuario_id"),
+      ]);
+
       return (
         <AppShell titulo={status.label} perfil={perfil}>
           <PainelAgAbertura
             aparelhos={(aparelhos ?? []) as AparelhoAgAbertura[]}
             mensagemVazia="Nenhum aparelho aguardando abertura no momento."
+            usuariosOperacional={usuariosOperacional ?? []}
+            selecaoInicial={(selecaoAtual ?? []).map((s) => s.usuario_id)}
             topo={
               <>
                 {voltar}

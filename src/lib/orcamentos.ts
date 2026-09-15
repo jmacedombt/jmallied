@@ -247,6 +247,74 @@ export function osReparadoraValida(valor: string): boolean {
   return /^[0-9]{10}$/.test(valor.trim());
 }
 
+// ---- Ag. Abertura: divisão por cor entre a equipe Operacional ----
+// (ver migration 0044, PainelAgAbertura.tsx, TabelaAgAbertura.tsx)
+
+/** Cor de cada usuário Operacional em Ag. Abertura — atribuída por
+ * ordem alfabética entre TODOS os usuários com cargo "Operacional"
+ * (não pela ordem em que foram marcados), assim a cor de cada um fica
+ * sempre a mesma, não importa quem mais estiver selecionado no momento. */
+export const PALETA_CORES_ABERTURA = [
+  "#eab308", // amarelo
+  "#22c55e", // verde
+  "#3b82f6", // azul
+  "#ec4899", // rosa
+  "#f97316", // laranja
+  "#a855f7", // roxo
+  "#06b6d4", // ciano
+  "#ef4444", // vermelho
+] as const;
+
+export function corUsuarioAbertura(usuariosOperacional: { id: string }[], usuarioId: string): string {
+  const idx = usuariosOperacional.findIndex((u) => u.id === usuarioId);
+  if (idx === -1) return PALETA_CORES_ABERTURA[0];
+  return PALETA_CORES_ABERTURA[idx % PALETA_CORES_ABERTURA.length];
+}
+
+/** Converte uma cor "#rrggbb" em "rgba(r,g,b,alpha)" — usado pra pintar
+ * o fundo das linhas com um tom claro da cor do usuário (mesmo padrão
+ * de opacidade 0.14 já usado nos outros destaques da tela). */
+export function hexParaRgba(hex: string, alpha: number): string {
+  const limpo = hex.replace("#", "");
+  const r = parseInt(limpo.substring(0, 2), 16);
+  const g = parseInt(limpo.substring(2, 4), 16);
+  const b = parseInt(limpo.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * Divide os aparelhos pendentes de Ag. Abertura — já ordenados pelo
+ * número sequencial da tela (numero_sequencial_abertura) — em blocos
+ * CONTÍGUOS entre os usuários marcados: 1 marcado = todo mundo com a
+ * cor dele; 2 marcados = a lista dividida ao meio, cada metade com a
+ * cor de um; 3 marcados = dividida em 3, e assim por diante. Quando não
+ * divide exato, a sobra fica com os primeiros usuários da ordem
+ * recebida. Ninguém marcado = mapa vazio (nenhuma linha ganha cor).
+ */
+export function calcularBlocosAgAbertura(
+  aparelhosOrdenados: { id: string }[],
+  usuariosSelecionadosEmOrdem: { id: string }[]
+): Map<string, string> {
+  const mapa = new Map<string, string>();
+  const k = usuariosSelecionadosEmOrdem.length;
+  if (k === 0) return mapa;
+
+  const total = aparelhosOrdenados.length;
+  const base = Math.floor(total / k);
+  const resto = total % k;
+
+  let cursor = 0;
+  for (let i = 0; i < k; i++) {
+    const tamanho = base + (i < resto ? 1 : 0);
+    for (let j = 0; j < tamanho; j++) {
+      const aparelho = aparelhosOrdenados[cursor];
+      if (aparelho) mapa.set(aparelho.id, usuariosSelecionadosEmOrdem[i].id);
+      cursor++;
+    }
+  }
+  return mapa;
+}
+
 export type ConfiguracaoMaoDeObra = {
   valor_sem_peca: number;
   valor_uma_peca: number;
