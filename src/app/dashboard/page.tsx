@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
+import { operacionalRestrito, rotaBloqueadaParaOperacional } from "@/lib/usuarios";
 
 // Um card por menu/submenu já existente no sistema — cada um com sua
 // própria identidade de cor (mesmo estilo dos cards de Operacional:
@@ -126,6 +127,14 @@ export default async function DashboardPage() {
     perfil = data;
   }
 
+  // Operacional (sem is_master) não vê card nenhum que só vai devolver
+  // pro Painel (Bases, Configurações, Usuários, Reconhecimento Lote) —
+  // esses caminhos já ficam bloqueados no middleware de qualquer jeito
+  // (ver PREFIXOS_BLOQUEADOS_OPERACIONAL em lib/usuarios.ts).
+  const cardsVisiveis = operacionalRestrito(perfil)
+    ? CARDS_PAINEL.filter((card) => !rotaBloqueadaParaOperacional(card.href))
+    : CARDS_PAINEL;
+
   return (
     <AppShell titulo="Início" perfil={perfil}>
       <h1 className="text-xl font-semibold mb-2" style={{ color: "var(--ink)" }}>
@@ -137,7 +146,7 @@ export default async function DashboardPage() {
       </p>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {CARDS_PAINEL.map((card) => {
+        {cardsVisiveis.map((card) => {
           const Icone = card.icone;
           return (
             <Link

@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { STATUS_OPERACIONAL } from "@/lib/orcamentos";
+import { rotaBloqueadaParaOperacional } from "@/lib/usuarios";
 
 // caminhos de página que o cargo ALLIED (login externo, só consulta)
 // pode abrir — Operacional > Painel, a etapa de cada card (qualquer
@@ -35,6 +36,9 @@ function rotaPermitidaParaAllied(path: string): boolean {
  *   chamada de API própria (/api/**) é barrada (ALLIED é só consulta,
  *   nenhuma tela dele precisa chamar API nenhuma — os dados vêm todos
  *   já prontos do Server Component).
+ * - cargo Operacional (sem is_master) -> Backlog, Reconhecimento Lote,
+ *   Bases, Configurações e Sistema viram redirect pra /operacional,
+ *   mesmo entrando pela URL direto.
  */
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } });
@@ -74,11 +78,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  let perfil: { must_change_password: boolean; cargo: string } | null = null;
+  let perfil: { must_change_password: boolean; cargo: string; is_master: boolean } | null = null;
   if (user) {
     const { data } = await supabase
       .from("usuarios")
-      .select("must_change_password, cargo")
+      .select("must_change_password, cargo, is_master")
       .eq("id", user.id)
       .single();
     perfil = data;
@@ -115,6 +119,13 @@ export async function middleware(request: NextRequest) {
         url.search = "";
         return NextResponse.redirect(url);
       }
+    }
+
+    if (perfil?.cargo === "Operacional" && !perfil.is_master && rotaBloqueadaParaOperacional(path)) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/operacional";
+      url.search = "";
+      return NextResponse.redirect(url);
     }
   }
 

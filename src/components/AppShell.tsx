@@ -40,7 +40,7 @@ import Avatar from "@/components/Avatar";
 import BotaoTema from "@/components/BotaoTema";
 import ColorPickerSistema from "@/components/ColorPickerSistema";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
-import { isAllied } from "@/lib/usuarios";
+import { isAllied, operacionalRestrito } from "@/lib/usuarios";
 
 type Perfil = {
   nome: string;
@@ -162,6 +162,29 @@ const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
   },
 ];
 
+// Menu do cargo Operacional (sem is_master) — quem digita a OS
+// Reparadora em Ag. Abertura: só Painel (Backlog e Reconhecimento Lote
+// saem do menu) e Impressão. Nada de Bases, Configurações nem Sistema —
+// o middleware barra essas páginas mesmo digitando a URL direto (ver
+// PREFIXOS_BLOQUEADOS_OPERACIONAL em middleware.ts). Métricas já fica de
+// fora sozinho, porque esse cargo não passa em podeConfirmarAnaliseEmLote.
+const GRUPOS_MENU_OPERACIONAL: GrupoMenu[] = [
+  {
+    id: "operacional",
+    label: "Operacional",
+    icone: LayoutGrid,
+    hrefGrupo: "/operacional",
+    itens: [{ href: "/operacional", label: "Painel", icone: LayoutGrid }],
+  },
+  {
+    id: "impressao",
+    label: "Impressão",
+    icone: Printer,
+    hrefGrupo: "/impressao",
+    itens: [{ href: "/impressao/avulsa", label: "Impressão Avulsa", icone: Printer }],
+  },
+];
+
 // Item ativo do menu lateral: usa a cor do sistema (definida em "Cor do
 // sistema") pra fundo, texto e a barrinha lateral, então ao arrastar a
 // roda de cores o menu inteiro reage junto — não só os botões.
@@ -202,14 +225,19 @@ export default function AppShell({
   const supabase = createClient();
 
   const allied = isAllied(perfil);
+  const restritoOperacional = !allied && operacionalRestrito(perfil);
 
   // "Métricas" só aparece pra quem tem permissão — inserido logo depois
   // de "Impressão", antes de "Configurações". ALLIED nunca vê Métricas
-  // nem nenhum outro grupo além de Operacional (Painel + Backlog).
-  const podeVerMetricas = !allied && podeConfirmarAnaliseEmLote(perfil);
+  // nem nenhum outro grupo além de Operacional (Painel + Backlog);
+  // Operacional (sem is_master) só vê Painel + Impressão (ver
+  // GRUPOS_MENU_OPERACIONAL) — também nunca vê Métricas.
+  const podeVerMetricas = !allied && !restritoOperacional && podeConfirmarAnaliseEmLote(perfil);
   const grupos = allied
     ? GRUPOS_MENU_ALLIED
-    : GRUPOS_MENU_BASE.flatMap((g) => (g.id === "impressao" && podeVerMetricas ? [g, GRUPO_METRICAS] : [g]));
+    : restritoOperacional
+      ? GRUPOS_MENU_OPERACIONAL
+      : GRUPOS_MENU_BASE.flatMap((g) => (g.id === "impressao" && podeVerMetricas ? [g, GRUPO_METRICAS] : [g]));
 
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>(
