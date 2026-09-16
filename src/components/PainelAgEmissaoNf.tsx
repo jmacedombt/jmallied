@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronRight, FileSpreadsheet, Loader2, UploadCloud } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronRight, Copy, FileSpreadsheet, Loader2, UploadCloud } from "lucide-react";
 import PopupDetalheGrupoNf from "@/components/PopupDetalheGrupoNf";
 import {
   STATUS_AG_NF_RETORNO_RECUSADOS,
@@ -202,9 +202,20 @@ function ConferenciaAllPending({
   onSelecionarArquivo: (arquivo: File) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [osCopiada, setOsCopiada] = useState<string | null>(null);
 
   const semCoincidencia = resultado != null && resultado.coincidencias.length === 0;
   const comCoincidencia = resultado != null && resultado.coincidencias.length > 0;
+
+  async function copiarOs(os: string) {
+    try {
+      await navigator.clipboard.writeText(os);
+      setOsCopiada(os);
+      setTimeout(() => setOsCopiada((atual) => (atual === os ? null : atual)), 1200);
+    } catch {
+      // clipboard indisponível — ignora silenciosamente
+    }
+  }
 
   return (
     <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--line)", background: "var(--surface)" }}>
@@ -268,15 +279,27 @@ function ConferenciaAllPending({
             bloqueado nessa tela até resolver:
           </p>
           <div className="flex flex-wrap gap-1.5 pl-[23px]">
-            {resultado!.coincidencias.map((os) => (
-              <span
-                key={os}
-                className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-mono"
-                style={{ background: "rgba(239,68,68,0.16)", color: "#ef4444" }}
-              >
-                {os}
-              </span>
-            ))}
+            {resultado!.coincidencias.map((os) => {
+              const copiada = osCopiada === os;
+              return (
+                <span
+                  key={os}
+                  className="inline-flex items-center gap-1 rounded-full pl-2.5 pr-1 py-1 text-xs font-mono"
+                  style={{ background: "rgba(239,68,68,0.16)", color: "#ef4444" }}
+                >
+                  {os}
+                  <button
+                    type="button"
+                    onClick={() => copiarOs(os)}
+                    title={copiada ? "Copiado!" : "Copiar OS Reparadora"}
+                    className="inline-flex items-center justify-center w-5 h-5 rounded-full transition hover:bg-red-500/25"
+                    style={{ color: copiada ? "#22c55e" : "#ef4444" }}
+                  >
+                    {copiada ? <Check size={12} /> : <Copy size={12} />}
+                  </button>
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
