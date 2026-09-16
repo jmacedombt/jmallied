@@ -526,6 +526,25 @@ export default function PainelAgEmissaoNf({
     nfLocalAprovados.pecas ??
     (aprovados[0] ? lerInfoNotaFiscal(aprovados[0].nf_pecas_numero, aprovados[0].nf_pecas_valor) : null);
 
+  // o pop-up de detalhe (PopupDetalheGrupoNf) lê os campos nf_* direto
+  // de cada item — sem isso aqui, uma NF lançada nessa sessão (ainda sem
+  // vir do servidor, ver comentário no useEffect acima) apareceria como
+  // "—" lá mesmo já salva de verdade no banco. Aplica os mesmos
+  // overrides usados nos ícones (infoRetorno/infoMaoDeObraAprovados/
+  // infoPecasAprovados) em cima dos itens antes de abrir o detalhe.
+  function itensComNfAtual(bloco: Bloco, grupo: GrupoNfRemessa): AparelhoAgEmissaoNf[] {
+    const retorno = infoRetorno(bloco, grupo);
+    const maoDeObra = bloco === "aprovados" ? infoMaoDeObraAprovados : null;
+    const pecas = bloco === "aprovados" ? infoPecasAprovados : null;
+    if (!retorno && !maoDeObra && !pecas) return grupo.itens;
+    return grupo.itens.map((item) => ({
+      ...item,
+      ...(maoDeObra ? { nf_mao_de_obra_numero: maoDeObra.numero, nf_mao_de_obra_valor: maoDeObra.valor } : {}),
+      ...(pecas ? { nf_pecas_numero: pecas.numero, nf_pecas_valor: pecas.valor } : {}),
+      ...(retorno ? { nf_retorno_numero: retorno.numero, nf_retorno_valor: retorno.valor } : {}),
+    }));
+  }
+
   async function exportarGrupo(bloco: Bloco, grupo: GrupoNfRemessa) {
     if (bloco === "aprovados") {
       await gerarExcelExportacaoN3(grupo.itens as ItemExportacaoN3[]);
@@ -786,7 +805,7 @@ export default function PainelAgEmissaoNf({
       {detalheGrupo && (
         <PopupDetalheGrupoNf
           nfRemessa={detalheGrupo.grupo.nfRemessa}
-          itens={detalheGrupo.grupo.itens}
+          itens={itensComNfAtual(detalheGrupo.bloco, detalheGrupo.grupo)}
           mostrarNfMaoDeObraEPecas={detalheGrupo.bloco === "aprovados"}
           onFechar={() => setDetalheGrupo(null)}
         />
