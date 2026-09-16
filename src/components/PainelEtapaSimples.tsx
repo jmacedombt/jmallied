@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Ban } from "lucide-react";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
-import { type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import { type DetalheValidacaoOrcamento, type InfoNotaFiscal, lerInfoNotaFiscal, podeLancarNfProdutoEntregue } from "@/lib/orcamentos";
 import { operacionalRestrito } from "@/lib/usuarios";
 
 type Perfil = { cargo: string; is_master: boolean } | null;
@@ -19,6 +19,14 @@ export type AparelhoEtapaSimples = {
   sku: string | null;
   descricao_completa: string | null;
   validacao_snapshot: DetalheValidacaoOrcamento | null;
+  // só vêm preenchidos quando `mostrarNotasFiscais` (etapa Produto
+  // Entregue) — ver page.tsx e migration 0048.
+  nf_mao_de_obra_numero?: string | null;
+  nf_mao_de_obra_valor?: number | null;
+  nf_pecas_numero?: string | null;
+  nf_pecas_valor?: number | null;
+  nf_retorno_numero?: string | null;
+  nf_retorno_valor?: number | null;
 };
 
 // Tabela de consulta genérica usada pelas etapas do Operacional que
@@ -32,11 +40,16 @@ export default function PainelEtapaSimples({
   aparelhos,
   permiteReprovar,
   perfil = null,
+  mostrarNotasFiscais = false,
   mensagemVazia = "Nenhum aparelho nessa etapa ainda.",
 }: {
   aparelhos: AparelhoEtapaSimples[];
   permiteReprovar: boolean;
   perfil?: Perfil;
+  /** true só na etapa "Produto Entregue" — mostra (e deixa corrigir,
+   * pra quem tem permissão) as NFs lançadas em Ag. Emissão de Nota
+   * Fiscal (ver PopupAtendimentoPecas.tsx e migration 0048). */
+  mostrarNotasFiscais?: boolean;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
@@ -47,6 +60,7 @@ export default function PainelEtapaSimples({
   // sempre só consulta, mesmo quando `permiteReprovar` é true pra outros
   // cargos.
   const mostrarAcao = permiteReprovar && !operacionalRestrito(perfil);
+  const podeEditarNf = mostrarNotasFiscais && podeLancarNfProdutoEntregue(perfil);
 
   return (
     <>
@@ -131,7 +145,24 @@ export default function PainelEtapaSimples({
         />
       )}
 
-      {detalhe && <PopupAtendimentoPecas aparelho={detalhe} onFechar={() => setDetalhe(null)} />}
+      {detalhe && (
+        <PopupAtendimentoPecas
+          aparelho={detalhe}
+          onFechar={() => setDetalhe(null)}
+          notasFiscais={
+            mostrarNotasFiscais
+              ? {
+                  id: detalhe.id,
+                  maoDeObra: lerInfoNotaFiscal(detalhe.nf_mao_de_obra_numero, detalhe.nf_mao_de_obra_valor),
+                  pecas: lerInfoNotaFiscal(detalhe.nf_pecas_numero, detalhe.nf_pecas_valor),
+                  retorno: lerInfoNotaFiscal(detalhe.nf_retorno_numero, detalhe.nf_retorno_valor),
+                }
+              : undefined
+          }
+          podeEditarNf={podeEditarNf}
+          onNfAtualizada={() => router.refresh()}
+        />
+      )}
     </>
   );
 }

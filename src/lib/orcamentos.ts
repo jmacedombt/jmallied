@@ -630,6 +630,34 @@ export function podeConfirmarOqcEmLote(perfil: { cargo: string; is_master: boole
 // selecionados pra "Ag. Emissão de Nota Fiscal").
 export const podeEmitirNfEmLote = podeConfirmarAnaliseEmLote;
 
+// idem, reaproveitada pra lançar as NFs (Mão de Obra/Peças/Retorno) e
+// mandar pra "Produto Entregue" dentro de "Ag. Emissão de Nota Fiscal"
+// (ver PainelAgEmissaoNf.tsx e migration 0048) — mesmo cargo que já
+// libera "Emitir NF em lote" nessa tela hoje.
+export const podeLancarNfProdutoEntregue = podeConfirmarAnaliseEmLote;
+
+// ---- NF Mão de Obra / NF Peças / NF Retorno (Ag. Emissão de Nota
+// Fiscal → Produto Entregue, ver migration 0048) ----
+
+export type InfoNotaFiscal = { numero: string; valor: number };
+
+/** Lê um par número/valor gravado em orcamentos (colunas nf_*_numero /
+ * nf_*_valor) — null enquanto não foi lançado ainda. */
+export function lerInfoNotaFiscal(numero: string | null | undefined, valor: number | null | undefined): InfoNotaFiscal | null {
+  if (!numero) return null;
+  return { numero, valor: valor ?? 0 };
+}
+
+export type CamposNotaFiscal = {
+  nf_mao_de_obra_numero: string | null;
+  nf_mao_de_obra_valor: number | null;
+  nf_pecas_numero: string | null;
+  nf_pecas_valor: number | null;
+  nf_retorno_numero: string | null;
+  nf_retorno_valor: number | null;
+  nf_exportado_em: string | null;
+};
+
 // ---- Contra Proposta (Ag. Contra Proposta) — ajuste peça a peça ----
 // (ver migration 0033, PopupPecasContraProposta.tsx, PainelContraProposta.tsx)
 

@@ -779,7 +779,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pre_ordem, status_operacional, nf_remessa_allied, ${COLUNAS_PECAS}, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5, custo_peca_add_1, custo_peca_add_2, custo_peca_add_3, custo_peca_add_4, custo_peca_add_5, aprovado_reorcamento_em, reorcamento_detalhe, contra_proposta_ajustado, contra_proposta_pecas, contra_proposta_mao_de_obra, validacao_snapshot, updated_at`
+        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pre_ordem, status_operacional, nf_remessa_allied, ${COLUNAS_PECAS}, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5, custo_peca_add_1, custo_peca_add_2, custo_peca_add_3, custo_peca_add_4, custo_peca_add_5, aprovado_reorcamento_em, reorcamento_detalhe, contra_proposta_ajustado, contra_proposta_pecas, contra_proposta_mao_de_obra, validacao_snapshot, updated_at, nf_mao_de_obra_numero, nf_mao_de_obra_valor, nf_pecas_numero, nf_pecas_valor, nf_retorno_numero, nf_retorno_valor, nf_exportado_em`
       )
       .in("status_operacional", GRUPO_STATUS_AG_EMISSAO_NF)
       .order("updated_at", { ascending: false });
@@ -798,6 +798,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelAgEmissaoNf
           aparelhos={itensComValor}
+          perfil={perfil}
           topo={
             <>
               {voltar}
@@ -820,7 +821,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
   const { data: aparelhos } = await supabase
     .from("orcamentos")
     .select(
-      "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, data_reconhecimento"
+      "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, data_reconhecimento, nf_mao_de_obra_numero, nf_mao_de_obra_valor, nf_pecas_numero, nf_pecas_valor, nf_retorno_numero, nf_retorno_valor"
     )
     .eq("status_operacional", status.valor)
     .order("updated_at", { ascending: false });
@@ -838,6 +839,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         aparelhos={(aparelhos ?? []) as AparelhoEtapaSimples[]}
         permiteReprovar={status.slug !== "produto-entregue"}
         perfil={perfil}
+        mostrarNotasFiscais={status.slug === "produto-entregue"}
         mensagemVazia="Nenhum aparelho nessa etapa ainda."
       />
       <p className="text-xs mt-3" style={{ color: "var(--muted)" }}>

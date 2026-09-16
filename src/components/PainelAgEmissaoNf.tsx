@@ -1,11 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, CheckCircle2, ChevronRight, Copy, FileSpreadsheet, Loader2, UploadCloud } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  Copy,
+  FileSpreadsheet,
+  Hammer,
+  Loader2,
+  Package,
+  PackageCheck,
+  RotateCcw,
+  UploadCloud,
+} from "lucide-react";
 import PopupDetalheGrupoNf from "@/components/PopupDetalheGrupoNf";
+import PopupNfEmissao from "@/components/PopupNfEmissao";
+import PopupConfirmarProdutoEntregue, { type LoteResumoEnvio } from "@/components/PopupConfirmarProdutoEntregue";
 import {
   STATUS_AG_NF_RETORNO_RECUSADOS,
   STATUS_AG_NF_SERVICO_VENDA_RETORNO,
+  podeLancarNfProdutoEntregue,
+  lerInfoNotaFiscal,
+  type InfoNotaFiscal,
+  type CamposNotaFiscal,
   type CamposPecasComCusto,
   type CamposValorVigente,
 } from "@/lib/orcamentos";
@@ -13,8 +33,11 @@ import { gerarExcelExportacaoN3, type ItemExportacaoN3 } from "@/lib/exportN3";
 import { gerarExcelPreOrdem } from "@/lib/preOrdemExport";
 import { extrairOsReparadoraDoAllPending } from "@/lib/allPending";
 
+type Perfil = { cargo: string; is_master: boolean } | null;
+
 export type AparelhoAgEmissaoNf = CamposPecasComCusto &
-  CamposValorVigente & {
+  CamposValorVigente &
+  CamposNotaFiscal & {
     id: string;
     os_reparadora: string | null;
     trade_allied: string;
@@ -47,6 +70,22 @@ type ResultadoConferencia = {
   totalConferido: number;
 };
 
+type Bloco = "aprovados" | "recusados";
+
+/** Popup de lançar NF aberto no momento — carrega tudo que
+ * PopupNfEmissao precisa pra salvar (ids afetados + de onde vem o valor
+ * inicial), ver abaixo. */
+type PopupNfAberto = {
+  tipo: "mao_de_obra" | "pecas" | "retorno";
+  titulo: string;
+  escopo: string;
+  ids: string[];
+  valorInicial: InfoNotaFiscal | null;
+  /** só pro tipo "retorno" — chave do grupo (ver chaveGrupo) onde salvar
+   * o override local ao confirmar (ver salvarPopupNf). */
+  chaveRetorno?: string;
+};
+
 function agruparPorNfRemessa(itens: AparelhoAgEmissaoNf[]): GrupoNfRemessa[] {
   const mapa = new Map<string, GrupoNfRemessa>();
   for (const a of itens) {
@@ -65,6 +104,48 @@ function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function chaveGrupo(bloco: Bloco, nfRemessa: string): string {
+  return `${bloco}:${nfRemessa}`;
+}
+
+function BotaoIconeNf({
+  icone: Icone,
+  rotulo,
+  preenchido,
+  habilitado,
+  titulo,
+  onClick,
+}: {
+  icone: typeof Hammer;
+  rotulo: string;
+  preenchido: boolean;
+  habilitado: boolean;
+  titulo: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!habilitado) return;
+        onClick();
+      }}
+      disabled={!habilitado}
+      title={titulo}
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition hover:bg-[var(--surface2)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+      style={{
+        borderColor: preenchido ? "#22c55e" : "var(--line)",
+        color: preenchido ? "#22c55e" : "var(--ink)",
+        background: preenchido ? "rgba(34,197,94,0.08)" : undefined,
+      }}
+    >
+      {preenchido ? <Check size={13} /> : <Icone size={13} />}
+      {rotulo}
+    </button>
+  );
+}
+
 function TabelaGrupos({
   titulo,
   cor,
@@ -73,6 +154,8 @@ function TabelaGrupos({
   onExportar,
   rotuloExportar = "Exportar",
   exportarLiberado,
+  acoesTopo,
+  renderAcaoLinha,
 }: {
   titulo: string;
   cor: string;
@@ -84,6 +167,12 @@ function TabelaGrupos({
    * "tudo certo" (ver ConferenciaAllPending) — o botão fica visível mas
    * desabilitado, com o motivo no title. */
   exportarLiberado: boolean;
+  /** ícones de NF que valem pro bloco inteiro (Mão de Obra/Peças) — só
+   * no bloco Aprovados, aparecem uma vez ao lado do título. */
+  acoesTopo?: React.ReactNode;
+  /** ícone de NF Retorno de cada linha (um por NF Remessa, nos dois
+   * blocos). */
+  renderAcaoLinha: (grupo: GrupoNfRemessa) => React.ReactNode;
 }) {
   const totalQuantidade = grupos.reduce((soma, g) => soma + g.quantidade, 0);
   const totalMaoDeObra = grupos.reduce((soma, g) => soma + g.maoDeObra, 0);
@@ -91,10 +180,13 @@ function TabelaGrupos({
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--ink)" }}>
-        <span className="inline-block w-2 h-2 rounded-full" style={{ background: cor }} />
-        {titulo}
-      </p>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--ink)" }}>
+          <span className="inline-block w-2 h-2 rounded-full" style={{ background: cor }} />
+          {titulo}
+        </p>
+        {acoesTopo && <div className="flex items-center gap-2">{acoesTopo}</div>}
+      </div>
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
         <table className="w-full text-sm">
           <thead>
@@ -103,6 +195,7 @@ function TabelaGrupos({
               <th className="px-4 py-2.5 font-medium">Quantidade</th>
               <th className="px-4 py-2.5 font-medium text-right">Mão de Obra</th>
               <th className="px-4 py-2.5 font-medium text-right">Venda Peças</th>
+              <th className="px-4 py-2.5 font-medium" />
               <th className="px-4 py-2.5 font-medium" />
               <th className="px-4 py-2.5 font-medium w-8" />
             </tr>
@@ -149,6 +242,9 @@ function TabelaGrupos({
                     {rotuloExportar}
                   </button>
                 </td>
+                <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                  {renderAcaoLinha(g)}
+                </td>
                 <td className="px-4 py-2.5 text-right" style={{ color: "var(--muted)" }}>
                   <ChevronRight size={14} />
                 </td>
@@ -169,6 +265,7 @@ function TabelaGrupos({
               <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
                 {formatarReal(totalVendaPecas)}
               </td>
+              <td />
               <td />
               <td />
             </tr>
@@ -324,27 +421,56 @@ function ConferenciaAllPending({
 // orçamentos daquele lote. O Exportar (de qualquer um dos 2 blocos) só
 // libera depois de conferir a tela inteira contra o All Pending do GSPN
 // (ver ConferenciaAllPending acima — pedido explícito).
+//
+// Depois de exportar um lote, libera lançar as NFs daquele lote (ver
+// migration 0048): NF Mão de Obra e NF Peças valem pro bloco Aprovados
+// INTEIRO de uma vez só (ícone único, no topo do bloco, some depois que
+// todo lote de Aprovados já tiver sido exportado); NF Retorno é por NF
+// Remessa, nos dois blocos (ícone em cada linha). Quando tudo que um
+// bloco precisa já foi lançado, aparece o botão "Enviar para Produto
+// Entregue" daquele bloco — Aprovados precisa das 3 NFs, Recusados só
+// da NF Retorno de cada lote.
 export default function PainelAgEmissaoNf({
   aparelhos,
   topo,
+  perfil = null,
   mensagemVazia = "Nenhum aparelho aguardando emissão de Nota Fiscal no momento.",
 }: {
   aparelhos: AparelhoAgEmissaoNf[];
   topo: React.ReactNode;
+  perfil?: Perfil;
   mensagemVazia?: string;
 }) {
-  const [detalheGrupo, setDetalheGrupo] = useState<GrupoNfRemessa | null>(null);
+  const router = useRouter();
+  const [detalheGrupo, setDetalheGrupo] = useState<{ bloco: Bloco; grupo: GrupoNfRemessa } | null>(null);
 
   const [resultadoConferencia, setResultadoConferencia] = useState<ResultadoConferencia | null>(null);
   const [conferindo, setConferindo] = useState(false);
   const [erroConferencia, setErroConferencia] = useState<string | null>(null);
 
+  // "já exportado" e os valores de NF lançados nessa sessão — ver reset
+  // abaixo sempre que `aparelhos` mudar de verdade (ex.: depois de
+  // mandar um bloco pra Produto Entregue, ver enviarProdutoEntregue).
+  const [exportadosSessao, setExportadosSessao] = useState<Set<string>>(new Set());
+  const [nfLocalAprovados, setNfLocalAprovados] = useState<{ maoDeObra?: InfoNotaFiscal; pecas?: InfoNotaFiscal }>({});
+  const [nfLocalRetorno, setNfLocalRetorno] = useState<Record<string, InfoNotaFiscal>>({});
+
+  const [popupNf, setPopupNf] = useState<PopupNfAberto | null>(null);
+  const [confirmandoEnvio, setConfirmandoEnvio] = useState<Bloco | null>(null);
+  const [erroAcao, setErroAcao] = useState<string | null>(null);
+
+  const podeLancarNf = podeLancarNfProdutoEntregue(perfil);
+
   // se a lista de aparelhos mudar (voltou pra tela, um lote saiu daqui,
-  // router.refresh de qualquer ação), a conferência anterior não vale
-  // mais — precisa subir o All Pending de novo antes de exportar.
+  // router.refresh de qualquer ação), a conferência anterior e o que foi
+  // exportado/lançado só nessa sessão não valem mais — já está refletido
+  // nos dados novos vindos do servidor.
   useEffect(() => {
     setResultadoConferencia(null);
     setErroConferencia(null);
+    setExportadosSessao(new Set());
+    setNfLocalAprovados({});
+    setNfLocalRetorno({});
   }, [aparelhos]);
 
   async function conferirComAllPending(arquivo: File) {
@@ -381,6 +507,131 @@ export default function PainelAgEmissaoNf({
   const gruposAprovados = useMemo(() => agruparPorNfRemessa(aprovados), [aprovados]);
   const gruposRecusados = useMemo(() => agruparPorNfRemessa(recusados), [recusados]);
 
+  function estaExportado(bloco: Bloco, grupo: GrupoNfRemessa): boolean {
+    if (exportadosSessao.has(chaveGrupo(bloco, grupo.nfRemessa))) return true;
+    return grupo.itens.length > 0 && grupo.itens.every((i) => i.nf_exportado_em != null);
+  }
+
+  function infoRetorno(bloco: Bloco, grupo: GrupoNfRemessa): InfoNotaFiscal | null {
+    const local = nfLocalRetorno[chaveGrupo(bloco, grupo.nfRemessa)];
+    if (local) return local;
+    const primeiro = grupo.itens[0];
+    return primeiro ? lerInfoNotaFiscal(primeiro.nf_retorno_numero, primeiro.nf_retorno_valor) : null;
+  }
+
+  const infoMaoDeObraAprovados: InfoNotaFiscal | null =
+    nfLocalAprovados.maoDeObra ??
+    (aprovados[0] ? lerInfoNotaFiscal(aprovados[0].nf_mao_de_obra_numero, aprovados[0].nf_mao_de_obra_valor) : null);
+  const infoPecasAprovados: InfoNotaFiscal | null =
+    nfLocalAprovados.pecas ??
+    (aprovados[0] ? lerInfoNotaFiscal(aprovados[0].nf_pecas_numero, aprovados[0].nf_pecas_valor) : null);
+
+  async function exportarGrupo(bloco: Bloco, grupo: GrupoNfRemessa) {
+    if (bloco === "aprovados") {
+      await gerarExcelExportacaoN3(grupo.itens as ItemExportacaoN3[]);
+    } else {
+      await gerarExcelPreOrdem(grupo.itens, `NF_${grupo.nfRemessa}_Recusados`);
+    }
+    try {
+      const res = await fetch("/api/operacional/orcamentos/marcar-exportado-nf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: grupo.itens.map((i) => i.id) }),
+      });
+      if (res.ok) {
+        setExportadosSessao((prev) => new Set(prev).add(chaveGrupo(bloco, grupo.nfRemessa)));
+      } else {
+        setErroAcao("A planilha foi gerada, mas não deu pra registrar a exportação — os ícones de NF desse lote continuam bloqueados.");
+      }
+    } catch {
+      setErroAcao("A planilha foi gerada, mas não deu pra registrar a exportação — os ícones de NF desse lote continuam bloqueados.");
+    }
+  }
+
+  function abrirPopupMaoDeObra() {
+    setErroAcao(null);
+    setPopupNf({
+      tipo: "mao_de_obra",
+      titulo: "NF Mão de Obra",
+      escopo: `Vale pra todos os ${aprovados.length} aparelho(s) do bloco Aprovados de uma vez.`,
+      ids: aprovados.map((a) => a.id),
+      valorInicial: infoMaoDeObraAprovados,
+    });
+  }
+
+  function abrirPopupPecas() {
+    setErroAcao(null);
+    setPopupNf({
+      tipo: "pecas",
+      titulo: "NF Peças",
+      escopo: `Vale pra todos os ${aprovados.length} aparelho(s) do bloco Aprovados de uma vez.`,
+      ids: aprovados.map((a) => a.id),
+      valorInicial: infoPecasAprovados,
+    });
+  }
+
+  function abrirPopupRetorno(bloco: Bloco, grupo: GrupoNfRemessa) {
+    setErroAcao(null);
+    setPopupNf({
+      tipo: "retorno",
+      titulo: "NF Retorno",
+      escopo: `Vale só pra NF Remessa ${grupo.nfRemessa} (${grupo.quantidade} aparelho(s)).`,
+      ids: grupo.itens.map((i) => i.id),
+      valorInicial: infoRetorno(bloco, grupo),
+      chaveRetorno: chaveGrupo(bloco, grupo.nfRemessa),
+    });
+  }
+
+  async function salvarPopupNf(info: InfoNotaFiscal) {
+    if (!popupNf) return;
+    const res = await fetch("/api/operacional/orcamentos/salvar-nf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: popupNf.ids, tipo: popupNf.tipo, numero: info.numero, valor: info.valor }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.error || "Não foi possível salvar essa NF.");
+    }
+    if (popupNf.tipo === "mao_de_obra") {
+      setNfLocalAprovados((prev) => ({ ...prev, maoDeObra: info }));
+    } else if (popupNf.tipo === "pecas") {
+      setNfLocalAprovados((prev) => ({ ...prev, pecas: info }));
+    } else if (popupNf.chaveRetorno) {
+      const chave = popupNf.chaveRetorno;
+      setNfLocalRetorno((prev) => ({ ...prev, [chave]: info }));
+    }
+    setPopupNf(null);
+  }
+
+  const aprovadosProntoParaEnviar =
+    aprovados.length > 0 &&
+    infoMaoDeObraAprovados != null &&
+    infoPecasAprovados != null &&
+    gruposAprovados.every((g) => infoRetorno("aprovados", g) != null);
+
+  const recusadosProntoParaEnviar =
+    recusados.length > 0 && gruposRecusados.every((g) => infoRetorno("recusados", g) != null);
+
+  async function enviarProdutoEntregue(bloco: Bloco) {
+    const itens = bloco === "aprovados" ? aprovados : recusados;
+    const rota =
+      bloco === "aprovados"
+        ? "/api/operacional/orcamentos/enviar-produto-entregue-aprovados-em-massa"
+        : "/api/operacional/orcamentos/enviar-produto-entregue-recusados-em-massa";
+    const res = await fetch(rota, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: itens.map((i) => i.id) }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.error || "Não foi possível enviar pra Produto Entregue.");
+    }
+    setConfirmandoEnvio(null);
+    router.refresh();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center flex-wrap">{topo}</div>
@@ -401,33 +652,166 @@ export default function PainelAgEmissaoNf({
         />
       )}
 
+      {erroAcao && (
+        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 flex items-start gap-2">
+          <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+          {erroAcao}
+        </p>
+      )}
+
       {gruposAprovados.length > 0 && (
-        <TabelaGrupos
-          titulo="Aprovados — vindos de 7 - Reparo Finalizado"
-          cor="#34d399"
-          grupos={gruposAprovados}
-          onAbrirDetalhe={setDetalheGrupo}
-          onExportar={(g) => gerarExcelExportacaoN3(g.itens as ItemExportacaoN3[])}
-          exportarLiberado={exportarLiberado}
-        />
+        <div className="space-y-2">
+          <TabelaGrupos
+            titulo="Aprovados — vindos de 7 - Reparo Finalizado"
+            cor="#34d399"
+            grupos={gruposAprovados}
+            onAbrirDetalhe={(g) => setDetalheGrupo({ bloco: "aprovados", grupo: g })}
+            onExportar={(g) => exportarGrupo("aprovados", g)}
+            exportarLiberado={exportarLiberado}
+            acoesTopo={
+              <>
+                <BotaoIconeNf
+                  icone={Hammer}
+                  rotulo="NF Mão de Obra"
+                  preenchido={infoMaoDeObraAprovados != null}
+                  habilitado={podeLancarNf && exportarLiberado && gruposAprovados.every((g) => estaExportado("aprovados", g))}
+                  titulo={
+                    !podeLancarNf
+                      ? "Seu cargo não tem permissão pra lançar NF."
+                      : !gruposAprovados.every((g) => estaExportado("aprovados", g))
+                        ? "Exporte todos os lotes de Aprovados antes de lançar a NF Mão de Obra."
+                        : !exportarLiberado
+                          ? "Confira o All Pending do GSPN antes de lançar a NF."
+                          : "Lançar NF Mão de Obra (vale pra todo o bloco Aprovados)"
+                  }
+                  onClick={abrirPopupMaoDeObra}
+                />
+                <BotaoIconeNf
+                  icone={Package}
+                  rotulo="NF Peças"
+                  preenchido={infoPecasAprovados != null}
+                  habilitado={podeLancarNf && exportarLiberado && gruposAprovados.every((g) => estaExportado("aprovados", g))}
+                  titulo={
+                    !podeLancarNf
+                      ? "Seu cargo não tem permissão pra lançar NF."
+                      : !gruposAprovados.every((g) => estaExportado("aprovados", g))
+                        ? "Exporte todos os lotes de Aprovados antes de lançar a NF Peças."
+                        : !exportarLiberado
+                          ? "Confira o All Pending do GSPN antes de lançar a NF."
+                          : "Lançar NF Peças (vale pra todo o bloco Aprovados)"
+                  }
+                  onClick={abrirPopupPecas}
+                />
+              </>
+            }
+            renderAcaoLinha={(g) => (
+              <BotaoIconeNf
+                icone={RotateCcw}
+                rotulo="NF Retorno"
+                preenchido={infoRetorno("aprovados", g) != null}
+                habilitado={podeLancarNf && exportarLiberado && estaExportado("aprovados", g)}
+                titulo={
+                  !podeLancarNf
+                    ? "Seu cargo não tem permissão pra lançar NF."
+                    : !estaExportado("aprovados", g)
+                      ? "Exporte esse lote antes de lançar a NF Retorno."
+                      : !exportarLiberado
+                        ? "Confira o All Pending do GSPN antes de lançar a NF."
+                        : "Lançar NF Retorno desse lote"
+                }
+                onClick={() => abrirPopupRetorno("aprovados", g)}
+              />
+            )}
+          />
+          {podeLancarNf && aprovadosProntoParaEnviar && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmandoEnvio("aprovados")}
+                className="inline-flex items-center gap-2 rounded-lg text-white text-sm font-medium px-4 py-2.5 transition"
+                style={{ background: "#22c55e" }}
+              >
+                <PackageCheck size={15} />
+                Enviar Aprovados para Produto Entregue
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {gruposRecusados.length > 0 && (
-        <TabelaGrupos
-          titulo="Recusados — vindos de 8 - Orçamento Reprovado"
-          cor="#f87171"
-          grupos={gruposRecusados}
-          onAbrirDetalhe={setDetalheGrupo}
-          onExportar={(g) => gerarExcelPreOrdem(g.itens, `NF_${g.nfRemessa}_Recusados`)}
-          exportarLiberado={exportarLiberado}
-        />
+        <div className="space-y-2">
+          <TabelaGrupos
+            titulo="Recusados — vindos de 8 - Orçamento Reprovado"
+            cor="#f87171"
+            grupos={gruposRecusados}
+            onAbrirDetalhe={(g) => setDetalheGrupo({ bloco: "recusados", grupo: g })}
+            onExportar={(g) => exportarGrupo("recusados", g)}
+            exportarLiberado={exportarLiberado}
+            renderAcaoLinha={(g) => (
+              <BotaoIconeNf
+                icone={RotateCcw}
+                rotulo="NF Retorno"
+                preenchido={infoRetorno("recusados", g) != null}
+                habilitado={podeLancarNf && exportarLiberado && estaExportado("recusados", g)}
+                titulo={
+                  !podeLancarNf
+                    ? "Seu cargo não tem permissão pra lançar NF."
+                    : !estaExportado("recusados", g)
+                      ? "Exporte esse lote antes de lançar a NF Retorno."
+                      : !exportarLiberado
+                        ? "Confira o All Pending do GSPN antes de lançar a NF."
+                        : "Lançar NF Retorno desse lote"
+                }
+                onClick={() => abrirPopupRetorno("recusados", g)}
+              />
+            )}
+          />
+          {podeLancarNf && recusadosProntoParaEnviar && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmandoEnvio("recusados")}
+                className="inline-flex items-center gap-2 rounded-lg text-white text-sm font-medium px-4 py-2.5 transition"
+                style={{ background: "#22c55e" }}
+              >
+                <PackageCheck size={15} />
+                Enviar Recusados para Produto Entregue
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {detalheGrupo && (
         <PopupDetalheGrupoNf
-          nfRemessa={detalheGrupo.nfRemessa}
-          itens={detalheGrupo.itens}
+          nfRemessa={detalheGrupo.grupo.nfRemessa}
+          itens={detalheGrupo.grupo.itens}
+          mostrarNfMaoDeObraEPecas={detalheGrupo.bloco === "aprovados"}
           onFechar={() => setDetalheGrupo(null)}
+        />
+      )}
+
+      {popupNf && (
+        <PopupNfEmissao
+          titulo={popupNf.titulo}
+          escopo={popupNf.escopo}
+          valorInicial={popupNf.valorInicial}
+          onFechar={() => setPopupNf(null)}
+          onSalvar={salvarPopupNf}
+        />
+      )}
+
+      {confirmandoEnvio && (
+        <PopupConfirmarProdutoEntregue
+          titulo={confirmandoEnvio === "aprovados" ? "Enviar Aprovados para Produto Entregue" : "Enviar Recusados para Produto Entregue"}
+          lotes={
+            (confirmandoEnvio === "aprovados" ? gruposAprovados : gruposRecusados).map(
+              (g): LoteResumoEnvio => ({ nfRemessa: g.nfRemessa, quantidade: g.quantidade })
+            )
+          }
+          onFechar={() => setConfirmandoEnvio(null)}
+          onConfirmar={() => enviarProdutoEntregue(confirmandoEnvio)}
         />
       )}
     </div>

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, PackageSearch, X } from "lucide-react";
-import { type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import { Check, Copy, FileEdit, PackageSearch, X } from "lucide-react";
+import { type DetalheValidacaoOrcamento, type InfoNotaFiscal } from "@/lib/orcamentos";
+import PopupNfEmissao from "@/components/PopupNfEmissao";
 
 export type AparelhoAtendimentoPecas = {
   os_reparadora: string | null;
@@ -13,6 +14,22 @@ export type AparelhoAtendimentoPecas = {
   descricao_completa: string | null;
   validacao_snapshot: DetalheValidacaoOrcamento | null;
 };
+
+/** Notas fiscais já lançadas em "Ag. Emissão de Nota Fiscal" (ver
+ * migration 0048 e PainelAgEmissaoNf.tsx) — só é passado quando o
+ * aparelho já está em "Produto Entregue" (ver PainelEtapaSimples.tsx),
+ * pra dar pra corrigir um número/valor digitado errado mesmo depois de
+ * já ter saído daquela tela. */
+export type NotasFiscaisAtendimento = {
+  id: string;
+  maoDeObra: InfoNotaFiscal | null;
+  pecas: InfoNotaFiscal | null;
+  retorno: InfoNotaFiscal | null;
+};
+
+const FUNDO_NF_MAO_DE_OBRA = "rgba(59, 130, 246, 0.12)";
+const FUNDO_NF_PECAS = "rgba(168, 85, 247, 0.12)";
+const FUNDO_NF_RETORNO = "rgba(249, 115, 22, 0.14)";
 
 function formatarReal(valor: number | null): string {
   return (valor ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -28,11 +45,24 @@ function formatarReal(valor: number | null): string {
 export default function PopupAtendimentoPecas({
   aparelho,
   onFechar,
+  notasFiscais,
+  podeEditarNf = false,
+  onNfAtualizada,
 }: {
   aparelho: AparelhoAtendimentoPecas;
   onFechar: () => void;
+  /** só vem preenchido quando o aparelho já está em "Produto Entregue" —
+   * mostra os números de NF lançados em Ag. Emissão de Nota Fiscal. */
+  notasFiscais?: NotasFiscaisAtendimento;
+  /** libera corrigir os números depois de entregue (mesmo cargo que já
+   * lança as NFs na tela — ver podeLancarNfProdutoEntregue). */
+  podeEditarNf?: boolean;
+  onNfAtualizada?: () => void;
 }) {
   const [copiado, setCopiado] = useState<string | null>(null);
+  const [editandoNf, setEditandoNf] = useState<null | { tipo: "mao_de_obra" | "pecas" | "retorno"; titulo: string; valorInicial: InfoNotaFiscal | null }>(
+    null
+  );
 
   async function copiar(texto: string, chave: string) {
     try {
@@ -168,7 +198,77 @@ export default function PopupAtendimentoPecas({
             ))}
           </div>
         )}
+
+        {notasFiscais && (
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: "var(--line)" }}>
+            <p className="text-xs font-semibold mb-2" style={{ color: "var(--ink)" }}>
+              Notas Fiscais
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              {(
+                [
+                  ["mao_de_obra" as const, "NF Mão de Obra", notasFiscais.maoDeObra, FUNDO_NF_MAO_DE_OBRA],
+                  ["pecas" as const, "NF Peças", notasFiscais.pecas, FUNDO_NF_PECAS],
+                  ["retorno" as const, "NF Retorno", notasFiscais.retorno, FUNDO_NF_RETORNO],
+                ] as const
+              ).map(([tipo, rotulo, info, fundo]) => (
+                <div key={tipo} className="rounded-lg border px-3 py-2 flex items-center justify-between gap-2" style={{ borderColor: "var(--line)", background: fundo }}>
+                  <div>
+                    <p className="uppercase tracking-wide text-[10px] mb-0.5" style={{ color: "var(--muted)" }}>
+                      {rotulo}
+                    </p>
+                    {info ? (
+                      <>
+                        <p className="font-semibold" style={{ color: "var(--ink)" }}>
+                          {info.numero}
+                        </p>
+                        <p className="text-[11px]" style={{ color: "var(--muted)" }}>
+                          {formatarReal(info.valor)}
+                        </p>
+                      </>
+                    ) : (
+                      <p style={{ color: "var(--muted)" }}>—</p>
+                    )}
+                  </div>
+                  {podeEditarNf && (
+                    <button
+                      type="button"
+                      onClick={() => setEditandoNf({ tipo, titulo: rotulo, valorInicial: info })}
+                      title={`Corrigir ${rotulo}`}
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-md border shrink-0 transition hover:border-[var(--accent2)]"
+                      style={{ borderColor: "var(--line)", color: "var(--muted)", background: "var(--surface)" }}
+                    >
+                      <FileEdit size={13} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      {editandoNf && notasFiscais && (
+        <PopupNfEmissao
+          titulo={editandoNf.titulo}
+          escopo="Corrige o número/valor já lançado — o aparelho continua em Produto Entregue."
+          valorInicial={editandoNf.valorInicial}
+          onFechar={() => setEditandoNf(null)}
+          onSalvar={async (info) => {
+            const res = await fetch("/api/operacional/orcamentos/salvar-nf", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ids: [notasFiscais.id], tipo: editandoNf.tipo, numero: info.numero, valor: info.valor }),
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+              throw new Error(data?.error || "Não foi possível salvar essa NF.");
+            }
+            setEditandoNf(null);
+            onNfAtualizada?.();
+          }}
+        />
+      )}
     </div>
   );
 }

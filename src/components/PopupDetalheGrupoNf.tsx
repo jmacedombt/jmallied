@@ -7,18 +7,49 @@ function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// cor de fundo de cada coluna de NF — só pra diferenciar visualmente uma
+// da outra na tabela (pedido explícito), sem nenhum outro significado.
+const FUNDO_NF_MAO_DE_OBRA = "rgba(59, 130, 246, 0.12)"; // azul
+const FUNDO_NF_PECAS = "rgba(168, 85, 247, 0.12)"; // roxo
+const FUNDO_NF_RETORNO = "rgba(249, 115, 22, 0.14)"; // laranja
+
+function CelulaNf({ numero, valor, fundo }: { numero: string | null; valor: number | null; fundo: string }) {
+  return (
+    <td className="px-4 py-2.5" style={{ background: fundo }}>
+      {numero ? (
+        <>
+          <p className="font-semibold" style={{ color: "var(--ink)" }}>
+            {numero}
+          </p>
+          <p className="text-[11px]" style={{ color: "var(--muted)" }}>
+            {formatarReal(valor ?? 0)}
+          </p>
+        </>
+      ) : (
+        <span style={{ color: "var(--muted)" }}>—</span>
+      )}
+    </td>
+  );
+}
+
 /** Detalhe de uma NF Remessa dentro de "Ag. Emissão de Nota Fiscal" —
  * abre ao clicar na NF Remessa ou na Quantidade do resumo (ver
  * PainelAgEmissaoNf.tsx): lista os orçamentos daquele lote com os
- * dados principais, Pré Ordem em destaque e o valor individual de Mão
- * de Obra/Peças de cada um. */
+ * dados principais, Pré Ordem em destaque, o valor individual de Mão
+ * de Obra/Peças de cada um, e os números de NF já lançados (Mão de
+ * Obra + Peças, só no bloco Aprovados, e Retorno nos dois blocos) —
+ * cada um com uma cor de fundo diferente pra ressaltar. */
 export default function PopupDetalheGrupoNf({
   nfRemessa,
   itens,
+  mostrarNfMaoDeObraEPecas = false,
   onFechar,
 }: {
   nfRemessa: string;
   itens: AparelhoAgEmissaoNf[];
+  /** true só quando o grupo é do bloco Aprovados — Recusados não tem NF
+   * de Mão de Obra/Peças, só Retorno. */
+  mostrarNfMaoDeObraEPecas?: boolean;
   onFechar: () => void;
 }) {
   return (
@@ -56,6 +87,19 @@ export default function PopupDetalheGrupoNf({
                 </th>
                 <th className="px-4 py-2.5 font-medium text-right">Mão de Obra</th>
                 <th className="px-4 py-2.5 font-medium text-right">Venda Peças</th>
+                {mostrarNfMaoDeObraEPecas && (
+                  <th className="px-4 py-2.5 font-medium" style={{ background: FUNDO_NF_MAO_DE_OBRA }}>
+                    NF Mão de Obra
+                  </th>
+                )}
+                {mostrarNfMaoDeObraEPecas && (
+                  <th className="px-4 py-2.5 font-medium" style={{ background: FUNDO_NF_PECAS }}>
+                    NF Peças
+                  </th>
+                )}
+                <th className="px-4 py-2.5 font-medium" style={{ background: FUNDO_NF_RETORNO }}>
+                  NF Retorno
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -85,6 +129,13 @@ export default function PopupDetalheGrupoNf({
                   <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
                     {formatarReal(a.vendaPecas)}
                   </td>
+                  {mostrarNfMaoDeObraEPecas && (
+                    <CelulaNf numero={a.nf_mao_de_obra_numero} valor={a.nf_mao_de_obra_valor} fundo={FUNDO_NF_MAO_DE_OBRA} />
+                  )}
+                  {mostrarNfMaoDeObraEPecas && (
+                    <CelulaNf numero={a.nf_pecas_numero} valor={a.nf_pecas_valor} fundo={FUNDO_NF_PECAS} />
+                  )}
+                  <CelulaNf numero={a.nf_retorno_numero} valor={a.nf_retorno_valor} fundo={FUNDO_NF_RETORNO} />
                 </tr>
               ))}
             </tbody>
