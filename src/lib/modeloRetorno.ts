@@ -51,6 +51,18 @@ const CABECALHO = [
   "Valor Total NF Serviço",
 ];
 
+// Formato de moeda aplicado nas colunas monetárias da planilha (pedido
+// explícito) — os índices saem calculados a partir do próprio CABECALHO
+// (toda coluna "Valor ..." + "MO"), pra não precisar atualizar números
+// mágicos se a ordem das colunas mudar. O valor da célula continua
+// numérico (não vira texto) — só a exibição do Excel que já sai em
+// "R$ 1.234,56", mantendo somas/fórmulas funcionando normalmente.
+const FORMATO_MOEDA = '"R$" #,##0.00';
+const COLUNAS_MOEDA = CABECALHO.reduce<number[]>((colunas, rotulo, indice) => {
+  if (rotulo === "MO" || rotulo.startsWith("Valor")) colunas.push(indice);
+  return colunas;
+}, []);
+
 /** "Part Number - Peça Solução" (pedido explícito) — cai pro código
  * sozinho quando a peça não tem solução cadastrada no BID. */
 function formatarPeca(codigo: string, solucoesPorPartNumber: Record<string, string>): string {
@@ -137,6 +149,19 @@ export async function gerarExcelModeloRetorno(
 
   const planilha = XLSX.utils.aoa_to_sheet([CABECALHO, ...corpo]);
   planilha["!cols"] = CABECALHO.map(() => ({ wch: 16 }));
+
+  // Aplica o formato de moeda (R$) em toda célula numérica das colunas
+  // monetárias — pula célula vazia (peça/valor não preenchido nessa
+  // posição) e linha do cabeçalho (r: 0).
+  for (let linha = 0; linha < corpo.length; linha++) {
+    for (const coluna of COLUNAS_MOEDA) {
+      const endereco = XLSX.utils.encode_cell({ r: linha + 1, c: coluna });
+      const celula = planilha[endereco];
+      if (celula && typeof celula.v === "number") {
+        celula.z = FORMATO_MOEDA;
+      }
+    }
+  }
 
   const workbook = XLSX.utils.book_new();
   const data = dataArquivoBrasilia();
