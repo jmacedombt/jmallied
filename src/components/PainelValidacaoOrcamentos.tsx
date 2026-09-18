@@ -7,6 +7,7 @@ import {
   BadgePercent,
   Ban,
   Banknote,
+  BarChart3,
   CheckCircle2,
   Coins,
   Gauge,
@@ -26,6 +27,7 @@ import { type FaixaMarkup } from "@/lib/bid";
 import PopupPecasValidacao, { type AparelhoValidacaoDetalhe } from "@/components/PopupPecasValidacao";
 import PopupRevisaoValidacao, { type ResumoValidacao } from "@/components/PopupRevisaoValidacao";
 import PopupHistoricoEnvios from "@/components/PopupHistoricoEnvios";
+import PopupResumoPecasMarkup from "@/components/PopupResumoPecasMarkup";
 import CelulaLucroPercentual, { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupDetalheCard, { type BaseCalculoResumo, type LinhaDetalheCard } from "@/components/PopupDetalheCard";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
@@ -208,6 +210,7 @@ export default function PainelValidacaoOrcamentos({
   const [avisoPendenciaAnterior, setAvisoPendenciaAnterior] = useState(false);
   const [avisoEmail, setAvisoEmail] = useState<string | null>(null);
   const [mostrarHistorico, setMostrarHistorico] = useState(false);
+  const [mostrarResumoPecas, setMostrarResumoPecas] = useState(false);
 
   // "Recalcular": busca de novo os custos da Base Peças pra essa mesma
   // lista — pega na hora qualquer código cadastrado manualmente (nesse
@@ -265,6 +268,11 @@ export default function PainelValidacaoOrcamentos({
   // cards sempre somam o que está sendo exibido na tabela agora — todos
   // os lotes juntos quando nenhum está selecionado, ou só o escolhido.
   const resumo = useMemo(() => calcularResumoDeLista(filtrados), [filtrados]);
+
+  // peças de tudo que está filtrado agora (mesmo escopo dos cards do
+  // topo) — usado só pelo "Resumo de Peças" (ver PopupResumoPecasMarkup),
+  // que quebra essas mesmas peças por faixa de Markup.
+  const pecasParaResumo = useMemo(() => filtrados.flatMap((a) => a.pecas), [filtrados]);
 
   // a mesma conta, mas quebrada por lote — usada só pro "resumo
   // relacionado ao card" quando o usuário clica num card pra entender
@@ -509,6 +517,16 @@ export default function PainelValidacaoOrcamentos({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setMostrarResumoPecas(true)}
+            title="Quantidade e valor de peças por faixa de Markup, com simulação de multiplicador em tempo real"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)]"
+            style={{ color: "var(--ink)", border: "1px solid var(--line)" }}
+          >
+            <BarChart3 size={13} style={{ color: "var(--accent2)" }} />
+            Resumo de Peças
+          </button>
+          <button
+            type="button"
             onClick={() => setMostrarHistorico(true)}
             title="Ver o histórico de envios já confirmados, com opção de baixar o Excel de novo"
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)]"
@@ -729,6 +747,15 @@ export default function PainelValidacaoOrcamentos({
       )}
 
       {mostrarHistorico && <PopupHistoricoEnvios onFechar={() => setMostrarHistorico(false)} />}
+
+      {mostrarResumoPecas && (
+        <PopupResumoPecasMarkup
+          pecas={pecasParaResumo}
+          faixas={faixas}
+          icmsPercentual={icmsPercentual}
+          onFechar={() => setMostrarResumoPecas(false)}
+        />
+      )}
 
       {avisoPendenciaAnterior && (
         <PopupAviso
