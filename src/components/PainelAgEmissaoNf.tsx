@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import PopupDetalheGrupoNf from "@/components/PopupDetalheGrupoNf";
 import PopupNfEmissao from "@/components/PopupNfEmissao";
-import PopupConfirmarProdutoEntregue, { type LoteResumoEnvio } from "@/components/PopupConfirmarProdutoEntregue";
+import PopupConfirmarProdutoEntregue, { type LinhaResumoEnvio } from "@/components/PopupConfirmarProdutoEntregue";
 import {
   STATUS_AG_NF_RETORNO_RECUSADOS,
   STATUS_AG_NF_SERVICO_VENDA_RETORNO,
@@ -31,6 +31,7 @@ import {
 } from "@/lib/orcamentos";
 import { gerarExcelExportacaoN3, type ItemExportacaoN3 } from "@/lib/exportN3";
 import { gerarExcelPreOrdem } from "@/lib/preOrdemExport";
+import { gerarExcelModeloRetorno, type ItemModeloRetorno } from "@/lib/modeloRetorno";
 import { extrairOsReparadoraDoAllPending } from "@/lib/allPending";
 
 type Perfil = { cargo: string; is_master: boolean } | null;
@@ -52,6 +53,10 @@ export type AparelhoAgEmissaoNf = CamposPecasComCusto &
      * calculado no servidor, ver operacional/[slug]/page.tsx. */
     maoDeObra: number;
     vendaPecas: number;
+    /** usados só na planilha "Modelo de Retorno" (ver lib/modeloRetorno.ts). */
+    imei_allied: string | null;
+    motivo_reprova: string | null;
+    observacao_tecnica_reparadora: string | null;
   };
 
 type GrupoNfRemessa = {
@@ -81,6 +86,11 @@ type PopupNfAberto = {
   escopo: string;
   ids: string[];
   valorInicial: InfoNotaFiscal | null;
+  /** só pra NF Mão de Obra/Peças — total já calculado (soma vigente do
+   * bloco Aprovados), mostrado só leitura no pop-up e é ele que é
+   * salvo (pedido explícito: nunca digitar valor à mão). Omitido pra NF
+   * Retorno, que não tem valor. */
+  valorAutomatico?: number;
   /** só pro tipo "retorno" — chave do grupo (ver chaveGrupo) onde salvar
    * o override local ao confirmar (ver salvarPopupNf). */
   chaveRetorno?: string;
@@ -435,11 +445,16 @@ export default function PainelAgEmissaoNf({
   topo,
   perfil = null,
   mensagemVazia = "Nenhum aparelho aguardando emissão de Nota Fiscal no momento.",
+  solucoesPorPartNumber = {},
 }: {
   aparelhos: AparelhoAgEmissaoNf[];
   topo: React.ReactNode;
   perfil?: Perfil;
   mensagemVazia?: string;
+  /** "Peça Solução" de cada Part Number (BID) — usado só pra formatar
+   * "Part Number - Peça Solução" na planilha "Modelo de Retorno" (ver
+   * lib/modeloRetorno.ts e operacional/[slug]/page.tsx). */
+  solucoesPorPartNumber?: Record<string, string>;
 }) {
   const router = useRouter();
   const [detalheGrupo, setDetalheGrupo] = useState<{ bloco: Bloco; grupo: GrupoNfRemessa } | null>(null);
@@ -456,7 +471,9 @@ export default function PainelAgEmissaoNf({
   const [nfLocalRetorno, setNfLocalRetorno] = useState<Record<string, InfoNotaFiscal>>({});
 
   const [popupNf, setPopupNf] = useState<PopupNfAberto | null>(null);
-  const [confirmandoEnvio, setConfirmandoEnvio] = useState<Bloco | null>(null);
+  // popup único do "resumo + Enviar para Produto Entregue" (gate no
+  // painel INTEIRO, não mais por bloco — ver prontoParaFinalizar abaixo).
+  const [confirmandoEnvio, setConfirmandoEnvio] = useState(false);
   const [erroAcao, setErroAcao] = useState<string | null>(null);
 
   const podeLancarNf = podeLancarNfProdutoEntregue(perfil);
@@ -545,6 +562,47 @@ export default function PainelAgEmissaoNf({
     }));
   }
 
+  /** Mesmos overrides de itensComNfAtual, só que pra TODOS os itens de
+   * uma lista de grupos de uma vez — usado só pra montar a planilha
+   * "Modelo de Retorno" (ver emitirPlanilhaRetorno abaixo). */
+  function itensParaModeloRetorno(bloco: Bloco, grupos: GrupoNfRemessa[]): ItemModeloRetorno[] {
+    return grupos.flatMap((g) => itensComNfAtual(bloco, g));
+  }
+
+  /** Resumo combinado (Aprovados + Recusados) mostrado no pop-up de
+   * confirmação — uma linha por NF Remessa de cada bloco (pedido
+   * explícito: NF Remessa, Quantidade, Mão de Obra, Vendas Peças, NF
+   * Retorno, NF Mão de Obra, NF Peça). */
+  function linhasResumoEnvio(): LinhaResumoEnvio[] {
+    const linhasAprovados: LinhaResumoEnvio[] = gruposAprovados.map((g) => ({
+      bloco: "aprovados",
+      nfRemessa: g.nfRemessa,
+      quantidade: g.quantidade,
+      maoDeObra: g.maoDeObra,
+      vendaPecas: g.vendaPecas,
+      nfRetorno: infoRetorno("aprovados", g)?.numero ?? null,
+      nfMaoDeObra: infoMaoDeObraAprovados?.numero ?? null,
+      nfPecas: infoPecasAprovados?.numero ?? null,
+    }));
+    const linhasRecusados: LinhaResumoEnvio[] = gruposRecusados.map((g) => ({
+      bloco: "recusados",
+      nfRemessa: g.nfRemessa,
+      quantidade: g.quantidade,
+      maoDeObra: g.maoDeObra,
+      vendaPecas: g.vendaPecas,
+      nfRetorno: infoRetorno("recusados", g)?.numero ?? null,
+      nfMaoDeObra: null,
+      nfPecas: null,
+    }));
+    return [...linhasAprovados, ...linhasRecusados];
+  }
+
+  async function emitirPlanilhaRetorno() {
+    const aprovadosPlanilha = itensParaModeloRetorno("aprovados", gruposAprovados);
+    const recusadosPlanilha = itensParaModeloRetorno("recusados", gruposRecusados);
+    await gerarExcelModeloRetorno(aprovadosPlanilha, recusadosPlanilha, solucoesPorPartNumber);
+  }
+
   async function exportarGrupo(bloco: Bloco, grupo: GrupoNfRemessa) {
     if (bloco === "aprovados") {
       await gerarExcelExportacaoN3(grupo.itens as ItemExportacaoN3[]);
@@ -569,23 +627,27 @@ export default function PainelAgEmissaoNf({
 
   function abrirPopupMaoDeObra() {
     setErroAcao(null);
+    const total = aprovados.reduce((soma, a) => soma + a.maoDeObra, 0);
     setPopupNf({
       tipo: "mao_de_obra",
       titulo: "NF Mão de Obra",
       escopo: `Vale pra todos os ${aprovados.length} aparelho(s) do bloco Aprovados de uma vez.`,
       ids: aprovados.map((a) => a.id),
       valorInicial: infoMaoDeObraAprovados,
+      valorAutomatico: total,
     });
   }
 
   function abrirPopupPecas() {
     setErroAcao(null);
+    const total = aprovados.reduce((soma, a) => soma + a.vendaPecas, 0);
     setPopupNf({
       tipo: "pecas",
       titulo: "NF Peças",
       escopo: `Vale pra todos os ${aprovados.length} aparelho(s) do bloco Aprovados de uma vez.`,
       ids: aprovados.map((a) => a.id),
       valorInicial: infoPecasAprovados,
+      valorAutomatico: total,
     });
   }
 
@@ -632,8 +694,18 @@ export default function PainelAgEmissaoNf({
   const recusadosProntoParaEnviar =
     recusados.length > 0 && gruposRecusados.every((g) => infoRetorno("recusados", g) != null);
 
-  async function enviarProdutoEntregue(bloco: Bloco) {
+  // Gate ÚNICO pro painel inteiro (pedido explícito) — só libera o botão
+  // "Enviar para Produto Entregue" quando os dois blocos que existirem
+  // na tela já tiverem todas as NFs lançadas (bloco vazio não trava).
+  const prontoParaFinalizar =
+    podeLancarNf &&
+    (aprovados.length > 0 || recusados.length > 0) &&
+    (gruposAprovados.length === 0 || aprovadosProntoParaEnviar) &&
+    (gruposRecusados.length === 0 || recusadosProntoParaEnviar);
+
+  async function enviarBloco(bloco: Bloco) {
     const itens = bloco === "aprovados" ? aprovados : recusados;
+    if (itens.length === 0) return;
     const rota =
       bloco === "aprovados"
         ? "/api/operacional/orcamentos/enviar-produto-entregue-aprovados-em-massa"
@@ -647,7 +719,15 @@ export default function PainelAgEmissaoNf({
     if (!res.ok) {
       throw new Error(data?.error || "Não foi possível enviar pra Produto Entregue.");
     }
-    setConfirmandoEnvio(null);
+  }
+
+  // Manda os dois blocos que existirem na tela de uma vez só (pedido
+  // explícito: gate no painel inteiro) — cada rota já revalida no
+  // servidor que as NFs daquele bloco estão todas preenchidas.
+  async function enviarProdutoEntregue() {
+    await enviarBloco("aprovados");
+    await enviarBloco("recusados");
+    setConfirmandoEnvio(false);
     router.refresh();
   }
 
@@ -742,19 +822,6 @@ export default function PainelAgEmissaoNf({
               />
             )}
           />
-          {podeLancarNf && aprovadosProntoParaEnviar && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => setConfirmandoEnvio("aprovados")}
-                className="inline-flex items-center gap-2 rounded-lg text-white text-sm font-medium px-4 py-2.5 transition"
-                style={{ background: "#22c55e" }}
-              >
-                <PackageCheck size={15} />
-                Enviar Aprovados para Produto Entregue
-              </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -786,19 +853,20 @@ export default function PainelAgEmissaoNf({
               />
             )}
           />
-          {podeLancarNf && recusadosProntoParaEnviar && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => setConfirmandoEnvio("recusados")}
-                className="inline-flex items-center gap-2 rounded-lg text-white text-sm font-medium px-4 py-2.5 transition"
-                style={{ background: "#22c55e" }}
-              >
-                <PackageCheck size={15} />
-                Enviar Recusados para Produto Entregue
-              </button>
-            </div>
-          )}
+        </div>
+      )}
+
+      {prontoParaFinalizar && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setConfirmandoEnvio(true)}
+            className="inline-flex items-center gap-2 rounded-lg text-white text-sm font-medium px-4 py-2.5 transition"
+            style={{ background: "#22c55e" }}
+          >
+            <PackageCheck size={15} />
+            Enviar para Produto Entregue
+          </button>
         </div>
       )}
 
@@ -816,6 +884,7 @@ export default function PainelAgEmissaoNf({
           titulo={popupNf.titulo}
           escopo={popupNf.escopo}
           valorInicial={popupNf.valorInicial}
+          valorAutomatico={popupNf.valorAutomatico}
           onFechar={() => setPopupNf(null)}
           onSalvar={salvarPopupNf}
         />
@@ -823,14 +892,10 @@ export default function PainelAgEmissaoNf({
 
       {confirmandoEnvio && (
         <PopupConfirmarProdutoEntregue
-          titulo={confirmandoEnvio === "aprovados" ? "Enviar Aprovados para Produto Entregue" : "Enviar Recusados para Produto Entregue"}
-          lotes={
-            (confirmandoEnvio === "aprovados" ? gruposAprovados : gruposRecusados).map(
-              (g): LoteResumoEnvio => ({ nfRemessa: g.nfRemessa, quantidade: g.quantidade })
-            )
-          }
-          onFechar={() => setConfirmandoEnvio(null)}
-          onConfirmar={() => enviarProdutoEntregue(confirmandoEnvio)}
+          linhas={linhasResumoEnvio()}
+          onFechar={() => setConfirmandoEnvio(false)}
+          onEmitirPlanilha={emitirPlanilhaRetorno}
+          onConfirmar={enviarProdutoEntregue}
         />
       )}
     </div>

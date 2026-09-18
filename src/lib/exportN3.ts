@@ -21,7 +21,7 @@ export type ItemExportacaoN3 = CamposValorVigente & {
 };
 
 type SlotPeca = { codigo: string; valor: number } | null;
-type PecaPosicionada = { posicao: string; codigo: string; valor: number };
+export type PecaPosicionada = { posicao: string; codigo: string; valor: number };
 
 /**
  * As peças de cada orçamento (PEÇA N/VLR. PEÇA N) seguem a MESMA
@@ -33,8 +33,11 @@ type PecaPosicionada = { posicao: string; codigo: string; valor: number };
  * de Peça (que sempre vem recalculada contra a Base Peças vigente,
  * igual em Validação de Orçamentos/Contra Proposta/Reorçamento) — usar
  * custo_peca_N fazia a coluna VLR. PEÇA N sair sempre zerada.
+ *
+ * Exportada porque lib/modeloRetorno.ts (planilha "Modelo de Retorno"
+ * de Ag. Emissão de Nota Fiscal) reaproveita a mesma cascata.
  */
-function pecasVigentes(o: CamposValorVigente): PecaPosicionada[] {
+export function pecasVigentes(o: CamposValorVigente): PecaPosicionada[] {
   if (o.aprovado_reorcamento_em && o.reorcamento_detalhe) {
     return o.reorcamento_detalhe.pecas.map((p) => ({ posicao: p.posicao, codigo: p.codigo, valor: p.vendaPeca ?? 0 }));
   }

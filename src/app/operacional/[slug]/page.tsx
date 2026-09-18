@@ -35,6 +35,7 @@ import PainelEtapaSimples, { type AparelhoEtapaSimples } from "@/components/Pain
 import PainelOperacionalAllied from "@/components/PainelOperacionalAllied";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
 import { buscarPrecosBidPorPartNumber, type FaixaMarkup } from "@/lib/bid";
+import { pecasVigentes } from "@/lib/exportN3";
 import { isAllied } from "@/lib/usuarios";
 import { buscarAparelhosAllied } from "@/lib/allied";
 
@@ -779,7 +780,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pre_ordem, status_operacional, nf_remessa_allied, ${COLUNAS_PECAS}, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5, custo_peca_add_1, custo_peca_add_2, custo_peca_add_3, custo_peca_add_4, custo_peca_add_5, aprovado_reorcamento_em, reorcamento_detalhe, contra_proposta_ajustado, contra_proposta_pecas, contra_proposta_mao_de_obra, validacao_snapshot, updated_at, nf_mao_de_obra_numero, nf_mao_de_obra_valor, nf_pecas_numero, nf_pecas_valor, nf_retorno_numero, nf_retorno_valor, nf_exportado_em`
+        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pre_ordem, status_operacional, nf_remessa_allied, imei_allied, motivo_reprova, observacao_tecnica_reparadora, ${COLUNAS_PECAS}, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5, custo_peca_add_1, custo_peca_add_2, custo_peca_add_3, custo_peca_add_4, custo_peca_add_5, aprovado_reorcamento_em, reorcamento_detalhe, contra_proposta_ajustado, contra_proposta_pecas, contra_proposta_mao_de_obra, validacao_snapshot, updated_at, nf_mao_de_obra_numero, nf_mao_de_obra_valor, nf_pecas_numero, nf_pecas_valor, nf_retorno_numero, nf_retorno_valor, nf_exportado_em`
       )
       .in("status_operacional", GRUPO_STATUS_AG_EMISSAO_NF)
       .order("updated_at", { ascending: false });
@@ -794,11 +795,24 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       vendaPecas: calcularVendaPecasVigente(a),
     }));
 
+    // Part Numbers referenciados (valor VIGENTE — reorçamento aprovado >
+    // contra proposta ajustada > validação original, mesma cascata do
+    // "Exportar" N3) — busca a "Peça Solução" de cada um no BID pra
+    // formatar "Part Number - Peça Solução" na planilha "Modelo de
+    // Retorno" (ver lib/modeloRetorno.ts e PainelAgEmissaoNf.tsx).
+    const partNumbersModeloRetorno = (aparelhos ?? []).flatMap((a) => pecasVigentes(a).map((p) => p.codigo));
+    const precosBidModeloRetorno = await buscarPrecosBidPorPartNumber(supabase, partNumbersModeloRetorno);
+    const solucoesPorPartNumber: Record<string, string> = {};
+    for (const [codigo, info] of Object.entries(precosBidModeloRetorno)) {
+      if (info.peca_solucao) solucoesPorPartNumber[codigo] = info.peca_solucao;
+    }
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelAgEmissaoNf
           aparelhos={itensComValor}
           perfil={perfil}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           topo={
             <>
               {voltar}

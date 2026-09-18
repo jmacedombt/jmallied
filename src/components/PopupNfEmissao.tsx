@@ -9,32 +9,38 @@ function formatarReal(valor: number): string {
 }
 
 /**
- * Pop-up de lançar (ou corrigir) o Nº NF + Valor de "NF Mão de Obra",
- * "NF Peças" ou "NF Retorno" dentro de "Ag. Emissão de Nota Fiscal" —
+ * Pop-up de lançar (ou corrigir) o Nº NF de "NF Mão de Obra", "NF
+ * Peças" ou "NF Retorno" dentro de "Ag. Emissão de Nota Fiscal" —
  * aberto pelos 3 ícones ao lado do Exportar (ver PainelAgEmissaoNf.tsx)
  * e, pra corrigir depois, também de dentro do detalhe de um aparelho já
  * em "Produto Entregue" (ver PopupAtendimentoPecas.tsx). O `titulo` já
  * vem pronto ("NF Mão de Obra" | "NF Peças" | "NF Retorno" — pedido
  * explícito) e o `escopo` só explica pra quem preenche o que aquele
  * número vai valer (todo o bloco ou só aquele lote).
+ *
+ * Só pede o Nº da NF — nunca um valor digitado à mão (pedido
+ * explícito): NF Mão de Obra/NF Peças levam o total já calculado
+ * automaticamente (`valorAutomatico`, mostrado só pra conferência); NF
+ * Retorno não tem valor nenhum (`valorAutomatico` omitido).
  */
 export default function PopupNfEmissao({
   titulo,
   escopo,
   valorInicial,
+  valorAutomatico,
   onFechar,
   onSalvar,
 }: {
   titulo: string;
   escopo: string;
   valorInicial: InfoNotaFiscal | null;
+  /** quando vem preenchido, mostra esse total (só leitura) e é ele que
+   * vai salvo — nunca um valor digitado. Omitido = NF sem valor (Retorno). */
+  valorAutomatico?: number;
   onFechar: () => void;
   onSalvar: (info: InfoNotaFiscal) => Promise<void>;
 }) {
   const [numero, setNumero] = useState(valorInicial?.numero ?? "");
-  const [valorTexto, setValorTexto] = useState(
-    valorInicial ? valorInicial.valor.toFixed(2).replace(".", ",") : ""
-  );
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -44,15 +50,10 @@ export default function PopupNfEmissao({
       setErro("Informe o Nº da NF.");
       return;
     }
-    const valorNumerico = Number(valorTexto.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(valorNumerico) || valorNumerico < 0) {
-      setErro("Informe um valor válido.");
-      return;
-    }
     setSalvando(true);
     setErro(null);
     try {
-      await onSalvar({ numero: numeroLimpo, valor: valorNumerico });
+      await onSalvar({ numero: numeroLimpo, valor: valorAutomatico ?? valorInicial?.valor ?? 0 });
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível salvar essa NF.");
       setSalvando(false);
@@ -104,22 +105,15 @@ export default function PopupNfEmissao({
           style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--ink)" }}
         />
 
-        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
-          Valor
-        </label>
-        <input
-          value={valorTexto}
-          onChange={(e) => setValorTexto(e.target.value)}
-          disabled={salvando}
-          inputMode="decimal"
-          placeholder="Ex.: 350,00"
-          className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition mb-1"
-          style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--ink)" }}
-        />
-        {Number.isFinite(Number(valorTexto.replace(/\./g, "").replace(",", "."))) && valorTexto.trim() !== "" && (
-          <p className="text-[11px] mb-3" style={{ color: "var(--muted)" }}>
-            {formatarReal(Number(valorTexto.replace(/\./g, "").replace(",", ".")))}
-          </p>
+        {valorAutomatico != null && (
+          <div className="rounded-lg border px-3 py-2.5 mb-1" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+            <p className="uppercase tracking-wide text-[10px] mb-0.5" style={{ color: "var(--muted)" }}>
+              Valor (total automático)
+            </p>
+            <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+              {formatarReal(valorAutomatico)}
+            </p>
+          </div>
         )}
 
         {erro && (

@@ -251,8 +251,13 @@ export default function PopupAtendimentoPecas({
       {editandoNf && notasFiscais && (
         <PopupNfEmissao
           titulo={editandoNf.titulo}
-          escopo="Corrige o número/valor já lançado — o aparelho continua em Produto Entregue."
+          escopo={
+            editandoNf.tipo === "retorno"
+              ? "Corrige o Nº da NF já lançado — o aparelho continua em Produto Entregue."
+              : "Corrige o Nº da NF já lançado — o valor (total automático) é mantido igual ao já gravado."
+          }
           valorInicial={editandoNf.valorInicial}
+          valorAutomatico={editandoNf.tipo !== "retorno" ? editandoNf.valorInicial?.valor ?? 0 : undefined}
           onFechar={() => setEditandoNf(null)}
           onSalvar={async (info) => {
             const res = await fetch("/api/operacional/orcamentos/salvar-nf", {
