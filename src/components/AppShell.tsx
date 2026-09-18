@@ -41,7 +41,7 @@ import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import BotaoTema from "@/components/BotaoTema";
 import ColorPickerSistema from "@/components/ColorPickerSistema";
-import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
+import { podeConfirmarAnaliseEmLote, podeLancarNfProdutoEntregue } from "@/lib/orcamentos";
 import { isAllied, operacionalRestrito } from "@/lib/usuarios";
 
 type Perfil = {
@@ -257,11 +257,19 @@ export default function AppShell({
   // Operacional (sem is_master) só vê Painel + Impressão (ver
   // GRUPOS_MENU_OPERACIONAL) — também nunca vê Métricas.
   const podeVerMetricas = !allied && !restritoOperacional && podeConfirmarAnaliseEmLote(perfil);
+  // "Modelo de Retorno" só aparece pra quem já pode lançar NF/mandar
+  // pra Produto Entregue (mesma permissão de quem gera a planilha em
+  // Ag. Emissão de Nota Fiscal — ver migration 0049).
+  const podeVerModeloRetorno = !allied && !restritoOperacional && podeLancarNfProdutoEntregue(perfil);
   const grupos = allied
     ? GRUPOS_MENU_ALLIED
     : restritoOperacional
       ? GRUPOS_MENU_OPERACIONAL
-      : GRUPOS_MENU_BASE.flatMap((g) => (g.id === "impressao" && podeVerMetricas ? [g, GRUPO_METRICAS] : [g]));
+      : GRUPOS_MENU_BASE.map((g) =>
+          g.id === "operacional" && podeVerModeloRetorno
+            ? { ...g, itens: [...g.itens, { href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet }] }
+            : g
+        ).flatMap((g) => (g.id === "impressao" && podeVerMetricas ? [g, GRUPO_METRICAS] : [g]));
 
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>(

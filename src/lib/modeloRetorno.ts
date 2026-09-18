@@ -2,9 +2,16 @@
  * Planilha "Modelo de Retorno" de "Ag. Emissão de Nota Fiscal" — mesmo
  * formato/colunas do arquivo-modelo enviado pelo Rafael (aba com o
  * nome da data, DDMMAAAA), sempre Aprovados primeiro e Recusados
- * depois (pedido explícito). Gerada no navegador, mesmo padrão de
- * lib/exportN3.ts e lib/preOrdemExport.ts (import dinâmico do "xlsx" +
+ * depois (pedido explícito). Gerada no navegador (mesmo padrão de
+ * lib/exportN3.ts e lib/preOrdemExport.ts, import dinâmico do "xlsx" +
  * XLSX.writeFile) — não muda nada no banco, só baixa o arquivo.
+ *
+ * A montagem da planilha em si (montarPlanilha/montarWorkbook) é
+ * compartilhada com a regeração no servidor — ver
+ * gerarBufferModeloRetorno abaixo, usada pelo histórico de "Modelo de
+ * Retorno" (menu Operacional > Modelo de Retorno, migration 0049) pra
+ * baixar de novo, dias depois, exatamente a mesma planilha, a partir só
+ * do snapshot de dados que foi salvo na hora da emissão.
  */
 import { type CamposValorVigente, calcularMaoDeObraVigente } from "@/lib/orcamentos";
 import { pecasVigentes, type PecaPosicionada } from "@/lib/exportN3";
@@ -22,6 +29,16 @@ export type ItemModeloRetorno = CamposValorVigente & {
   nf_mao_de_obra_valor: number | null;
   nf_pecas_numero: string | null;
   nf_pecas_valor: number | null;
+};
+
+/** Tudo que uma emissão da planilha precisa — é exatamente isso que
+ * fica gravado (coluna `dados`, jsonb) em cada registro do histórico
+ * (ver migration 0049 e /api/operacional/modelo-retorno), pra dar pra
+ * remontar o mesmo Excel depois, sem precisar guardar o arquivo. */
+export type SnapshotModeloRetorno = {
+  aprovados: ItemModeloRetorno[];
+  recusados: ItemModeloRetorno[];
+  solucoesPorPartNumber: Record<string, string>;
 };
 
 // "Reparadora Terceira" vem igual em toda linha do modelo enviado — é a
@@ -121,6 +138,11 @@ function linhaItem(
   return linha;
 }
 
+/** DDMMAAAA de hoje, no fuso de Brasília — usado como nome da aba e do
+ * arquivo na hora da emissão (ver gerarExcelModeloRetorno). Ao remontar
+ * depois (gerarBufferModeloRetorno), NÃO chama essa função de novo —
+ * usa a data que ficou gravada no registro, pra manter a planilha
+ * idêntica à que foi baixada na hora, mesmo consultando dias depois. */
 function dataArquivoBrasilia(): string {
   const partes = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
@@ -132,16 +154,19 @@ function dataArquivoBrasilia(): string {
   return `${valor("day")}${valor("month")}${valor("year")}`;
 }
 
-/** Gera e baixa a planilha "Modelo de Retorno" — Aprovados sempre
- * primeiro, Recusados depois (pedido explícito). Não grava nada no
- * banco nem muda status — só o Excel. */
-export async function gerarExcelModeloRetorno(
+// A biblioteca "xlsx" (SheetJS) funciona igual no navegador e no Node —
+// por isso o mesmo import dinâmico e a mesma montagem servem tanto pro
+// download direto no cliente (gerarExcelModeloRetorno) quanto pra
+// remontagem no servidor (gerarBufferModeloRetorno, chamada pela rota
+// de download do histórico).
+type LibXLSX = typeof import("xlsx");
+
+function montarPlanilha(
+  XLSX: LibXLSX,
   aprovados: ItemModeloRetorno[],
   recusados: ItemModeloRetorno[],
   solucoesPorPartNumber: Record<string, string>
 ) {
-  const XLSX = await import("xlsx");
-
   const corpo = [
     ...aprovados.map((item) => linhaItem(item, "Aprovado", solucoesPorPartNumber)),
     ...recusados.map((item) => linhaItem(item, "Reprovado", solucoesPorPartNumber)),
@@ -163,8 +188,51 @@ export async function gerarExcelModeloRetorno(
     }
   }
 
+  return planilha;
+}
+
+async function montarWorkbook(
+  aprovados: ItemModeloRetorno[],
+  recusados: ItemModeloRetorno[],
+  solucoesPorPartNumber: Record<string, string>,
+  dataReferencia: string
+) {
+  const XLSX = await import("xlsx");
+  const planilha = montarPlanilha(XLSX, aprovados, recusados, solucoesPorPartNumber);
   const workbook = XLSX.utils.book_new();
-  const data = dataArquivoBrasilia();
-  XLSX.utils.book_append_sheet(workbook, planilha, data);
-  XLSX.writeFile(workbook, `Modelo_de_Retorno_${data}.xlsx`);
+  XLSX.utils.book_append_sheet(workbook, planilha, dataReferencia);
+  return { XLSX, workbook };
+}
+
+/** Gera e baixa a planilha "Modelo de Retorno" — Aprovados sempre
+ * primeiro, Recusados depois (pedido explícito). Não grava nada no
+ * banco nem muda status — só o Excel (o registro no histórico, se
+ * quiser, é feito à parte, ver PainelAgEmissaoNf.tsx). Devolve o nome
+ * do arquivo e a data de referência usados, pra quem chamar registrar
+ * essa emissão com o MESMO nome/data (ver /api/operacional/modelo-retorno). */
+export async function gerarExcelModeloRetorno(
+  aprovados: ItemModeloRetorno[],
+  recusados: ItemModeloRetorno[],
+  solucoesPorPartNumber: Record<string, string>
+): Promise<{ nomeArquivo: string; dataReferencia: string }> {
+  const dataReferencia = dataArquivoBrasilia();
+  const { XLSX, workbook } = await montarWorkbook(aprovados, recusados, solucoesPorPartNumber, dataReferencia);
+  const nomeArquivo = `Modelo_de_Retorno_${dataReferencia}.xlsx`;
+  XLSX.writeFile(workbook, nomeArquivo);
+  return { nomeArquivo, dataReferencia };
+}
+
+/** Remonta (sem baixar) a mesma planilha "Modelo de Retorno" a partir
+ * de um snapshot já salvo — usada só pela rota de download do
+ * histórico (server-side), pra devolver os bytes do .xlsx idêntico ao
+ * que foi baixado na hora da emissão (mesma `dataReferencia` gravada
+ * naquele registro, não a data de hoje). */
+export async function gerarBufferModeloRetorno(
+  aprovados: ItemModeloRetorno[],
+  recusados: ItemModeloRetorno[],
+  solucoesPorPartNumber: Record<string, string>,
+  dataReferencia: string
+): Promise<Buffer> {
+  const { XLSX, workbook } = await montarWorkbook(aprovados, recusados, solucoesPorPartNumber, dataReferencia);
+  return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
 }

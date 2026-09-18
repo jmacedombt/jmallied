@@ -600,7 +600,32 @@ export default function PainelAgEmissaoNf({
   async function emitirPlanilhaRetorno() {
     const aprovadosPlanilha = itensParaModeloRetorno("aprovados", gruposAprovados);
     const recusadosPlanilha = itensParaModeloRetorno("recusados", gruposRecusados);
-    await gerarExcelModeloRetorno(aprovadosPlanilha, recusadosPlanilha, solucoesPorPartNumber);
+    const { nomeArquivo, dataReferencia } = await gerarExcelModeloRetorno(
+      aprovadosPlanilha,
+      recusadosPlanilha,
+      solucoesPorPartNumber
+    );
+    // Registra a emissão no histórico (menu Operacional > Modelo de
+    // Retorno — ver migration 0049) — best-effort: se falhar, a
+    // planilha já foi baixada normalmente, só não fica registrada.
+    try {
+      const res = await fetch("/api/operacional/modelo-retorno", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          aprovados: aprovadosPlanilha,
+          recusados: recusadosPlanilha,
+          solucoesPorPartNumber,
+          nomeArquivo,
+          dataReferencia,
+        }),
+      });
+      if (!res.ok) {
+        setErroAcao("A planilha foi baixada, mas não deu pra registrar no histórico de Modelo de Retorno.");
+      }
+    } catch {
+      setErroAcao("A planilha foi baixada, mas não deu pra registrar no histórico de Modelo de Retorno.");
+    }
   }
 
   async function exportarGrupo(bloco: Bloco, grupo: GrupoNfRemessa) {
