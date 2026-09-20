@@ -1,9 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, FileEdit, PackageSearch, X } from "lucide-react";
-import { type DetalheValidacaoOrcamento, type InfoNotaFiscal } from "@/lib/orcamentos";
+import { Check, Copy, FileEdit, PackageSearch, Undo2, X } from "lucide-react";
+import {
+  type DetalheValidacaoOrcamento,
+  type InfoNotaFiscal,
+  STATUS_DESTINO_RETROCEDER_PRODUTO_ENTREGUE,
+} from "@/lib/orcamentos";
 import PopupNfEmissao from "@/components/PopupNfEmissao";
+import PopupConfirmar from "@/components/PopupConfirmar";
 
 export type AparelhoAtendimentoPecas = {
   os_reparadora: string | null;
@@ -48,6 +53,8 @@ export default function PopupAtendimentoPecas({
   notasFiscais,
   podeEditarNf = false,
   onNfAtualizada,
+  podeRetroceder = false,
+  onRetrocedido,
 }: {
   aparelho: AparelhoAtendimentoPecas;
   onFechar: () => void;
@@ -58,11 +65,44 @@ export default function PopupAtendimentoPecas({
    * lança as NFs na tela — ver podeLancarNfProdutoEntregue). */
   podeEditarNf?: boolean;
   onNfAtualizada?: () => void;
+  /** libera "Retroceder Etapa" (pedido explícito) — só Administrador ou
+   * Gerente, ver podeRetrocederProdutoEntregue. Só faz sentido junto de
+   * `notasFiscais` (aparelho já em Produto Entregue). */
+  podeRetroceder?: boolean;
+  onRetrocedido?: () => void;
 }) {
   const [copiado, setCopiado] = useState<string | null>(null);
   const [editandoNf, setEditandoNf] = useState<null | { tipo: "mao_de_obra" | "pecas" | "retorno"; titulo: string; valorInicial: InfoNotaFiscal | null }>(
     null
   );
+  const [retrocedendo, setRetrocedendo] = useState(false);
+  const [statusEscolhido, setStatusEscolhido] = useState<string>(STATUS_DESTINO_RETROCEDER_PRODUTO_ENTREGUE[0]?.valor ?? "");
+  const [confirmandoRetrocesso, setConfirmandoRetrocesso] = useState(false);
+  const [enviandoRetrocesso, setEnviandoRetrocesso] = useState(false);
+  const [erroRetrocesso, setErroRetrocesso] = useState<string | null>(null);
+
+  async function confirmarRetrocesso() {
+    if (!notasFiscais) return;
+    setEnviandoRetrocesso(true);
+    setErroRetrocesso(null);
+    try {
+      const res = await fetch(`/api/operacional/orcamentos/${notasFiscais.id}/retroceder-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status_operacional: statusEscolhido }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || "Não foi possível retroceder esse orçamento.");
+      }
+      setConfirmandoRetrocesso(false);
+      setRetrocedendo(false);
+      onRetrocedido?.();
+    } catch (e) {
+      setErroRetrocesso(e instanceof Error ? e.message : "Não foi possível retroceder esse orçamento.");
+    }
+    setEnviandoRetrocesso(false);
+  }
 
   async function copiar(texto: string, chave: string) {
     try {
@@ -244,9 +284,88 @@ export default function PopupAtendimentoPecas({
                 </div>
               ))}
             </div>
+
+            {podeRetroceder && (
+              <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--line)" }}>
+                {!retrocedendo ? (
+                  <button
+                    type="button"
+                    onClick={() => setRetrocedendo(true)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition hover:bg-[var(--surface2)]"
+                    style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                  >
+                    <Undo2 size={13} />
+                    Retroceder Etapa
+                  </button>
+                ) : (
+                  <div className="rounded-lg border px-3 py-3" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+                    <p className="text-[11px] mb-2" style={{ color: "var(--muted)" }}>
+                      Escolha pra qual etapa esse orçamento deve voltar. As 3 NFs (Mão de Obra, Peças e Retorno) e a
+                      data de exportação são apagadas ao confirmar.
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <select
+                        value={statusEscolhido}
+                        onChange={(e) => setStatusEscolhido(e.target.value)}
+                        className="rounded-lg border px-2.5 py-1.5 text-xs flex-1 min-w-[180px]"
+                        style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
+                      >
+                        {STATUS_DESTINO_RETROCEDER_PRODUTO_ENTREGUE.map((s) => (
+                          <option key={s.slug} value={s.valor}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmandoRetrocesso(true)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition hover:bg-[var(--surface)]"
+                        style={{ borderColor: "#ef4444", color: "#ef4444" }}
+                      >
+                        <Undo2 size={13} />
+                        Retroceder
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRetrocedendo(false)}
+                        className="px-2.5 py-1.5 text-xs font-medium transition hover:underline"
+                        style={{ color: "var(--muted)" }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {confirmandoRetrocesso && notasFiscais && (
+        <PopupConfirmar
+          titulo="Retroceder Etapa"
+          mensagem={
+            <>
+              Retroceder o orçamento <strong style={{ color: "var(--ink)" }}>{aparelho.trade_allied}</strong> (OS
+              Reparadora {aparelho.os_reparadora || "—"}) de <strong style={{ color: "var(--ink)" }}>Produto Entregue</strong> pra{" "}
+              <strong style={{ color: "var(--ink)" }}>{statusEscolhido}</strong>?
+              <br />
+              As NFs de Mão de Obra, Peças e Retorno já lançadas (e a data de exportação) vão ser apagadas. Essa ação
+              não pode ser desfeita.
+            </>
+          }
+          rotuloConfirmar="Retroceder Etapa"
+          perigo
+          carregando={enviandoRetrocesso}
+          erro={erroRetrocesso}
+          onConfirmar={confirmarRetrocesso}
+          onFechar={() => {
+            setConfirmandoRetrocesso(false);
+            setErroRetrocesso(null);
+          }}
+        />
+      )}
 
       {editandoNf && notasFiscais && (
         <PopupNfEmissao

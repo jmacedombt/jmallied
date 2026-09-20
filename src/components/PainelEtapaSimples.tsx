@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { Ban } from "lucide-react";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
-import { type DetalheValidacaoOrcamento, type InfoNotaFiscal, lerInfoNotaFiscal, podeLancarNfProdutoEntregue } from "@/lib/orcamentos";
+import {
+  type DetalheValidacaoOrcamento,
+  type InfoNotaFiscal,
+  lerInfoNotaFiscal,
+  podeLancarNfProdutoEntregue,
+  podeRetrocederProdutoEntregue,
+} from "@/lib/orcamentos";
 import { operacionalRestrito } from "@/lib/usuarios";
 
 type Perfil = { cargo: string; is_master: boolean } | null;
@@ -61,6 +67,7 @@ export default function PainelEtapaSimples({
   // cargos.
   const mostrarAcao = permiteReprovar && !operacionalRestrito(perfil);
   const podeEditarNf = mostrarNotasFiscais && podeLancarNfProdutoEntregue(perfil);
+  const podeRetroceder = mostrarNotasFiscais && podeRetrocederProdutoEntregue(perfil);
 
   return (
     <>
@@ -161,6 +168,11 @@ export default function PainelEtapaSimples({
           }
           podeEditarNf={podeEditarNf}
           onNfAtualizada={() => router.refresh()}
+          podeRetroceder={podeRetroceder}
+          onRetrocedido={() => {
+            setDetalhe(null);
+            router.refresh();
+          }}
         />
       )}
     </>

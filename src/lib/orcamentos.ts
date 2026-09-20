@@ -694,6 +694,26 @@ export function statusAnteriorAgEmissaoNf(statusAtual: string): string | null {
   return null;
 }
 
+// quem pode retroceder manualmente um orçamento que já está em "Produto
+// Entregue" pra qualquer outro status (pedido explícito) — mesma trava
+// de cargo já usada no "Voltar Etapa" de Ag. Emissão de Nota Fiscal
+// (Administrador ou Gerente), reaproveitada em vez de criar uma
+// permissão nova só pra isso (ver PopupAtendimentoPecas.tsx e
+// retroceder-status/route.ts).
+export const podeRetrocederProdutoEntregue = podeVoltarEtapaAgEmissaoNf;
+
+// Status pra onde dá pra retroceder um orçamento de "Produto Entregue"
+// (ver seletor em PopupAtendimentoPecas.tsx) — todas as etapas do
+// pipeline, MENOS "Produto Entregue" (não faz sentido voltar pra onde
+// já está) e "Ag. Emissão de Nota Fiscal" (não é um status real gravado
+// em orcamentos.status_operacional, é só o rótulo de tela que agrupa os
+// 2 status de GRUPO_STATUS_AG_EMISSAO_NF — ver o comentário na entrada
+// dela em STATUS_OPERACIONAL acima; escolher qual dos 2 usar aqui seria
+// ambíguo pra quem está retrocedendo).
+export const STATUS_DESTINO_RETROCEDER_PRODUTO_ENTREGUE = STATUS_OPERACIONAL.filter(
+  (s) => s.slug !== "produto-entregue" && s.slug !== "ag-emissao-nf"
+);
+
 // ---- Contra Proposta (Ag. Contra Proposta) — ajuste peça a peça ----
 // (ver migration 0033, PopupPecasContraProposta.tsx, PainelContraProposta.tsx)
 
