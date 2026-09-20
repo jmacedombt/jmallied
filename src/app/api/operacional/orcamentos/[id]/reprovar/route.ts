@@ -8,7 +8,7 @@ import {
   type CamposPecasOrcamento,
   type ConfiguracaoMaoDeObra,
 } from "@/lib/orcamentos";
-import { type FaixaMarkup } from "@/lib/bid";
+import { buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
 
 const COLUNAS_PECAS =
   "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5";
@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const { data: atual, error: erroAtual } = await admin
     .from("orcamentos")
-    .select(`status_operacional, ${COLUNAS_PECAS}`)
+    .select(`status_operacional, nf_remessa_allied, ${COLUNAS_PECAS}`)
     .eq("id", params.id)
     .single();
 
@@ -103,13 +103,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
       valor_uma_peca: Number(configMaoObraBruta?.valor_uma_peca ?? 0),
       valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 0),
     };
-    const faixasMarkup: FaixaMarkup[] = (
+    const faixasMarkupGlobal: FaixaMarkup[] = (
       (faixasMarkupBrutas ?? []) as { valor_min: number; valor_max: number | null; multiplicador: number }[]
     ).map((f) => ({
       valor_min: Number(f.valor_min),
       valor_max: f.valor_max == null ? null : Number(f.valor_max),
       multiplicador: Number(f.multiplicador),
     }));
+
+    // override de margem gravado especificamente pra esse lote (botão
+    // "Utilizar nova margem" — ver migration 0050), se existir.
+    const overridesDoLote = await buscarOverridesMarkupPorLote(admin, [atual.nf_remessa_allied]);
+    const faixasMarkup: FaixaMarkup[] = overridesDoLote[atual.nf_remessa_allied] ?? faixasMarkupGlobal;
 
     const detalhe = calcularDetalheValidacao(
       atual as CamposPecasOrcamento,

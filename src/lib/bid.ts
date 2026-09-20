@@ -229,6 +229,30 @@ export async function buscarPrecosBidPorPartNumber(
   return resultado;
 }
 
+// ---- Override de Faixas de Markup por lote (ver migration 0050) ----
+
+/** Busca o override de Faixas de Markup gravado por lote (NF Remessa) —
+ * "Utilizar nova margem" em Validação de Orçamentos (ver
+ * PopupResumoPecasMarkup.tsx e migration 0050). Devolve um mapa
+ * nf_remessa_allied -> FaixaMarkup[] só com quem TEM override; quem não
+ * tem simplesmente não entra no mapa (quem chama cai pra faixa global
+ * nesse caso). Passar lista vazia busca todos os overrides existentes
+ * (usado quando ainda não se sabe quais NFs estarão na tela). */
+export async function buscarOverridesMarkupPorLote(
+  supabase: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  nfsRemessa: string[]
+): Promise<Record<string, FaixaMarkup[]>> {
+  let query = supabase.from("orcamentos_lote_markup_override").select("nf_remessa_allied, faixas");
+  if (nfsRemessa.length > 0) query = query.in("nf_remessa_allied", nfsRemessa);
+  const { data } = await query;
+
+  const mapa: Record<string, FaixaMarkup[]> = {};
+  for (const linha of (data ?? []) as { nf_remessa_allied: string; faixas: FaixaMarkup[] }[]) {
+    mapa[linha.nf_remessa_allied] = linha.faixas;
+  }
+  return mapa;
+}
+
 // ---- Consulta BID (busca com dados completos carregados na tela) ----
 
 export type SolucaoBidConsulta = { id: string; peca_solucao: string; principal: boolean };

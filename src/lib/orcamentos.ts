@@ -636,6 +636,18 @@ export const podeEmitirNfEmLote = podeConfirmarAnaliseEmLote;
 // libera "Emitir NF em lote" nessa tela hoje.
 export const podeLancarNfProdutoEntregue = podeConfirmarAnaliseEmLote;
 
+// quem pode voltar um orçamento de "Ag. Emissão de Nota Fiscal" pra
+// etapa anterior (ver voltarEtapaAgEmissaoNfPermitido logo abaixo) — só
+// Administrador (is_master) ou Gerente, mais restrito que as demais ações
+// de lote dessa tela (que também liberam Supervisor).
+export const CARGOS_VOLTAR_ETAPA_NF = ["Gerente"] as const;
+
+export function podeVoltarEtapaAgEmissaoNf(perfil: { cargo: string; is_master: boolean } | null): boolean {
+  if (!perfil) return false;
+  if (perfil.is_master) return true;
+  return (CARGOS_VOLTAR_ETAPA_NF as readonly string[]).includes(perfil.cargo);
+}
+
 // ---- NF Mão de Obra / NF Peças / NF Retorno (Ag. Emissão de Nota
 // Fiscal → Produto Entregue, ver migration 0048) ----
 
@@ -657,6 +669,30 @@ export type CamposNotaFiscal = {
   nf_retorno_valor: number | null;
   nf_exportado_em: string | null;
 };
+
+/** true quando NENHUMA NF (Mão de Obra/Peças/Retorno) já foi lançada e a
+ * exportação ainda não ocorreu — condição pra permitir "Voltar Etapa" em
+ * Ag. Emissão de Nota Fiscal. Uma vez que qualquer NF tenha sido
+ * registrada, o orçamento não pode mais voltar de etapa por essa ação
+ * (evita deixar NF "fantasma" gravada num orçamento que regrediu). */
+export function podeVoltarEtapaSemNfLancada(campos: CamposNotaFiscal): boolean {
+  return (
+    !campos.nf_mao_de_obra_numero &&
+    !campos.nf_pecas_numero &&
+    !campos.nf_retorno_numero &&
+    !campos.nf_exportado_em
+  );
+}
+
+/** Pra qual status_operacional um orçamento deve voltar ao usar "Voltar
+ * Etapa" em Ag. Emissão de Nota Fiscal, dado o status atual (um dos 2
+ * reais de GRUPO_STATUS_AG_EMISSAO_NF). null se o status não fizer parte
+ * dessa etapa (nada a reverter). */
+export function statusAnteriorAgEmissaoNf(statusAtual: string): string | null {
+  if (statusAtual === STATUS_AG_NF_RETORNO_RECUSADOS) return STATUS_ORCAMENTO_REPROVADO;
+  if (statusAtual === STATUS_AG_NF_SERVICO_VENDA_RETORNO) return STATUS_REPARO_FINALIZADO;
+  return null;
+}
 
 // ---- Contra Proposta (Ag. Contra Proposta) — ajuste peça a peça ----
 // (ver migration 0033, PopupPecasContraProposta.tsx, PainelContraProposta.tsx)

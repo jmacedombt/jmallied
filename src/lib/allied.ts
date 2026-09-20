@@ -86,3 +86,35 @@ export async function buscarBacklog(supabase: SupabaseClient): Promise<LinhaBack
     })
   );
 }
+
+export type LinhaBacklogPorLote = {
+  nf_remessa_allied: string;
+  status_operacional: string;
+  quantidade: number;
+  /** R-TAT médio do LOTE inteiro (não só dessa célula) — mesmo valor
+   * repetido em toda linha desse lote, ver migration 0051. */
+  media_rtat_lote_dias: number | null;
+};
+
+/** Backlog por lote (Operacional > Backlog, pedido explícito): uma linha
+ * por combinação lote (NF Remessa) + etapa numerada (1 a 8), com
+ * quantidade nessa célula e o R-TAT médio do LOTE inteiro (mesmo cálculo
+ * de buscarBacklog, só que agrupado também por lote — ver migration
+ * 0051). Sem custo nenhum, igual buscarBacklog. */
+export async function buscarBacklogPorLote(supabase: SupabaseClient): Promise<LinhaBacklogPorLote[]> {
+  const { data, error } = await supabase.rpc("orcamentos_backlog_por_lote");
+  if (error) throw error;
+  return (
+    (data ?? []) as {
+      nf_remessa_allied: string;
+      status_operacional: string;
+      quantidade: number | string;
+      media_rtat_lote_dias: number | string | null;
+    }[]
+  ).map((l) => ({
+    nf_remessa_allied: l.nf_remessa_allied,
+    status_operacional: l.status_operacional,
+    quantidade: Number(l.quantidade),
+    media_rtat_lote_dias: l.media_rtat_lote_dias == null ? null : Number(l.media_rtat_lote_dias),
+  }));
+}

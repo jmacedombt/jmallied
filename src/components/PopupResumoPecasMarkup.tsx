@@ -1,10 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { BarChart3, RotateCcw, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, BarChart3, CheckCircle2, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
 import { arredondarParaCima, type FaixaMarkup } from "@/lib/bid";
 import { type PecaDetalheValidacao } from "@/lib/orcamentos";
 import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
+
+function formatarDataHora(iso: string | null): string {
+  if (!iso) return "Nenhuma importação registrada ainda";
+  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
 
 function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -73,17 +78,85 @@ export default function PopupResumoPecasMarkup({
   pecas,
   faixas,
   icmsPercentual,
+  loteNf,
+  podePersonalizarMargem = false,
+  ultimaImportacaoGspn = null,
+  qtdSemPecaPendenteNoLote = 0,
+  onMargemAplicada,
   onFechar,
 }: {
   pecas: PecaDetalheValidacao[];
   faixas: FaixaMarkup[];
   icmsPercentual: number;
+  /** NF Remessa do lote selecionado na tela agora — undefined quando
+   * "Todos os lotes" está selecionado. "Utilizar nova margem" só aparece
+   * com um lote específico selecionado (pedido explícito: a ação vale só
+   * pra ESSE lote). */
+  loteNf?: string;
+  /** mesma permissão de "Confirmar Envio" nessa tela. */
+  podePersonalizarMargem?: boolean;
+  /** data/hora (ISO) da última importação da base GSPN — mostrado real,
+   * ao lado do 1º checkbox de confirmação (ver migration 0011). */
+  ultimaImportacaoGspn?: string | null;
+  /** quantos orçamentos do lote selecionado ainda estão sem peça e sem
+   * confirmação — mostrado real, ao lado do 2º checkbox. */
+  qtdSemPecaPendenteNoLote?: number;
+  /** chamado depois de aplicar a nova margem com sucesso — o pai dá
+   * router.refresh() pra tela toda (cards, tabela, "Mult. hoje") passar a
+   * refletir o override recém-gravado (ver PainelValidacaoOrcamentos.tsx). */
+  onMargemAplicada?: () => void;
   onFechar: () => void;
 }) {
   const [multiplicadores, setMultiplicadores] = useState<number[]>(() => faixas.map((f) => f.multiplicador));
 
+  // se as faixas efetivas mudarem (ex.: depois de aplicar um override e o
+  // pai atualizar via router.refresh — ver onMargemAplicada), reflete o
+  // novo "hoje" no simulado, senão o pop-up ficaria mostrando o
+  // multiplicador antigo mesmo já tendo confirmado o novo.
+  useEffect(() => {
+    setMultiplicadores(faixas.map((f) => f.multiplicador));
+  }, [faixas]);
+
   function restaurarPadrao() {
     setMultiplicadores(faixas.map((f) => f.multiplicador));
+  }
+
+  const [mostrarConfirmacaoMargem, setMostrarConfirmacaoMargem] = useState(false);
+  const [checkGspn, setCheckGspn] = useState(false);
+  const [checkSemPeca, setCheckSemPeca] = useState(false);
+  const [enviandoMargem, setEnviandoMargem] = useState(false);
+  const [erroMargem, setErroMargem] = useState<string | null>(null);
+
+  function abrirConfirmacaoMargem() {
+    setCheckGspn(false);
+    setCheckSemPeca(false);
+    setErroMargem(null);
+    setMostrarConfirmacaoMargem(true);
+  }
+
+  async function confirmarNovaMargem() {
+    if (!loteNf) return;
+    setEnviandoMargem(true);
+    setErroMargem(null);
+    try {
+      const res = await fetch("/api/operacional/orcamentos/lote-markup-override", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nfRemessa: loteNf,
+          faixas: faixas.map((f, i) => ({ valor_min: f.valor_min, valor_max: f.valor_max, multiplicador: multiplicadores[i] })),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || "Não foi possível aplicar a nova margem.");
+      }
+      setMostrarConfirmacaoMargem(false);
+      onMargemAplicada?.();
+    } catch (e) {
+      setErroMargem(e instanceof Error ? e.message : "Não foi possível aplicar a nova margem.");
+    }
+    setEnviandoMargem(false);
   }
 
   function alterarMultiplicador(indice: number, valor: number) {
@@ -189,7 +262,19 @@ export default function PopupResumoPecasMarkup({
           nessa tela agora. Objetivo: achar o multiplicador que faça a margem de peças bater pelo menos 30%.
         </p>
 
-        <div className="flex justify-end mb-2">
+        <div className="flex justify-end items-center gap-2 mb-2">
+          {loteNf && podePersonalizarMargem && (
+            <button
+              type="button"
+              onClick={abrirConfirmacaoMargem}
+              title={`Fixa o multiplicador simulado de cada faixa só pro lote ${loteNf} — outros lotes continuam na faixa global.`}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition"
+              style={{ background: "var(--accent)", boxShadow: "0 0 20px var(--accent-glow)" }}
+            >
+              <Sparkles size={12} />
+              Utilizar nova margem
+            </button>
+          )}
           <button
             type="button"
             onClick={restaurarPadrao}
@@ -201,6 +286,13 @@ export default function PopupResumoPecasMarkup({
             Restaurar padrão
           </button>
         </div>
+
+        {loteNf && podePersonalizarMargem && (
+          <p className="text-[11px] mb-3" style={{ color: "var(--muted)" }}>
+            "Utilizar nova margem" vale só pro lote <strong style={{ color: "var(--ink)" }}>{loteNf}</strong> — se
+            outro lote for selecionado depois, ele continua usando a faixa de Configurações &gt; Faixas de Markup (BID) normalmente.
+          </p>
+        )}
 
         <div className="rounded-xl border overflow-x-auto" style={{ borderColor: "var(--line)" }}>
           <table className="w-full text-xs">
@@ -311,6 +403,113 @@ export default function PopupResumoPecasMarkup({
           </p>
         )}
       </div>
+
+      {mostrarConfirmacaoMargem && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border shadow-2xl p-6"
+            style={{ background: "var(--surface)", borderColor: "var(--line)" }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-semibold flex items-center gap-2" style={{ color: "var(--ink)" }}>
+                <Sparkles size={17} style={{ color: "var(--accent2)" }} />
+                Utilizar nova margem
+              </h3>
+              <button
+                type="button"
+                onClick={() => setMostrarConfirmacaoMargem(false)}
+                aria-label="Fechar"
+                className="w-7 h-7 flex items-center justify-center rounded-md transition hover:bg-[var(--surface2)]"
+                style={{ color: "var(--muted)" }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+              Vai fixar o multiplicador simulado de cada faixa acima especificamente pro lote{" "}
+              <strong style={{ color: "var(--ink)" }}>{loteNf}</strong> — todo cálculo de peças desse lote (inclusive
+              depois de "Recalcular") passa a usar essa margem, mesmo que a configuração global de Faixas de Markup
+              (BID) mude depois. Outro lote selecionado continua usando a faixa global normalmente.
+            </p>
+
+            <label className="flex items-start gap-2.5 mb-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={checkGspn}
+                onChange={(e) => setCheckGspn(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span className="text-sm" style={{ color: "var(--ink)" }}>
+                Confirmo que a base do GSPN com a última atualização foi importada (atualiza os Part Number dos
+                orçamentos).
+                <br />
+                <span
+                  className="text-xs inline-flex items-center gap-1 mt-0.5"
+                  style={{ color: ultimaImportacaoGspn ? "var(--muted)" : "#ef4444" }}
+                >
+                  {ultimaImportacaoGspn ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+                  Última importação: {formatarDataHora(ultimaImportacaoGspn)}
+                </span>
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2.5 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={checkSemPeca}
+                onChange={(e) => setCheckSemPeca(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span className="text-sm" style={{ color: "var(--ink)" }}>
+                Já confirmei os orçamentos desse lote que seguirão sem peça.
+                <br />
+                <span
+                  className="text-xs inline-flex items-center gap-1 mt-0.5"
+                  style={{ color: qtdSemPecaPendenteNoLote > 0 ? "#ef4444" : "var(--muted)" }}
+                >
+                  {qtdSemPecaPendenteNoLote > 0 ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />}
+                  {qtdSemPecaPendenteNoLote > 0
+                    ? `${qtdSemPecaPendenteNoLote} orçamento(s) desse lote ainda pendente(s) de confirmação "sem peça".`
+                    : "Nenhum pendente nesse lote."}
+                </span>
+              </span>
+            </label>
+
+            {erroMargem && (
+              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-4">
+                {erroMargem}
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setMostrarConfirmacaoMargem(false)}
+                disabled={enviandoMargem}
+                className="rounded-lg px-4 py-2.5 text-sm font-medium transition hover:bg-[var(--surface2)] disabled:opacity-60"
+                style={{ color: "var(--muted)" }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarNovaMargem}
+                disabled={enviandoMargem || !checkGspn || !checkSemPeca}
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: "var(--accent)", boxShadow: "0 0 30px var(--accent-glow)" }}
+              >
+                {enviandoMargem && <Loader2 size={14} className="animate-spin" />}
+                Utilizar nova margem
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

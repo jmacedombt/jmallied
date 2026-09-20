@@ -8,7 +8,7 @@ import {
   type ConfiguracaoMaoDeObra,
   type DetalheValidacaoOrcamento,
 } from "@/lib/orcamentos";
-import { buscarPrecosBidPorPartNumber, type FaixaMarkup } from "@/lib/bid";
+import { buscarPrecosBidPorPartNumber, buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
 import { formatarDataBrasilia } from "@/lib/tempo";
 import { type LinhaPlanilhaOrcamento } from "@/lib/email";
 
@@ -272,13 +272,20 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
     valor_uma_peca: Number(configMaoObraBruta?.valor_uma_peca ?? 0),
     valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 0),
   };
-  const faixasMarkup: FaixaMarkup[] = (
+  const faixasMarkupGlobal: FaixaMarkup[] = (
     (faixasMarkupBrutas ?? []) as { valor_min: number; valor_max: number | null; multiplicador: number }[]
   ).map((f) => ({
     valor_min: Number(f.valor_min),
     valor_max: f.valor_max == null ? null : Number(f.valor_max),
     multiplicador: Number(f.multiplicador),
   }));
+
+  // override de margem gravado especificamente pra esse lote (botão
+  // "Utilizar nova margem" em Resumo de Peças — ver migration 0050):
+  // existindo, usa ele no lugar da faixa global só pra esse nfRemessa,
+  // inclusive no cálculo congelado (validacao_snapshot) feito abaixo.
+  const overridesDoLote = await buscarOverridesMarkupPorLote(admin, [nfRemessa]);
+  const faixasMarkup: FaixaMarkup[] = overridesDoLote[nfRemessa] ?? faixasMarkupGlobal;
 
   // data do envio (Confirmar Envio) — mesmo valor em toda linha do
   // arquivo, seja no preview ou na confirmação de verdade logo em

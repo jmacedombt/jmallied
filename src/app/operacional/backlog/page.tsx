@@ -4,13 +4,29 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import { STATUS_OPERACIONAL } from "@/lib/orcamentos";
 import { formatarDias } from "@/lib/metricas";
-import { buscarBacklog } from "@/lib/allied";
+import { buscarBacklogPorLote } from "@/lib/allied";
+import CelulaBacklogEtapa from "@/components/CelulaBacklogEtapa";
 
-// só as etapas numeradas (1 a 8) — igual ao card R-TAT ao vivo de cada
-// etapa (ver operacional/[slug]/page.tsx), aqui em forma de resumo geral
-// do pipeline inteiro numa tela só. Sem nenhum valor de custo, então
-// essa tela é igual pra equipe interna e pro cargo ALLIED.
+// só as etapas numeradas (1 a 8) — as "oficiais" (pedido explícito: "os
+// oficiais são os que tem Numeração") — igual ao card R-TAT ao vivo de
+// cada etapa (ver operacional/[slug]/page.tsx). Sem nenhum valor de
+// custo, então essa tela é igual pra equipe interna e pro cargo ALLIED.
 const ETAPAS_NUMERADAS = STATUS_OPERACIONAL.filter((s) => /^\d/.test(s.valor));
+
+// cor fixa por etapa/coluna — só pra diferenciar visualmente uma coluna
+// da outra na matriz (pedido explícito: "cada um com uma cor pra
+// diferenciar"), sem nenhum outro significado (não é a mesma escala de
+// cor de lucro/margem usada em outras telas).
+const CORES_ETAPAS_BACKLOG: Record<string, string> = {
+  "1-ag-triagem": "#60a5fa",
+  "2-ag-analise": "#a78bfa",
+  "3-ag-resposta-orcamento": "#f472b6",
+  "4-ag-resposta-reorcamento": "#fb923c",
+  "5-ag-pecas": "#facc15",
+  "6-ag-reparo": "#4ade80",
+  "7-reparo-finalizado": "#22d3ee",
+  "8-orcamento-reprovado": "#f87171",
+};
 
 export default async function BacklogPage() {
   const supabase = createClient();
@@ -28,15 +44,44 @@ export default async function BacklogPage() {
     perfil = data;
   }
 
-  const linhas = await buscarBacklog(supabase);
-  const mapa = new Map(linhas.map((l) => [l.status_operacional, l]));
+  const linhas = await buscarBacklogPorLote(supabase);
 
-  const totalQuantidade = ETAPAS_NUMERADAS.reduce((soma, s) => soma + (mapa.get(s.valor)?.quantidade ?? 0), 0);
+  // reagrupa por lote: cada linha da matriz é um nf_remessa_allied, com
+  // a quantidade de cada etapa numerada (0 quando não tem nenhum aparelho
+  // ali) e o R-TAT médio do lote inteiro (mesmo valor pras 8 colunas,
+  // vem pronto da RPC — ver migration 0051).
+  type LinhaMatriz = {
+    nfRemessa: string;
+    porEtapa: Record<string, number>;
+    total: number;
+    mediaRtatLote: number | null;
+  };
+
+  const mapaLotes = new Map<string, LinhaMatriz>();
+  for (const l of linhas) {
+    const atual = mapaLotes.get(l.nf_remessa_allied) ?? {
+      nfRemessa: l.nf_remessa_allied,
+      porEtapa: {},
+      total: 0,
+      mediaRtatLote: l.media_rtat_lote_dias,
+    };
+    atual.porEtapa[l.status_operacional] = l.quantidade;
+    atual.total += l.quantidade;
+    mapaLotes.set(l.nf_remessa_allied, atual);
+  }
+
+  const matriz = Array.from(mapaLotes.values()).sort((a, b) => a.nfRemessa.localeCompare(b.nfRemessa, "pt-BR", { numeric: true }));
+
+  const totalGeral = matriz.reduce((soma, l) => soma + l.total, 0);
+  const totalPorEtapa: Record<string, number> = {};
+  for (const s of ETAPAS_NUMERADAS) {
+    totalPorEtapa[s.valor] = matriz.reduce((soma, l) => soma + (l.porEtapa[s.valor] ?? 0), 0);
+  }
 
   return (
     <AppShell
       titulo="Backlog"
-      tituloInfo="Resumo do pipeline por etapa numerada (1 a 8): quantidade parada em cada uma e o R-TAT médio (dias desde a Data Reconhecimento até hoje) de quem está parado ali agora."
+      tituloInfo="Matriz do pipeline: cada linha é um lote (NF Remessa), cada coluna uma das 8 etapas numeradas (as oficiais). Mostra quantidade e percentual (sobre o total daquele lote) com barra colorida por etapa, além do R-TAT médio do lote inteiro (dias desde a Data Reconhecimento até hoje, de quem está parado nas etapas numeradas)."
       perfil={perfil}
     >
       <div className="flex items-center flex-wrap mb-4">
@@ -57,7 +102,7 @@ export default async function BacklogPage() {
           style={{ borderColor: "var(--line)", background: "var(--surface2)", color: "var(--ink)" }}
         >
           <ClipboardList size={12} style={{ color: "var(--accent2)" }} />
-          <strong>{totalQuantidade}</strong> aparelho(s) nas etapas numeradas
+          <strong>{totalGeral}</strong> aparelho(s) em <strong>{matriz.length}</strong> lote(s) nas etapas numeradas
         </span>
 
         <a
@@ -71,45 +116,90 @@ export default async function BacklogPage() {
         </a>
       </div>
 
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
+      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: "var(--line)" }}>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
-              <th className="px-4 py-2.5 font-medium">Etapa</th>
-              <th className="px-4 py-2.5 font-medium text-right">Quantidade</th>
-              <th className="px-4 py-2.5 font-medium text-right">R-TAT médio</th>
+              <th className="px-4 py-2.5 font-medium sticky left-0" style={{ background: "var(--surface2)" }}>
+                Lote (NF Remessa)
+              </th>
+              {ETAPAS_NUMERADAS.map((s) => (
+                <th key={s.slug} className="px-3 py-2.5 font-medium whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: CORES_ETAPAS_BACKLOG[s.slug] }} />
+                    {s.label}
+                  </span>
+                </th>
+              ))}
+              <th className="px-4 py-2.5 font-medium text-right">Total</th>
+              <th className="px-4 py-2.5 font-medium text-right">R-TAT médio do lote</th>
             </tr>
           </thead>
           <tbody>
-            {ETAPAS_NUMERADAS.map((s) => {
-              const linha = mapa.get(s.valor);
-              const quantidade = linha?.quantidade ?? 0;
-              return (
-                <tr key={s.slug} className="border-t" style={{ borderColor: "var(--line)" }}>
-                  <td className="px-4 py-2.5">
-                    <Link href={`/operacional/${s.slug}`} className="font-medium hover:underline" style={{ color: "var(--ink)" }}>
-                      {s.label}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
-                    {quantidade}
-                  </td>
-                  <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
-                    {linha?.media_rtat_dias != null ? (
-                      <span className="inline-flex items-center gap-1 justify-end">
-                        <Gauge size={12} style={{ color: "var(--accent2)" }} />
-                        {formatarDias(linha.media_rtat_dias)}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {matriz.map((l) => (
+              <tr key={l.nfRemessa} className="border-t" style={{ borderColor: "var(--line)" }}>
+                <td
+                  className="px-4 py-2.5 font-medium whitespace-nowrap sticky left-0"
+                  style={{ color: "var(--ink)", background: "var(--surface)" }}
+                >
+                  {l.nfRemessa}
+                </td>
+                {ETAPAS_NUMERADAS.map((s) => {
+                  const quantidade = l.porEtapa[s.valor] ?? 0;
+                  const percentual = l.total > 0 ? (quantidade / l.total) * 100 : 0;
+                  return (
+                    <td key={s.slug} className="px-3 py-2.5">
+                      <CelulaBacklogEtapa quantidade={quantidade} percentual={percentual} cor={CORES_ETAPAS_BACKLOG[s.slug]} />
+                    </td>
+                  );
+                })}
+                <td className="px-4 py-2.5 text-right font-semibold" style={{ color: "var(--ink)" }}>
+                  {l.total}
+                </td>
+                <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
+                  {l.mediaRtatLote != null ? (
+                    <span className="inline-flex items-center gap-1 justify-end">
+                      <Gauge size={12} style={{ color: "var(--accent2)" }} />
+                      {formatarDias(l.mediaRtatLote)}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            ))}
+            {matriz.length === 0 && (
+              <tr>
+                <td colSpan={ETAPAS_NUMERADAS.length + 3} className="px-4 py-8 text-center" style={{ color: "var(--muted)" }}>
+                  Nenhum aparelho nas etapas numeradas no momento.
+                </td>
+              </tr>
+            )}
           </tbody>
+          {matriz.length > 0 && (
+            <tfoot>
+              <tr className="border-t font-semibold" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+                <td className="px-4 py-2.5 sticky left-0" style={{ color: "var(--ink)", background: "var(--surface2)" }}>
+                  Total
+                </td>
+                {ETAPAS_NUMERADAS.map((s) => (
+                  <td key={s.slug} className="px-3 py-2.5" style={{ color: "var(--ink)" }}>
+                    {totalPorEtapa[s.valor]}
+                  </td>
+                ))}
+                <td className="px-4 py-2.5 text-right" style={{ color: "var(--ink)" }}>
+                  {totalGeral}
+                </td>
+                <td className="px-4 py-2.5" />
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
+
+      <p className="text-xs mt-3 flex items-center gap-3 flex-wrap" style={{ color: "var(--muted)" }}>
+        Percentual de cada célula é sobre o total de aparelhos daquele lote (soma das 8 etapas numeradas dessa linha).
+      </p>
     </AppShell>
   );
 }

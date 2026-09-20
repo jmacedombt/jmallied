@@ -175,6 +175,8 @@ export default function PainelValidacaoOrcamentos({
   aparelhos,
   perfil,
   faixas,
+  overridesPorLote = {},
+  ultimaImportacaoGspn = null,
   icmsPercentual,
   pendentesLabel,
   topo,
@@ -183,10 +185,20 @@ export default function PainelValidacaoOrcamentos({
 }: {
   aparelhos: AparelhoValidacao[];
   perfil: { cargo: string; is_master: boolean } | null;
-  /** faixas de markup do BID e o ICMS% configurado — usados só pra
-   * montar o balão de cálculo completo (mesmo formato do BID) ao passar
-   * o mouse na Venda de Peças, dentro do pop-up de peças. */
+  /** faixas de markup do BID (globais) e o ICMS% configurado — usados só
+   * pra montar o balão de cálculo completo (mesmo formato do BID) ao
+   * passar o mouse na Venda de Peças, dentro do pop-up de peças, e como
+   * base de comparação ("Mult. hoje") em Resumo de Peças quando o lote
+   * selecionado não tem override próprio. */
   faixas: FaixaMarkup[];
+  /** override de Faixas de Markup por lote (NF Remessa) — botão
+   * "Utilizar nova margem" (ver PopupResumoPecasMarkup.tsx e migration
+   * 0050). Quando o lote selecionado tem entrada aqui, ela substitui
+   * `faixas` como "hoje" pra esse lote. */
+  overridesPorLote?: Record<string, FaixaMarkup[]>;
+  /** data/hora (ISO) da última importação da base GSPN — mostrado real
+   * no checklist de confirmação de "Utilizar nova margem". */
+  ultimaImportacaoGspn?: string | null;
   icmsPercentual: number;
   /** conteúdo já pronto do balão de pendências dessa etapa (contador ao
    * vivo), pra entrar como o primeiro card da linha — mesmo componente
@@ -288,6 +300,23 @@ export default function PainelValidacaoOrcamentos({
   const loteTemPecaSemCusto = filtrados.some((a) => a.temPecaSemCusto);
   const loteTemPendenteConfirmacao = filtrados.some((a) => a.quantidadePecas === 0 && !a.validacaoConfirmadoSemPeca);
   const podeConfirmarEnvio = !!loteSelecionado && !loteTemPecaSemCusto && !loteTemPendenteConfirmacao && podeConfirmarLote;
+
+  // quantos aparelhos do lote selecionado ainda estão sem peça e sem
+  // confirmação — mostrado real no checklist de "Utilizar nova margem"
+  // (ver PopupResumoPecasMarkup), em vez de um checkbox cego.
+  const qtdSemPecaPendenteNoLote = loteSelecionado
+    ? filtrados.filter((a) => a.quantidadePecas === 0 && !a.validacaoConfirmadoSemPeca).length
+    : 0;
+
+  // faixas EFETIVAS de um lote: o override gravado pra ele (ver migration
+  // 0050), ou a faixa global quando não tem override — mesma regra usada
+  // no servidor (operacional/[slug]/page.tsx e lib/validacaoEnvioAllied.ts)
+  // pra calcular o detalhe de cada aparelho, só que aqui é só pra decidir
+  // o que mostrar como "hoje" nos pop-ups.
+  function faixasEfetivas(nf: string | undefined): FaixaMarkup[] {
+    if (!nf) return faixas;
+    return overridesPorLote[nf] ?? faixas;
+  }
 
   // trava extra: lote com aparelho ainda parado numa etapa anterior à
   // análise. Diferente das outras travas acima, essa NÃO entra no
@@ -714,7 +743,7 @@ export default function PainelValidacaoOrcamentos({
       {detalhe && (
         <PopupPecasValidacao
           aparelho={detalhe}
-          faixas={faixas}
+          faixas={faixasEfetivas(detalhe.nf_remessa_allied)}
           icmsPercentual={icmsPercentual}
           podeCadastrarPeca={podeCadastrarPeca}
           podeConfirmarSemPeca={podeConfirmarLote}
@@ -751,8 +780,13 @@ export default function PainelValidacaoOrcamentos({
       {mostrarResumoPecas && (
         <PopupResumoPecasMarkup
           pecas={pecasParaResumo}
-          faixas={faixas}
+          faixas={faixasEfetivas(loteSelecionado || undefined)}
           icmsPercentual={icmsPercentual}
+          loteNf={loteSelecionado || undefined}
+          podePersonalizarMargem={podeConfirmarLote}
+          ultimaImportacaoGspn={ultimaImportacaoGspn}
+          qtdSemPecaPendenteNoLote={qtdSemPecaPendenteNoLote}
+          onMargemAplicada={() => router.refresh()}
           onFechar={() => setMostrarResumoPecas(false)}
         />
       )}

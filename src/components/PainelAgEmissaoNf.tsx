@@ -900,6 +900,11 @@ export default function PainelAgEmissaoNf({
           nfRemessa={detalheGrupo.grupo.nfRemessa}
           itens={itensComNfAtual(detalheGrupo.bloco, detalheGrupo.grupo)}
           mostrarNfMaoDeObraEPecas={detalheGrupo.bloco === "aprovados"}
+          perfil={perfil}
+          onVoltarEtapaConcluida={() => {
+            setDetalheGrupo(null);
+            router.refresh();
+          }}
           onFechar={() => setDetalheGrupo(null)}
         />
       )}

@@ -34,7 +34,7 @@ import PainelAgEmissaoNf, { type AparelhoAgEmissaoNf } from "@/components/Painel
 import PainelEtapaSimples, { type AparelhoEtapaSimples } from "@/components/PainelEtapaSimples";
 import PainelOperacionalAllied from "@/components/PainelOperacionalAllied";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
-import { buscarPrecosBidPorPartNumber, type FaixaMarkup } from "@/lib/bid";
+import { buscarPrecosBidPorPartNumber, buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
 import { pecasVigentes } from "@/lib/exportN3";
 import { isAllied } from "@/lib/usuarios";
 import { buscarAparelhosAllied } from "@/lib/allied";
@@ -366,11 +366,13 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       for (const linha of data ?? []) custosPorCodigo.set(linha.codigo, Number(linha.valor_unitario));
     }
 
-    const [{ data: configImposto }, { data: configMaoObraBruta }, { data: faixasMarkupBrutas }] = await Promise.all([
-      supabase.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
-      supabase.from("configuracoes_mao_de_obra").select("valor_uma_peca, valor_mais_de_uma_peca").eq("id", 1).single(),
-      supabase.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
-    ]);
+    const [{ data: configImposto }, { data: configMaoObraBruta }, { data: faixasMarkupBrutas }, { data: ultimaImportacaoGspnBruta }] =
+      await Promise.all([
+        supabase.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+        supabase.from("configuracoes_mao_de_obra").select("valor_uma_peca, valor_mais_de_uma_peca").eq("id", 1).single(),
+        supabase.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+        supabase.from("gspn_importacoes").select("importado_em").order("importado_em", { ascending: false }).limit(1).maybeSingle(),
+      ]);
     const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
     const configMaoDeObra = {
       valor_uma_peca: Number(configMaoObraBruta?.valor_uma_peca ?? 80),
@@ -385,13 +387,22 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       multiplicador: Number(f.multiplicador),
     }));
 
+    // override de margem por lote (botão "Utilizar nova margem" — ver
+    // PopupResumoPecasMarkup.tsx e migration 0050): quando um
+    // nf_remessa_allied tem override gravado, usa ele no lugar da faixa
+    // global SÓ pros orçamentos daquele lote — os demais lotes continuam
+    // na faixa global normalmente.
+    const overridesPorLote = await buscarOverridesMarkupPorLote(supabase, nfsDistintas);
+    const ultimaImportacaoGspn: string | null = ultimaImportacaoGspnBruta?.importado_em ?? null;
+
     const listaAparelhos: AparelhoValidacao[] = listaBruta.map((a) => {
+      const faixasDoLote = overridesPorLote[a.nf_remessa_allied] ?? faixasMarkup;
       const detalheAutomatico = calcularDetalheValidacao(
         a as CamposPecasOrcamento,
         custosPorCodigo,
         icmsPercentual,
         configMaoDeObra,
-        faixasMarkup
+        faixasDoLote
       );
       // se alguém já ajustou manualmente esse orçamento (lápis no
       // pop-up), os 4 totais do resumo vêm congelados do banco em vez de
@@ -428,6 +439,8 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
           aparelhos={listaAparelhos}
           perfil={perfil}
           faixas={faixasMarkup}
+          overridesPorLote={overridesPorLote}
+          ultimaImportacaoGspn={ultimaImportacaoGspn}
           icmsPercentual={icmsPercentual}
           nfsComPendenciaEtapaAnterior={nfsComPendenciaEtapaAnterior}
           mensagemVazia="Nenhum aparelho em Validação de Orçamentos no momento."
