@@ -1,14 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ConfigImpostoForm from "@/components/ConfigImpostoForm";
-import GraficoLinhaGradiente from "@/components/GraficoLinhaGradiente";
-import { buscarHistoricoIcms } from "@/lib/impostos";
+import GraficoEvolucaoIcms from "@/components/GraficoEvolucaoIcms";
+import { buscarHistoricoIcms, formatarIcms } from "@/lib/impostos";
 import { formatarRotuloPeriodo } from "@/lib/metricas";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
-
-function formatarIcms(valor: number): string {
-  return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
-}
 
 export default async function ConfigImpostosPage() {
   const supabase = createClient();
@@ -55,12 +51,7 @@ export default async function ConfigImpostosPage() {
           Supabase, rode-a e recarregue essa página.
         </p>
       ) : (
-        <GraficoLinhaGradiente
-          titulo="Evolução do ICMS por mês"
-          pontos={pontosGrafico}
-          formatarValor={formatarIcms}
-          mensagemVazia="Nenhum histórico de ICMS registrado ainda — salve um valor acima pra começar."
-        />
+        <GraficoEvolucaoIcms pontos={pontosGrafico} />
       )}
 
       {historico.length > 0 && (

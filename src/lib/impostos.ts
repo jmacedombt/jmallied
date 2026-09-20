@@ -1,5 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/** Formata um percentual de ICMS pro padrão de exibição do sistema (2
+ * casas decimais + "%") — usado tanto na tabela de histórico (server,
+ * chamada direto) quanto no gráfico de evolução (GraficoEvolucaoIcms.tsx,
+ * client, chamada por dentro do componente — nunca passada como prop de
+ * Server pra Client Component, senão o Next quebra em produção: "Functions
+ * cannot be passed directly to Client Components"). */
+export function formatarIcms(valor: number): string {
+  return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+}
+
 /**
  * "aaaa-mm-01" do mês atual, sempre no fuso de Brasília — mesma
  * convenção de mês usada em configuracoes_impostos_historico (ver
