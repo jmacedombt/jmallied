@@ -26,7 +26,7 @@ export default async function ConfigImpostosPage() {
     perfil = data;
   }
 
-  const [{ data: config }, historico] = await Promise.all([
+  const [{ data: config }, { pontos: historico, erro: erroHistorico }] = await Promise.all([
     supabase.from("configuracoes_impostos").select("*").eq("id", 1).single(),
     buscarHistoricoIcms(supabase),
   ]);
@@ -49,12 +49,19 @@ export default async function ConfigImpostosPage() {
         <ConfigImpostoForm icmsInicial={config?.icms_percentual ?? 8.45} />
       </div>
 
-      <GraficoLinhaGradiente
-        titulo="Evolução do ICMS por mês"
-        pontos={pontosGrafico}
-        formatarValor={formatarIcms}
-        mensagemVazia="Nenhum histórico de ICMS registrado ainda — salve um valor acima pra começar."
-      />
+      {erroHistorico ? (
+        <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 mb-4 max-w-lg">
+          Não foi possível carregar o histórico de ICMS ({erroHistorico}). Se a migration 0054 ainda não foi rodada no
+          Supabase, rode-a e recarregue essa página.
+        </p>
+      ) : (
+        <GraficoLinhaGradiente
+          titulo="Evolução do ICMS por mês"
+          pontos={pontosGrafico}
+          formatarValor={formatarIcms}
+          mensagemVazia="Nenhum histórico de ICMS registrado ainda — salve um valor acima pra começar."
+        />
+      )}
 
       {historico.length > 0 && (
         <div className="rounded-xl border overflow-hidden mt-4 max-w-lg" style={{ borderColor: "var(--line)" }}>

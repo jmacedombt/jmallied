@@ -24,21 +24,34 @@ export type PontoIcmsHistorico = {
   atualizadoPorNome: string | null;
 };
 
+export type ResultadoHistoricoIcms = {
+  pontos: PontoIcmsHistorico[];
+  /** preenchido quando a consulta falha — normalmente porque a migration
+   * 0054 (tabela configuracoes_impostos_historico) ainda não foi rodada
+   * no Supabase. Nunca lança erro: a tela de Configurações > Imposto
+   * continua funcionando (formulário de ICMS normal), só sem o
+   * gráfico/tabela de histórico, com esse aviso — ver
+   * configuracoes/impostos/page.tsx. */
+  erro: string | null;
+};
+
 /**
  * Histórico mensal do ICMS (ver migration 0054), do mais antigo pro mais
  * recente — já no formato pronto pro gráfico de evolução
  * (GraficoLinhaGradiente) e pra tabela de auditoria, ambos em
  * configuracoes/impostos/page.tsx.
  */
-export async function buscarHistoricoIcms(supabase: SupabaseClient): Promise<PontoIcmsHistorico[]> {
+export async function buscarHistoricoIcms(supabase: SupabaseClient): Promise<ResultadoHistoricoIcms> {
   const { data, error } = await supabase
     .from("configuracoes_impostos_historico")
     .select("mes, icms_percentual, atualizado_em, usuarios:atualizado_por (nome, sobrenome)")
     .order("mes", { ascending: true });
 
-  if (error) throw error;
+  if (error) {
+    return { pontos: [], erro: error.message };
+  }
 
-  return ((data ?? []) as Record<string, unknown>[]).map((l) => {
+  const pontos = ((data ?? []) as Record<string, unknown>[]).map((l) => {
     const usuario = l.usuarios as { nome: string; sobrenome: string } | { nome: string; sobrenome: string }[] | null;
     const nomeUsuario = Array.isArray(usuario) ? usuario[0] : usuario;
     return {
@@ -48,4 +61,6 @@ export async function buscarHistoricoIcms(supabase: SupabaseClient): Promise<Pon
       atualizadoPorNome: nomeUsuario ? `${nomeUsuario.nome} ${nomeUsuario.sobrenome}` : null,
     };
   });
+
+  return { pontos, erro: null };
 }
