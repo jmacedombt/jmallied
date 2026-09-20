@@ -19,6 +19,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
 import { STATUS_OPERACIONAL, GRUPO_STATUS_AG_EMISSAO_NF } from "@/lib/orcamentos";
+import { buscarProdutoEntreguePorLote } from "@/lib/allied";
 
 const ICONES: Record<string, typeof Inbox> = {
   "ag-abertura": Inbox,
@@ -104,6 +105,13 @@ export default async function OperacionalPage() {
     0
   );
 
+  // card "Produto Entregue" (pedido explícito): em vez de só um número,
+  // mostra "lotes distintos entregues / total de orçamentos entregues" —
+  // quantidadeDoStatus("produto-entregue") já dá o total; falta só a
+  // quantidade de NF Remessa distintas que já têm alguma entrega.
+  const lotesComEntrega = await buscarProdutoEntreguePorLote(supabase);
+  const quantidadeLotesEntregues = lotesComEntrega.length;
+
   return (
     <AppShell titulo="Operacional" perfil={perfil}>
       <p className="text-sm mb-5" style={{ color: "var(--muted)" }}>
@@ -115,8 +123,19 @@ export default async function OperacionalPage() {
           const Icone = ICONES[status.slug];
           const cores = CORES[status.slug];
           const quantidade = quantidadeDoStatus(status);
-          const percentual =
-            status.slug === "produto-entregue" || totalPipelineAtivo === 0 ? null : (quantidade / totalPipelineAtivo) * 100;
+          const ehProdutoEntregue = status.slug === "produto-entregue";
+          // "Produto Entregue" usa uma base diferente das demais: fatia
+          // do TOTAL (entregues + tudo que ainda está em andamento no
+          // pipeline) que já foi concluída — as outras etapas continuam
+          // comparando só entre si (sem Produto Entregue, ver
+          // totalPipelineAtivo acima).
+          const percentual = ehProdutoEntregue
+            ? totalPipelineAtivo + quantidade > 0
+              ? (quantidade / (totalPipelineAtivo + quantidade)) * 100
+              : null
+            : totalPipelineAtivo === 0
+              ? null
+              : (quantidade / totalPipelineAtivo) * 100;
           return (
             <Link
               key={status.slug}
@@ -137,6 +156,12 @@ export default async function OperacionalPage() {
               <div className="flex items-center gap-3 mb-2">
                 <Icone size={26} strokeWidth={2} style={{ color: cores.cor }} />
                 <span className="text-2xl font-bold leading-none" style={{ color: "var(--ink)" }}>
+                  {ehProdutoEntregue && (
+                    <>
+                      <span title="Lotes (NF Remessa) distintos com alguma entrega">{quantidadeLotesEntregues}</span>
+                      <span style={{ color: "var(--muted)" }}> / </span>
+                    </>
+                  )}
                   <ContadorAoVivo
                     status={status.slug === "ag-emissao-nf" ? GRUPO_STATUS_AG_EMISSAO_NF : status.valor}
                     contagemInicial={quantidade}
@@ -145,11 +170,16 @@ export default async function OperacionalPage() {
               </div>
               <p className="text-[13px] font-medium leading-snug" style={{ color: "var(--muted)" }}>
                 {status.label}
+                {ehProdutoEntregue && <span style={{ color: "var(--muted)" }}> (lotes / orçamentos)</span>}
               </p>
               {percentual != null && (
                 <div
                   className="mt-2 flex items-center gap-1.5"
-                  title={`${percentual.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% do pipeline ativo (todas as etapas, exceto Produto Entregue)`}
+                  title={
+                    ehProdutoEntregue
+                      ? `${percentual.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% já concluído (entregues em relação a entregues + pipeline ainda em andamento)`
+                      : `${percentual.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% do pipeline ativo (todas as etapas, exceto Produto Entregue)`
+                  }
                 >
                   <div className="h-[3px] flex-1 rounded-full overflow-hidden" style={{ background: "var(--surface)" }}>
                     <div

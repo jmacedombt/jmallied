@@ -31,13 +31,14 @@ import PainelAgReparo, { type AparelhoAgReparo, type FalhaOqcResumo } from "@/co
 import PainelOqc, { type AparelhoOqcLista } from "@/components/PainelOqc";
 import PainelReparoFinalizado, { type AparelhoReparoFinalizado } from "@/components/PainelReparoFinalizado";
 import PainelAgEmissaoNf, { type AparelhoAgEmissaoNf } from "@/components/PainelAgEmissaoNf";
-import PainelEtapaSimples, { type AparelhoEtapaSimples } from "@/components/PainelEtapaSimples";
+import { type AparelhoEtapaSimples } from "@/components/PainelEtapaSimples";
+import PainelProdutoEntregue, { type LinhaProdutoEntregueLote } from "@/components/PainelProdutoEntregue";
 import PainelOperacionalAllied from "@/components/PainelOperacionalAllied";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
 import { buscarPrecosBidPorPartNumber, buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
 import { pecasVigentes } from "@/lib/exportN3";
 import { isAllied } from "@/lib/usuarios";
-import { buscarAparelhosAllied } from "@/lib/allied";
+import { buscarAparelhosAllied, buscarProdutoEntreguePorLote } from "@/lib/allied";
 
 const COLUNAS_PECAS =
   "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, custo_peca_1, custo_peca_2, custo_peca_3, custo_peca_4, custo_peca_5, custo_peca_6, custo_peca_7, custo_peca_8, custo_peca_9, custo_peca_10";
@@ -838,40 +839,54 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
-  // etapas ainda sem tela própria (Produto Entregue — "3",
-  // "Ag. Contra Proposta", "4", "5", "6", "OQC - Controle de Qualidade",
-  // "7" e "Ag. Emissão de Nota Fiscal" já ganharam tela própria acima) —
-  // só a lista, com o ícone de reprovar (não faz sentido reprovar um
-  // orçamento já entregue, e Produto Entregue é a única que ainda cai
-  // aqui hoje), clique na linha abrindo o pop-up de atendimento/peças, e
-  // o card R-TAT só nas que têm número no valor.
-  const { data: aparelhos } = await supabase
-    .from("orcamentos")
-    .select(
-      "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, data_reconhecimento, nf_mao_de_obra_numero, nf_mao_de_obra_valor, nf_pecas_numero, nf_pecas_valor, nf_retorno_numero, nf_retorno_valor"
-    )
-    .eq("status_operacional", status.valor)
-    .order("updated_at", { ascending: false });
+  // "Produto Entregue" (pedido explícito): em vez da lista simples de
+  // aparelhos soltos, agrupa por NF Remessa — número da NF, total de
+  // orçamentos já importados com essa NF (qualquer status, desde
+  // sempre) e quantos já foram entregues, com o percentual do lote (ver
+  // migration 0052 e PainelProdutoEntregue.tsx). Clicar numa NF abre o
+  // detalhe dos aparelhos entregues daquele lote.
+  if (status.slug === "produto-entregue") {
+    const [lotesComEntrega, { data: entreguesBrutos }] = await Promise.all([
+      buscarProdutoEntreguePorLote(supabase),
+      supabase
+        .from("orcamentos")
+        .select(
+          "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_snapshot, nf_remessa_allied, nf_mao_de_obra_numero, nf_mao_de_obra_valor, nf_pecas_numero, nf_pecas_valor, nf_retorno_numero, nf_retorno_valor"
+        )
+        .eq("status_operacional", status.valor)
+        .order("updated_at", { ascending: false }),
+    ]);
 
-  const etapaNumerada = /^\d/.test(status.valor);
+    const entregues = entreguesBrutos ?? [];
+    const aparelhosPorLote: Record<string, AparelhoEtapaSimples[]> = {};
+    for (const a of entregues) {
+      const chave = a.nf_remessa_allied || "—";
+      (aparelhosPorLote[chave] ??= []).push(a as AparelhoEtapaSimples);
+    }
 
-  return (
-    <AppShell titulo={status.label} perfil={perfil}>
-      <div className="flex items-center flex-wrap">
-        {voltar}
-        {badgeContador(aparelhos?.length ?? 0)}
-        {etapaNumerada && badgeRTat(aparelhos ?? [])}
-      </div>
-      <PainelEtapaSimples
-        aparelhos={(aparelhos ?? []) as AparelhoEtapaSimples[]}
-        permiteReprovar={status.slug !== "produto-entregue"}
-        perfil={perfil}
-        mostrarNotasFiscais={status.slug === "produto-entregue"}
-        mensagemVazia="Nenhum aparelho nessa etapa ainda."
-      />
-      <p className="text-xs mt-3" style={{ color: "var(--muted)" }}>
-        Essa etapa ainda é só consulta — o fluxo de ação dela entra numa próxima rodada.
-      </p>
-    </AppShell>
-  );
+    const lotes: LinhaProdutoEntregueLote[] = lotesComEntrega
+      .map((l) => ({ nfRemessa: l.nf_remessa_allied, totalLote: l.totalLote, quantidadeEntregue: l.quantidadeEntregue }))
+      .sort((a, b) => b.nfRemessa.localeCompare(a.nfRemessa, "pt-BR", { numeric: true }));
+
+    return (
+      <AppShell titulo={status.label} perfil={perfil}>
+        <div className="flex items-center flex-wrap">
+          {voltar}
+          {badgeContador(entregues.length)}
+        </div>
+        <PainelProdutoEntregue
+          lotes={lotes}
+          aparelhosPorLote={aparelhosPorLote}
+          perfil={perfil}
+          mensagemVazia="Nenhum lote com aparelho entregue ainda."
+        />
+      </AppShell>
+    );
+  }
+
+  // as 14 etapas de STATUS_OPERACIONAL já têm, cada uma, um branch
+  // explícito acima (a última a ganhar tela própria foi "Produto
+  // Entregue") — chegar aqui só seria possível se uma etapa nova fosse
+  // adicionada em STATUS_OPERACIONAL sem ganhar tratamento nenhum.
+  notFound();
 }
