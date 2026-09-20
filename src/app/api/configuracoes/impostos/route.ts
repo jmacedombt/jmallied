@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { podeImportarBid } from "@/lib/bid";
+import { mesAtualIso } from "@/lib/impostos";
 
 export async function PUT(request: Request) {
   const supabase = createClient();
@@ -26,17 +27,36 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Informe um percentual válido, entre 0 e 100." }, { status: 400 });
   }
 
+  const agora = new Date().toISOString();
+
   const { error } = await admin
     .from("configuracoes_impostos")
     .update({
       icms_percentual: icmsPercentual,
       atualizado_por: user.id,
-      atualizado_em: new Date().toISOString(),
+      atualizado_em: agora,
     })
     .eq("id", 1);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  // registra (ou corrige, se já tiver sido salvo antes dentro do mesmo
+  // mês) o valor do mês atual no histórico — ver migration 0054 e o
+  // gráfico de evolução em configuracoes/impostos/page.tsx.
+  const { error: erroHistorico } = await admin.from("configuracoes_impostos_historico").upsert(
+    {
+      mes: mesAtualIso(),
+      icms_percentual: icmsPercentual,
+      atualizado_por: user.id,
+      atualizado_em: agora,
+    },
+    { onConflict: "mes" }
+  );
+
+  if (erroHistorico) {
+    return NextResponse.json({ error: erroHistorico.message }, { status: 400 });
   }
 
   return NextResponse.json({ ok: true });
