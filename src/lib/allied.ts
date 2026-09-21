@@ -35,6 +35,12 @@ export type AparelhoOperacionalAllied = {
   venda_total_pecas: number | null;
   mao_de_obra_cobrada: number | null;
   pecas: PecaSeguraAllied[] | null;
+  /** Só preenchido em "8 - Orçamento Reprovado" (migration 0057, pedido
+   * explícito: o motivo em destaque que já existia pro login interno
+   * também precisa aparecer pro ALLIED). */
+  motivo_reprova: string | null;
+  reprovado_em: string | null;
+  reprovado_por_nome: string | null;
 };
 
 /** Lista os aparelhos de uma etapa (ou de todas, se `statusOperacional`

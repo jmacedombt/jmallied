@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { X, Copy, Check } from "lucide-react";
+import { X, Copy, Check, Ban } from "lucide-react";
 import { type AparelhoOperacionalAllied } from "@/lib/allied";
+import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
 function formatarReal(valor: number | null | undefined) {
   return (valor ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -69,6 +70,28 @@ export default function PopupAtendimentoPecasAllied({
         </div>
 
         <div className="p-5 space-y-5">
+          {aparelho.motivo_reprova && (
+            <div
+              className="rounded-lg border px-3 py-2.5"
+              style={{ borderColor: "#ef4444", background: "rgba(239, 68, 68, 0.1)" }}
+            >
+              <p className="text-xs font-semibold flex items-center gap-1.5 mb-1" style={{ color: "#ef4444" }}>
+                <Ban size={13} />
+                Motivo da reprovação
+              </p>
+              <p className="text-sm" style={{ color: "var(--ink)" }}>
+                {aparelho.motivo_reprova}
+              </p>
+              {(aparelho.reprovado_em || aparelho.reprovado_por_nome) && (
+                <p className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
+                  {aparelho.reprovado_em && formatarDataHoraBrasilia(aparelho.reprovado_em)}
+                  {aparelho.reprovado_em && aparelho.reprovado_por_nome && " · "}
+                  {aparelho.reprovado_por_nome}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
             <Campo label="OS Care Allied" valor={aparelho.os_care_allied} />
             <Campo label="Modelo comercial" valor={aparelho.modelo_comercial} />
