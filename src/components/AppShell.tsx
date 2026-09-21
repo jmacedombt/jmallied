@@ -196,6 +196,17 @@ const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
       { href: "/metricas/orcamentos", label: "Orçamentos", icone: PackageCheck },
     ],
   },
+  // item "BID" (pedido explícito) — só as versões do Relatório BID já
+  // marcadas como enviadas (ver Bases > Relatório BID e migration
+  // 0056); nada mais de Bases fica visível, mesmo pela URL direto (ver
+  // ROTA_BID_ALLIED no middleware.ts).
+  {
+    id: "bid",
+    label: "BID",
+    icone: Tags,
+    hrefGrupo: "/bases/bid/versoes-enviadas",
+    itens: [{ href: "/bases/bid/versoes-enviadas", label: "Versões enviadas", icone: Tags }],
+  },
 ];
 
 // Menu dos cargos restritos por etapa — Operacional (sem is_master, quem

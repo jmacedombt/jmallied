@@ -18,20 +18,33 @@ import {
 // banco, ver migration 0035_cargo_allied.sql.
 const SLUGS_OPERACIONAL_ALLIED = STATUS_OPERACIONAL.map((s) => s.slug);
 
-// única chamada de API que ALLIED pode fazer: o botão "Exportar
-// backlog" da tela Backlog — sem nenhuma coluna de custo, então não
-// tem problema nenhum em liberar (ver route.ts dessa rota).
+// chamadas de API que ALLIED pode fazer: o botão "Exportar backlog" da
+// tela Backlog (sem nenhuma coluna de custo) e o download de uma versão
+// do Relatório BID já marcada como enviada (a própria rota confere de
+// novo que aquele id está mesmo marcado como enviado antes de
+// responder — ver .../relatorio/[id]/download/route.ts).
 const APIS_PERMITIDAS_ALLIED = ["/api/operacional/backlog/exportar-allied"];
+const REGEX_API_DOWNLOAD_BID_ALLIED = /^\/api\/bases\/bid\/relatorio\/[^/]+\/download$/;
+
+function apiPermitidaParaAllied(path: string): boolean {
+  return APIS_PERMITIDAS_ALLIED.includes(path) || REGEX_API_DOWNLOAD_BID_ALLIED.test(path);
+}
 
 // páginas de Métricas liberadas pro ALLIED (pedido explícito) — só a
 // capa (/metricas, com os cards) e essas 2 telas; R-TAT, OQC e Previsão
 // de Recebimento continuam de fora mesmo entrando pela URL direto.
 const ROTAS_METRICAS_ALLIED = ["/metricas", "/metricas/volumetria", "/metricas/orcamentos"];
 
+// menu "BID" liberado pro ALLIED (pedido explícito) — só essa tela de
+// consulta (versões já marcadas como enviadas); o resto de Bases/BID
+// continua de fora mesmo entrando pela URL direto.
+const ROTA_BID_ALLIED = "/bases/bid/versoes-enviadas";
+
 function rotaPermitidaParaAllied(path: string): boolean {
   if (path === "/operacional") return true;
   if (path === "/operacional/backlog" || path.startsWith("/operacional/backlog/")) return true;
   if (ROTAS_METRICAS_ALLIED.some((rota) => path === rota || path.startsWith(`${rota}/`))) return true;
+  if (path === ROTA_BID_ALLIED || path.startsWith(`${ROTA_BID_ALLIED}/`)) return true;
   return SLUGS_OPERACIONAL_ALLIED.some(
     (slug) => path === `/operacional/${slug}` || path.startsWith(`/operacional/${slug}/`)
   );
@@ -114,7 +127,7 @@ export async function middleware(request: NextRequest) {
     }
 
     if (perfil?.cargo === "ALLIED") {
-      const apiPermitida = APIS_PERMITIDAS_ALLIED.includes(path);
+      const apiPermitida = apiPermitidaParaAllied(path);
 
       if (path.startsWith("/api/") && !apiPermitida) {
         return NextResponse.json({ error: "Não permitido para este cargo." }, { status: 403 });

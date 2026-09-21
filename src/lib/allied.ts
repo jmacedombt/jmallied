@@ -152,6 +152,39 @@ export async function buscarBacklogResumoPorLote(supabase: SupabaseClient): Prom
   }));
 }
 
+export type VersaoBidEnviadaAllied = {
+  id: string;
+  nomeArquivo: string;
+  quantidadePartNumbers: number;
+  geradoEm: string;
+  enviadoEm: string;
+};
+
+/** Versões do Relatório BID marcadas como "enviadas" (ver menu BID do
+ * login ALLIED, migration 0056) — a RPC já filtra só quem tem
+ * enviado_em preenchido e está dentro dos últimos 60 dias; nenhum custo
+ * aqui, é só a listagem (o Excel em si, baixado à parte, é o documento
+ * que o parceiro já está autorizado a receber). */
+export async function buscarVersoesBidEnviadasAllied(supabase: SupabaseClient): Promise<VersaoBidEnviadaAllied[]> {
+  const { data, error } = await supabase.rpc("bid_relatorio_log_allied_listar");
+  if (error) throw error;
+  return (
+    (data ?? []) as {
+      id: string;
+      nome_arquivo: string;
+      quantidade_part_numbers: number | string;
+      gerado_em: string;
+      enviado_em: string;
+    }[]
+  ).map((l) => ({
+    id: l.id,
+    nomeArquivo: l.nome_arquivo,
+    quantidadePartNumbers: Number(l.quantidade_part_numbers),
+    geradoEm: l.gerado_em,
+    enviadoEm: l.enviado_em,
+  }));
+}
+
 export type LinhaProdutoEntreguePorLote = {
   nf_remessa_allied: string;
   /** TODOS os orçamentos já importados com essa NF Remessa, em qualquer

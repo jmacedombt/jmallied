@@ -275,3 +275,60 @@ export type PecaBidConsulta = {
   valor_direcao: "+" | "-" | null;
   bid_solucoes: SolucaoBidConsulta[];
 };
+
+// ---- Relatório BID (histórico com cópia + versões enviadas) ----
+
+export type LinhaRelatorioBid = {
+  modelo: string;
+  part_number: string;
+  peca_solucao: string | null;
+  custo_peca_allied: number | null;
+  mao_de_obra: number | null;
+};
+
+/** Data/hora "agora" no fuso de Brasília — usado pro nome do arquivo/aba
+ * do Relatório BID (ver /api/bases/bid/relatorio), independente do fuso
+ * do servidor (a Vercel roda em UTC). */
+export function partesDataHoraSaoPauloBid() {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const valor = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "00";
+  return {
+    dia: valor("day"),
+    mes: valor("month"),
+    ano: valor("year"),
+    anoCurto: valor("year").slice(-2),
+    hora: valor("hour"),
+    minuto: valor("minute"),
+  };
+}
+
+/** Monta (sem baixar) o Excel do Relatório BID a partir de um conjunto
+ * de linhas já filtradas (peças completas) — compartilhado entre a
+ * geração com dados ao vivo (ver /api/bases/bid/relatorio) e o download
+ * de uma versão já salva no histórico, a partir do snapshot gravado
+ * naquela hora (ver /api/bases/bid/relatorio/[id]/download) — pra sair
+ * sempre byte a byte igual à que foi gerada originalmente, mesmo que o
+ * BID já tenha mudado desde então. Import dinâmico do "xlsx" (mesmo
+ * padrão de lib/modeloRetorno.ts): esse arquivo também é importado por
+ * componente client (ImportarBidForm.tsx e outros), então um import
+ * estático aqui inflaria o bundle do navegador à toa.
+ */
+export async function gerarBufferRelatorioBid(linhas: LinhaRelatorioBid[], nomeAba: string): Promise<Buffer> {
+  const XLSX = await import("xlsx");
+  const cabecalho = ["Peças", "Part Number", "Peça Solução", "Custo Peça", "Mão de Obra"];
+  const linhasPlanilha = linhas.map((l) => [l.modelo, l.part_number, l.peca_solucao, l.custo_peca_allied, l.mao_de_obra]);
+  const planilha = XLSX.utils.aoa_to_sheet([cabecalho, ...linhasPlanilha]);
+  planilha["!cols"] = [{ wch: 22 }, { wch: 20 }, { wch: 34 }, { wch: 14 }, { wch: 14 }];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, planilha, nomeAba);
+  return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+}

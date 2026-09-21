@@ -377,6 +377,9 @@ export default function PainelOrcamentoReprovado({
           podeCadastrar={podeCadastrarBid}
           onPecaAtualizada={(info) => setPrecosBid((atual) => ({ ...atual, [info.part_number]: info }))}
           onFechar={() => setDetalhe(null)}
+          motivoReprova={detalhe.motivo_reprova}
+          reprovadoEm={detalhe.reprovado_em}
+          reprovadoPorNome={nomeUsuario(detalhe.usuarios)}
         />
       )}
 

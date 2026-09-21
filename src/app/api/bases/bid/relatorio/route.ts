@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { podeImportarBid } from "@/lib/bid";
+import { podeImportarBid, gerarBufferRelatorioBid, partesDataHoraSaoPauloBid } from "@/lib/bid";
 
 type LinhaBidBruta = {
   modelo: string;
@@ -11,35 +10,15 @@ type LinhaBidBruta = {
   bid_solucoes: { peca_solucao: string; principal: boolean }[] | null;
 };
 
-/** Data/hora "agora" no fuso de Brasília, independente do fuso do
- * servidor (a Vercel roda em UTC) — evita o nome do arquivo/aba saírem
- * com o dia errado perto da virada da meia-noite. */
-function partesDataHoraSaoPaulo() {
-  const partes = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date());
-
-  const valor = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "00";
-  return {
-    dia: valor("day"),
-    mes: valor("month"),
-    ano: valor("year"),
-    anoCurto: valor("year").slice(-2),
-    hora: valor("hour"),
-    minuto: valor("minute"),
-  };
-}
-
 // Gera o Relatório BID em Excel (Bases > Relatório BID): só entram
 // peças com Modelo, Part Number, Peça Solução, Custo Peça (Allied) e
 // Mão de Obra todos preenchidos. Cada geração fica registrada em
-// bid_relatorio_log (quem, quando, quantas peças saíram).
+// bid_relatorio_log (quem, quando, quantas peças saíram) — a partir da
+// migration 0056, também grava uma CÓPIA das linhas (coluna `dados`) e
+// o nome da aba usados, pra dar pra baixar de novo depois byte a byte
+// igual (ver /api/bases/bid/relatorio/[id]/download), e pode ser
+// marcada como "enviada" por linha (ver .../marcar-enviado), o que a
+// deixa visível pro login ALLIED.
 export async function POST() {
   const supabase = createClient();
   const {
@@ -93,30 +72,18 @@ export async function POST() {
     // só entra no relatório quem tem TODOS os campos preenchidos
     .filter((l) => l.modelo && l.part_number && l.peca_solucao && l.custo_peca_allied != null && l.mao_de_obra != null);
 
-  const { dia, mes, ano, anoCurto, hora, minuto } = partesDataHoraSaoPaulo();
+  const { dia, mes, ano, anoCurto, hora, minuto } = partesDataHoraSaoPauloBid();
   const nomeAba = `BID SANTOS ${dia}${mes}${anoCurto}`;
   const nomeArquivo = `BID SANTOS ${dia}${mes}${ano}_${hora}${minuto}.xlsx`;
 
-  const cabecalho = ["Peças", "Part Number", "Peça Solução", "Custo Peça", "Mão de Obra"];
-  const linhasPlanilha = linhasCompletas.map((l) => [
-    l.modelo,
-    l.part_number,
-    l.peca_solucao,
-    l.custo_peca_allied,
-    l.mao_de_obra,
-  ]);
-
-  const planilha = XLSX.utils.aoa_to_sheet([cabecalho, ...linhasPlanilha]);
-  planilha["!cols"] = [{ wch: 22 }, { wch: 20 }, { wch: 34 }, { wch: 14 }, { wch: 14 }];
-
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, planilha, nomeAba);
-  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  const buffer = await gerarBufferRelatorioBid(linhasCompletas, nomeAba);
 
   await admin.from("bid_relatorio_log").insert({
     gerado_por: user.id,
     quantidade_part_numbers: linhasCompletas.length,
     nome_arquivo: nomeArquivo,
+    nome_aba: nomeAba,
+    dados: linhasCompletas,
   });
 
   return new NextResponse(new Uint8Array(buffer), {

@@ -78,7 +78,7 @@ export default async function BacklogPage() {
           href="/api/operacional/backlog/exportar-allied"
           className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium mb-3 ml-auto transition hover:border-[var(--accent2)]"
           style={{ borderColor: "var(--line)", color: "var(--ink)" }}
-          title="Baixar o backlog em Excel, no layout usado pela Allied — só os status com numeração"
+          title="Baixar o backlog em Excel — 2 abas: uma só com os status numerados (layout usado pela Allied) e outra com todas as pendências"
         >
           <Download size={14} style={{ color: "var(--accent2)" }} />
           Exportar backlog
@@ -89,7 +89,8 @@ export default async function BacklogPage() {
 
       <p className="text-xs mt-3" style={{ color: "var(--muted)" }}>
         "Pendente" não conta quem já está em Produto Entregue nem quem já foi reprovado (8 - Orçamento Reprovado). O
-        Excel exportado continua seguindo a regra vigente: só os status com numeração (1 a 8) entram no arquivo.
+        Excel exportado sai com 2 abas: a primeira só com os status com numeração (1 a 8, regra vigente), a segunda
+        com todas as pendências, numeradas ou não.
       </p>
     </AppShell>
   );

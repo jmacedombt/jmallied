@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { ArrowLeft, FileSpreadsheet, Info } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import BotaoGerarRelatorioBid from "@/components/BotaoGerarRelatorioBid";
 import BotaoMarcarBidEnviado from "@/components/BotaoMarcarBidEnviado";
+import BotaoMarcarVersaoBidEnviado from "@/components/BotaoMarcarVersaoBidEnviado";
 import { podeImportarBid } from "@/lib/bid";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
@@ -12,6 +13,7 @@ type LogRelatorio = {
   quantidade_part_numbers: number;
   nome_arquivo: string;
   gerado_em: string;
+  enviado_em: string | null;
   usuarios: { nome: string; sobrenome: string } | { nome: string; sobrenome: string }[] | null;
 };
 
@@ -36,7 +38,7 @@ export default async function RelatorioBidPage() {
   const { data: historico } = podeAcessar
     ? await supabase
         .from("bid_relatorio_log")
-        .select("id, quantidade_part_numbers, nome_arquivo, gerado_em, usuarios:gerado_por (nome, sobrenome)")
+        .select("id, quantidade_part_numbers, nome_arquivo, gerado_em, enviado_em, usuarios:gerado_por (nome, sobrenome)")
         .order("gerado_em", { ascending: false })
         .limit(100)
         .returns<LogRelatorio[]>()
@@ -76,7 +78,7 @@ export default async function RelatorioBidPage() {
             <BotaoMarcarBidEnviado />
             {ultimoEnvio?.valor_enviado_em && (
               <span className="text-xs" style={{ color: "var(--muted)" }}>
-                Último envio: {formatarDataHoraBrasilia(ultimoEnvio.valor_enviado_em)}
+                Último travamento de preço: {formatarDataHoraBrasilia(ultimoEnvio.valor_enviado_em)}
               </span>
             )}
             <div className="group relative inline-flex">
@@ -94,6 +96,10 @@ export default async function RelatorioBidPage() {
 
           <p className="text-xs uppercase tracking-wide mb-2 flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
             <FileSpreadsheet size={13} /> Histórico de emissões
+          </p>
+          <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
+            Cada geração guarda uma cópia (por até 60 dias) que dá pra baixar de novo igual à original. Marque uma
+            versão como <strong>enviada</strong> pra ela ficar visível também no login Allied (menu BID).
           </p>
 
           {!historico || historico.length === 0 ? (
@@ -117,13 +123,27 @@ export default async function RelatorioBidPage() {
                     <th className="text-right px-4 py-2.5 font-medium" style={{ color: "var(--muted)" }}>
                       Part Numbers exportados
                     </th>
+                    <th className="text-left px-4 py-2.5 font-medium" style={{ color: "var(--muted)" }}>
+                      Status
+                    </th>
+                    <th className="text-right px-4 py-2.5 font-medium" style={{ color: "var(--muted)" }}>
+                      Baixar
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {historico.map((log) => {
                     const usuario = Array.isArray(log.usuarios) ? log.usuarios[0] : log.usuarios;
+                    const enviado = !!log.enviado_em;
                     return (
-                      <tr key={log.id} className="border-t" style={{ borderColor: "var(--line)" }}>
+                      <tr
+                        key={log.id}
+                        className="border-t"
+                        style={{
+                          borderColor: "var(--line)",
+                          background: enviado ? "rgba(34, 197, 94, 0.06)" : undefined,
+                        }}
+                      >
                         <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
                           {usuario ? `${usuario.nome} ${usuario.sobrenome}` : "—"}
                         </td>
@@ -135,6 +155,19 @@ export default async function RelatorioBidPage() {
                         </td>
                         <td className="px-4 py-2.5 text-right font-medium" style={{ color: "var(--ink)" }}>
                           {log.quantidade_part_numbers}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <BotaoMarcarVersaoBidEnviado id={log.id} enviadoEm={log.enviado_em} />
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <a
+                            href={`/api/bases/bid/relatorio/${log.id}/download`}
+                            title="Baixar essa versão de novo"
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[var(--accent2)]"
+                            style={{ borderColor: "var(--line)", color: "var(--muted)" }}
+                          >
+                            <Download size={14} />
+                          </a>
                         </td>
                       </tr>
                     );

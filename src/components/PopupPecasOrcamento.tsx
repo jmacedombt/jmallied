@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, PackageSearch, PlusCircle, X } from "lucide-react";
+import { AlertTriangle, Ban, PackageSearch, PlusCircle, X } from "lucide-react";
 import { type FaixaMarkup, type InfoBidPeca } from "@/lib/bid";
 import TooltipCalculoBid from "@/components/TooltipCalculoBid";
 import PopupCadastrarPecaBid from "@/components/PopupCadastrarPecaBid";
+import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
 export type AparelhoComPecas = {
   os_reparadora: string | null;
@@ -40,11 +41,12 @@ function formatarReal(valor: number | null): string {
 }
 
 // Pop-up mostrando as 10 posições de peça/valor de um orçamento — abre
-// ao clicar na linha da tabela de Ag. Análise. O valor exibido pra cada
-// peça vem AO VIVO do BID (busca por Part Number, não o custo gravado no
-// próprio orçamento) — quando o BID ainda não tem essa peça cadastrada
-// (ou tem, mas sem custo calculado), a linha fica em destaque vermelho
-// com um botão pra cadastrar na hora.
+// ao clicar na linha da tabela de Ag. Análise (e também de "8 -
+// Orçamento Reprovado", ver PainelOrcamentoReprovado.tsx). O valor
+// exibido pra cada peça vem AO VIVO do BID (busca por Part Number, não o
+// custo gravado no próprio orçamento) — quando o BID ainda não tem essa
+// peça cadastrada (ou tem, mas sem custo calculado), a linha fica em
+// destaque vermelho com um botão pra cadastrar na hora.
 export default function PopupPecasOrcamento({
   aparelho,
   precosBid,
@@ -53,6 +55,9 @@ export default function PopupPecasOrcamento({
   podeCadastrar,
   onPecaAtualizada,
   onFechar,
+  motivoReprova = null,
+  reprovadoEm = null,
+  reprovadoPorNome = null,
 }: {
   aparelho: AparelhoComPecas;
   precosBid: Record<string, InfoBidPeca>;
@@ -61,6 +66,13 @@ export default function PopupPecasOrcamento({
   podeCadastrar: boolean;
   onPecaAtualizada: (info: InfoBidPeca) => void;
   onFechar: () => void;
+  /** Só preenchido em "8 - Orçamento Reprovado" (pedido explícito) —
+   * mostra o motivo em destaque no topo do pop-up, junto de quem/quando
+   * reprovou. Nas demais telas que usam esse mesmo pop-up (Ag. Análise),
+   * fica de fora. */
+  motivoReprova?: string | null;
+  reprovadoEm?: string | null;
+  reprovadoPorNome?: string | null;
 }) {
   const [cadastrando, setCadastrando] = useState<{ partNumber: string; prefillModelo: string | null } | null>(null);
   const [tooltip, setTooltip] = useState<{ info: InfoBidPeca; x: number; y: number } | null>(null);
@@ -107,6 +119,28 @@ export default function PopupPecasOrcamento({
         <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
           {aparelho.trade_allied} · OS Reparadora {aparelho.os_reparadora || "—"}
         </p>
+
+        {motivoReprova && (
+          <div
+            className="rounded-lg border px-3 py-2.5 mb-4"
+            style={{ borderColor: "#ef4444", background: "rgba(239, 68, 68, 0.1)" }}
+          >
+            <p className="text-xs font-semibold flex items-center gap-1.5 mb-1" style={{ color: "#ef4444" }}>
+              <Ban size={13} />
+              Motivo da reprovação
+            </p>
+            <p className="text-sm" style={{ color: "var(--ink)" }}>
+              {motivoReprova}
+            </p>
+            {(reprovadoEm || reprovadoPorNome) && (
+              <p className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
+                {reprovadoEm && formatarDataHoraBrasilia(reprovadoEm)}
+                {reprovadoEm && reprovadoPorNome && " · "}
+                {reprovadoPorNome}
+              </p>
+            )}
+          </div>
+        )}
 
         {!algumaPecaPreenchida && (
           <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>

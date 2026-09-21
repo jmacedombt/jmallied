@@ -78,7 +78,7 @@ export default function PainelBacklogPorLote({
             <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
               <th className="px-4 py-2.5 font-medium">Lote (NF Remessa)</th>
               <th className="px-4 py-2.5 font-medium text-right">Total do lote</th>
-              <th className="px-4 py-2.5 font-medium text-right">Pendente (antes do Produto Entregue)</th>
+              <th className="px-4 py-2.5 font-medium text-right">Pendente</th>
               <th className="px-4 py-2.5 font-medium text-right">R-TAT médio</th>
             </tr>
           </thead>
