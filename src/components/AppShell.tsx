@@ -17,6 +17,7 @@ import {
   Home,
   Info,
   KeyRound,
+  Landmark,
   LayoutGrid,
   LineChart,
   LogOut,
@@ -42,7 +43,8 @@ import Avatar from "@/components/Avatar";
 import BotaoTema from "@/components/BotaoTema";
 import ColorPickerSistema from "@/components/ColorPickerSistema";
 import { podeConfirmarAnaliseEmLote, podeLancarNfProdutoEntregue } from "@/lib/orcamentos";
-import { isAllied, operacionalRestrito } from "@/lib/usuarios";
+import { isAllied, operacionalRestrito, financeiroRestrito } from "@/lib/usuarios";
+import { podeAcessarFinanceiro } from "@/lib/financeiro";
 
 type Perfil = {
   nome: string;
@@ -92,6 +94,19 @@ const GRUPO_METRICAS: GrupoMenu = {
     // Métricas). Corrigido aqui, logo depois de "OQC".
     { href: "/metricas/previsao-recebimento", label: "Previsão de Recebimento", icone: Wallet },
   ],
+};
+
+// grupo "Financeiro" (pedido explícito) só entra na lista pra quem tem
+// permissão (Administrador, Gerente ou o cargo dedicado "Financeiro" —
+// ver podeAcessarFinanceiro em lib/financeiro.ts) — inserido logo
+// depois de "Impressão", antes de "Métricas" (ver GRUPOS_MENU_BASE
+// abaixo).
+const GRUPO_FINANCEIRO: GrupoMenu = {
+  id: "financeiro",
+  label: "Financeiro",
+  icone: Landmark,
+  hrefGrupo: "/financeiro",
+  itens: [{ href: "/financeiro", label: "Notas Fiscais", icone: Landmark }],
 };
 
 const GRUPOS_MENU_BASE: GrupoMenu[] = [
@@ -209,6 +224,22 @@ const GRUPOS_MENU_OPERACIONAL: GrupoMenu[] = [
   },
 ];
 
+// Menu do cargo "Financeiro" (sem is_master, ver migration 0055 e
+// financeiroRestrito em lib/usuarios.ts): só Financeiro + Impressão.
+// Nada de Operacional, Bases, Configurações, Sistema nem Métricas — o
+// middleware barra essas páginas mesmo digitando a URL direto (ver
+// PREFIXOS_BLOQUEADOS_FINANCEIRO em lib/usuarios.ts).
+const GRUPOS_MENU_FINANCEIRO: GrupoMenu[] = [
+  {
+    id: "impressao",
+    label: "Impressão",
+    icone: Printer,
+    hrefGrupo: "/impressao",
+    itens: [{ href: "/impressao/avulsa", label: "Impressão Avulsa", icone: Printer }],
+  },
+  GRUPO_FINANCEIRO,
+];
+
 // Item ativo do menu lateral: usa a cor do sistema (definida em "Cor do
 // sistema") pra fundo, texto e a barrinha lateral, então ao arrastar a
 // roda de cores o menu inteiro reage junto — não só os botões.
@@ -250,26 +281,39 @@ export default function AppShell({
 
   const allied = isAllied(perfil);
   const restritoOperacional = !allied && operacionalRestrito(perfil);
+  const restritoFinanceiro = !allied && !restritoOperacional && financeiroRestrito(perfil);
 
   // "Métricas" só aparece pra quem tem permissão — inserido logo depois
-  // de "Impressão", antes de "Configurações". ALLIED nunca vê Métricas
-  // nem nenhum outro grupo além de Operacional (Painel + Backlog);
-  // Operacional (sem is_master) só vê Painel + Impressão (ver
-  // GRUPOS_MENU_OPERACIONAL) — também nunca vê Métricas.
-  const podeVerMetricas = !allied && !restritoOperacional && podeConfirmarAnaliseEmLote(perfil);
+  // de "Impressão"/"Financeiro", antes de "Configurações". ALLIED nunca
+  // vê Métricas nem nenhum outro grupo além de Operacional (Painel +
+  // Backlog); Operacional (sem is_master) só vê Painel + Impressão (ver
+  // GRUPOS_MENU_OPERACIONAL) — também nunca vê Métricas. Financeiro
+  // (sem is_master) só vê Financeiro + Impressão (ver
+  // GRUPOS_MENU_FINANCEIRO) — também nunca vê Métricas.
+  const podeVerMetricas = !allied && !restritoOperacional && !restritoFinanceiro && podeConfirmarAnaliseEmLote(perfil);
   // "Modelo de Retorno" só aparece pra quem já pode lançar NF/mandar
   // pra Produto Entregue (mesma permissão de quem gera a planilha em
   // Ag. Emissão de Nota Fiscal — ver migration 0049).
-  const podeVerModeloRetorno = !allied && !restritoOperacional && podeLancarNfProdutoEntregue(perfil);
+  const podeVerModeloRetorno = !allied && !restritoOperacional && !restritoFinanceiro && podeLancarNfProdutoEntregue(perfil);
+  // "Financeiro" (pedido explícito): Administrador, Gerente ou o cargo
+  // dedicado "Financeiro" — inserido logo abaixo de "Impressão", antes
+  // de "Métricas" (ver podeAcessarFinanceiro em lib/financeiro.ts).
+  const podeVerFinanceiro = !allied && !restritoOperacional && !restritoFinanceiro && podeAcessarFinanceiro(perfil);
   const grupos = allied
     ? GRUPOS_MENU_ALLIED
     : restritoOperacional
       ? GRUPOS_MENU_OPERACIONAL
-      : GRUPOS_MENU_BASE.map((g) =>
-          g.id === "operacional" && podeVerModeloRetorno
-            ? { ...g, itens: [...g.itens, { href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet }] }
-            : g
-        ).flatMap((g) => (g.id === "impressao" && podeVerMetricas ? [g, GRUPO_METRICAS] : [g]));
+      : restritoFinanceiro
+        ? GRUPOS_MENU_FINANCEIRO
+        : GRUPOS_MENU_BASE.map((g) =>
+            g.id === "operacional" && podeVerModeloRetorno
+              ? { ...g, itens: [...g.itens, { href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet }] }
+              : g
+          ).flatMap((g) =>
+            g.id === "impressao"
+              ? [g, ...(podeVerFinanceiro ? [GRUPO_FINANCEIRO] : []), ...(podeVerMetricas ? [GRUPO_METRICAS] : [])]
+              : [g]
+          );
 
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>(

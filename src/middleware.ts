@@ -1,7 +1,12 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { STATUS_OPERACIONAL } from "@/lib/orcamentos";
-import { operacionalRestrito, rotaBloqueadaParaOperacional } from "@/lib/usuarios";
+import {
+  operacionalRestrito,
+  rotaBloqueadaParaOperacional,
+  financeiroRestrito,
+  rotaBloqueadaParaFinanceiro,
+} from "@/lib/usuarios";
 
 // caminhos de página que o cargo ALLIED (login externo, só consulta)
 // pode abrir — Operacional > Painel, a etapa de cada card (qualquer
@@ -131,6 +136,13 @@ export async function middleware(request: NextRequest) {
     if (operacionalRestrito(perfil) && rotaBloqueadaParaOperacional(path)) {
       const url = request.nextUrl.clone();
       url.pathname = "/operacional";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+
+    if (financeiroRestrito(perfil) && rotaBloqueadaParaFinanceiro(path)) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/financeiro";
       url.search = "";
       return NextResponse.redirect(url);
     }

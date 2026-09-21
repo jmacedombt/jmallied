@@ -41,6 +41,7 @@ export const CARGOS = [
   "Estoque",
   "Operacional",
   "Triagem/OQC",
+  "Financeiro",
   "ALLIED",
 ] as const;
 

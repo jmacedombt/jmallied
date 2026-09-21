@@ -4,6 +4,7 @@ import {
   CalendarCheck2,
   Database,
   FileText,
+  Landmark,
   LayoutGrid,
   Printer,
   Search,
@@ -14,7 +15,12 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
-import { operacionalRestrito, rotaBloqueadaParaOperacional } from "@/lib/usuarios";
+import {
+  operacionalRestrito,
+  rotaBloqueadaParaOperacional,
+  financeiroRestrito,
+  rotaBloqueadaParaFinanceiro,
+} from "@/lib/usuarios";
 
 // Um card por menu/submenu já existente no sistema — cada um com sua
 // própria identidade de cor (mesmo estilo dos cards de Operacional:
@@ -108,6 +114,14 @@ const CARDS_PAINEL = [
     cor: "#059669",
     corClara: "#34d399",
   },
+  {
+    href: "/financeiro",
+    label: "Financeiro",
+    descricao: "Controle das NFs de Mão de Obra e Peças emitidas, e do recebimento dos valores.",
+    icone: Landmark,
+    cor: "#0d9488",
+    corClara: "#2dd4bf",
+  },
 ];
 
 export default async function DashboardPage() {
@@ -127,13 +141,17 @@ export default async function DashboardPage() {
     perfil = data;
   }
 
-  // Operacional (sem is_master) não vê card nenhum que só vai devolver
-  // pro Painel (Bases, Configurações, Usuários, Reconhecimento Lote) —
-  // esses caminhos já ficam bloqueados no middleware de qualquer jeito
-  // (ver PREFIXOS_BLOQUEADOS_OPERACIONAL em lib/usuarios.ts).
-  const cardsVisiveis = operacionalRestrito(perfil)
-    ? CARDS_PAINEL.filter((card) => !rotaBloqueadaParaOperacional(card.href))
-    : CARDS_PAINEL;
+  // Operacional/Triagem-OQC (sem is_master) não vê card nenhum que só
+  // vai devolver pro Painel, e o cargo Financeiro não vê nenhum card
+  // fora de Financeiro/Impressão — nos dois casos os caminhos já ficam
+  // bloqueados no middleware de qualquer jeito (ver
+  // PREFIXOS_BLOQUEADOS_OPERACIONAL/PREFIXOS_BLOQUEADOS_FINANCEIRO em
+  // lib/usuarios.ts).
+  const cardsVisiveis = CARDS_PAINEL.filter((card) => {
+    if (operacionalRestrito(perfil) && rotaBloqueadaParaOperacional(card.href)) return false;
+    if (financeiroRestrito(perfil) && rotaBloqueadaParaFinanceiro(card.href)) return false;
+    return true;
+  });
 
   return (
     <AppShell titulo="Início" perfil={perfil}>

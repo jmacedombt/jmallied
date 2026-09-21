@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { podeLancarNfProdutoEntregue } from "@/lib/orcamentos";
+import { registrarLancamentoFinanceiro } from "@/lib/financeiro";
 
 const COLUNAS_POR_TIPO = {
   mao_de_obra: { numero: "nf_mao_de_obra_numero", valor: "nf_mao_de_obra_valor" },
@@ -60,6 +61,20 @@ export async function POST(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  // módulo Financeiro (pedido explícito) "recebe" a NF Mão de Obra/Peças
+  // sozinho, sem precisar digitar de novo — best-effort: se isso falhar
+  // por qualquer motivo, o lançamento da NF acima (o que já funcionava)
+  // não é afetado, só não aparece em /financeiro até alguém completar na
+  // mão. NF Retorno não entra no Financeiro (não é isso que é
+  // acompanhado ali).
+  if (tipo === "mao_de_obra" || tipo === "pecas") {
+    try {
+      await registrarLancamentoFinanceiro(admin, { tipo, numero, valor });
+    } catch {
+      // silencioso de propósito, ver comentário acima.
+    }
   }
 
   return NextResponse.json({ ok: true });

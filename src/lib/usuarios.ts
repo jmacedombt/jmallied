@@ -115,3 +115,31 @@ export const PREFIXOS_BLOQUEADOS_OPERACIONAL = [
 export function rotaBloqueadaParaOperacional(path: string): boolean {
   return PREFIXOS_BLOQUEADOS_OPERACIONAL.some((prefixo) => path === prefixo || path.startsWith(`${prefixo}/`));
 }
+
+/**
+ * Cargo "Financeiro" (sem is_master, ver migration 0055): mesmo espírito
+ * de restrição de Operacional/Triagem-OQC acima, só que sem NENHUMA
+ * etapa do Painel Operacional — só enxerga o módulo Financeiro +
+ * Impressão Avulsa (ver GRUPOS_MENU_FINANCEIRO em AppShell.tsx). Tudo
+ * mais (Operacional, Bases, Configurações, Sistema, Métricas) fica
+ * bloqueado mesmo digitando a URL direto — ver
+ * rotaBloqueadaParaFinanceiro logo abaixo e o middleware.ts.
+ */
+export function financeiroRestrito(perfil: { cargo: string; is_master: boolean } | null): boolean {
+  if (!perfil || perfil.is_master) return false;
+  return perfil.cargo === "Financeiro";
+}
+
+export const PREFIXOS_BLOQUEADOS_FINANCEIRO = [
+  "/operacional",
+  "/bases",
+  "/configuracoes",
+  "/usuarios",
+  "/manutencao",
+  "/sistema",
+  "/metricas",
+] as const;
+
+export function rotaBloqueadaParaFinanceiro(path: string): boolean {
+  return PREFIXOS_BLOQUEADOS_FINANCEIRO.some((prefixo) => path === prefixo || path.startsWith(`${prefixo}/`));
+}

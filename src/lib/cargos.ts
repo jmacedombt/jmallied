@@ -45,8 +45,9 @@ export const RESUMO_ACESSO_CARGOS: ResumoAcessoCargo[] = [
       "Configurações",
       "Sistema (Usuários, Manutenção do Banco, Cargos)",
       "Métricas (Volumetria, R-TAT, Orçamentos, OQC, Previsão de Recebimento)",
+      "Financeiro (Notas Fiscais)",
     ],
-    extras: ["Gerenciar usuários", "Ações em lote no Operacional", "Importar Base Peças", "Ver Métricas"],
+    extras: ["Gerenciar usuários", "Ações em lote no Operacional", "Importar Base Peças", "Ver Métricas", "Ver Financeiro"],
   },
   {
     cargo: "Supervisor",
@@ -98,6 +99,13 @@ export const RESUMO_ACESSO_CARGOS: ResumoAcessoCargo[] = [
     extras: ["Ações em lote em 1 - Ag. Triagem e OQC"],
     observacao:
       "Função completa só em \"1 - Ag. Triagem\" e \"OQC - Controle de Qualidade\" (incluindo ação em lote). Nas demais etapas — inclusive Ag. Abertura — só consulta. Mesmo menu restrito do cargo Operacional.",
+  },
+  {
+    cargo: "Financeiro",
+    modulos: ["Financeiro (Notas Fiscais)", "Impressão Avulsa"],
+    extras: [],
+    observacao:
+      "Cargo dedicado ao controle de NF Mão de Obra/Peças e recebimento (ver menu Financeiro). Sem Operacional, Bases, Configurações, Sistema nem Métricas — mesmo digitando a URL direto.",
   },
   {
     cargo: "ALLIED",
