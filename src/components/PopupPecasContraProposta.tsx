@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, CheckCircle2, Loader2, PackageSearch, Save, Sparkles, X, XCircle } from "lucide-react";
+import { Check, CheckCircle2, Loader2, Minus, PackageSearch, Plus, Save, Sparkles, X, XCircle } from "lucide-react";
 import { calcularResumoContraProposta, type PecaContraProposta } from "@/lib/orcamentos";
 import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupConfirmar from "@/components/PopupConfirmar";
@@ -71,8 +71,20 @@ export default function PopupPecasContraProposta({
   const [confirmando, setConfirmando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Resumo recolhido por padrão (pedido explícito, pra tela ficar menor)
+  // — o Total após alteração fica sempre visível no cabeçalho mesmo
+  // recolhido; o + expande o detalhamento, o - recolhe de novo.
+  const [resumoAberto, setResumoAberto] = useState(false);
 
   const resumo = calcularResumoContraProposta(pecas, maoDeObra);
+  // Total após alteração = novo valor das peças + mão de obra — tem que
+  // bater com o valor da Contra Proposta recebido da Allied (pedido
+  // explícito, mesma conta já usada no bloco "Valor da Contra Proposta"
+  // acima, só que agora com destaque e comparação no Resumo).
+  const totalAposAlteracao = resumo.vendaTotalPecas + maoDeObra;
+  const diferencaParaContraProposta =
+    aparelho.valorRecebidoAllied != null ? Math.round((totalAposAlteracao - aparelho.valorRecebidoAllied) * 100) / 100 : null;
+  const bateComContraProposta = diferencaParaContraProposta != null && Math.abs(diferencaParaContraProposta) < 0.005;
 
   // Sugestão de redução proporcional (pedido explícito) — parte sempre
   // do "Valor original" de cada peça (nunca do que já foi editado
@@ -147,13 +159,13 @@ export default function PopupPecasContraProposta({
     background: "var(--surface)",
     borderColor: "var(--accent2)",
     color: "var(--ink)",
-    width: "8rem",
+    width: "7rem",
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }}>
       <div
-        className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border shadow-2xl p-6"
+        className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-2xl border shadow-2xl p-6"
         style={{ background: "var(--surface)", borderColor: "var(--line)" }}
       >
         <div className="flex items-center justify-between mb-1">
@@ -230,7 +242,7 @@ export default function PopupPecasContraProposta({
         {aparelho.jaAjustado && (
           <div
             className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 mb-3 text-[11px]"
-            style={{ background: "rgba(59, 130, 246, 0.1)", color: "#2563eb" }}
+            style={{ background: "rgba(250, 204, 21, 0.15)", color: "#ea580c" }}
           >
             <CheckCircle2 size={12} />
             Esse aparelho já foi ajustado — editar e salvar de novo atualiza os valores.
@@ -255,12 +267,14 @@ export default function PopupPecasContraProposta({
                 ({formatarReal(aparelho.valorRecebidoAllied)}) — não dá pra sugerir redução só nas peças nesse caso.
               </p>
             )}
-            {/* overflow-x-auto (em vez de overflow-hidden) — com a coluna
-                de Sugestão a mais, a tabela pode ficar mais larga que o
-                pop-up; assim ela rola por dentro do card em vez de
-                estourar pra fora (bug reportado). */}
+            {/* overflow-x-auto continua como rede de segurança (janela
+                muito estreita), mas SEM largura mínima forçada — o
+                card agora é largo o bastante (max-w-6xl) e "Peça
+                Solução" trunca com "..." em vez de quebrar em 3 linhas,
+                então a tabela cabe inteira sem precisar rolar (bug
+                reportado: estava sempre estourando). */}
             <div className="rounded-xl border overflow-x-auto mb-4" style={{ borderColor: "var(--line)" }}>
-              <table className="w-full text-sm" style={{ minWidth: "56rem" }}>
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
                     <th className="px-3 py-2 font-medium">#</th>
@@ -283,7 +297,9 @@ export default function PopupPecasContraProposta({
                         {p.codigo}
                       </td>
                       <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
-                        {solucoesPorPartNumber[p.codigo] ?? "—"}
+                        <span className="block truncate max-w-[160px]" title={solucoesPorPartNumber[p.codigo] ?? "—"}>
+                          {solucoesPorPartNumber[p.codigo] ?? "—"}
+                        </span>
                       </td>
                       <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
                         {formatarReal(p.custo)}
@@ -338,56 +354,97 @@ export default function PopupPecasContraProposta({
         )}
 
         <div className="rounded-xl border p-4 space-y-1.5 text-sm" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
-          <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-            Resumo
-          </span>
-          <div className="flex items-center justify-between">
-            <span style={{ color: "var(--muted)" }}>Custo das peças</span>
-            <strong style={{ color: "var(--ink)" }}>{formatarReal(resumo.custoTotalPecas)}</strong>
+          {/* Cabeçalho sempre visível — recolhido por padrão pra tela
+              ficar menor (pedido explícito): o Total após alteração
+              (novo valor das peças + mão de obra) fica em destaque aqui
+              mesmo com o detalhamento fechado, comparado com o valor da
+              Contra Proposta recebido da Allied. */}
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              Resumo
+            </span>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <span className="text-[10px] uppercase tracking-wide mr-1.5" style={{ color: "var(--muted)" }}>
+                  Total após alteração
+                </span>
+                <strong className="text-base" style={{ color: bateComContraProposta ? "#16a34a" : "#ea580c" }}>
+                  {formatarReal(totalAposAlteracao)}
+                </strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResumoAberto((atual) => !atual)}
+                title={resumoAberto ? "Recolher detalhamento" : "Expandir detalhamento"}
+                className="inline-flex items-center justify-center w-6 h-6 rounded-md border transition hover:border-[var(--accent2)]"
+                style={{ borderColor: "var(--line)", color: "var(--accent2)" }}
+              >
+                {resumoAberto ? <Minus size={13} /> : <Plus size={13} />}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center justify-between">
-            <span style={{ color: "var(--muted)" }}>Imposto (ICMS)</span>
-            <strong style={{ color: "var(--ink)" }}>{formatarReal(resumo.impostoTotalPecas)}</strong>
-          </div>
-          <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
-            <span style={{ color: "var(--ink)" }}>Venda de peças (novo total)</span>
-            <strong style={{ color: "var(--ink)" }}>{formatarReal(resumo.vendaTotalPecas)}</strong>
-          </div>
-          <div className="flex items-center justify-between">
-            <span style={{ color: "var(--muted)" }}>Mão de obra</span>
-            {podeEditar ? (
-              <input
-                type="text"
-                inputMode="decimal"
-                value={textoMaoDeObra}
-                onChange={(e) => aoEditarMaoDeObra(e.target.value)}
-                className="rounded-md border px-2 py-1 text-right text-sm outline-none"
-                style={estiloInput}
-              />
-            ) : (
-              <strong style={{ color: "var(--ink)" }}>{formatarReal(maoDeObra)}</strong>
-            )}
-          </div>
-          <div className="flex items-center justify-between">
-            <span style={{ color: "var(--muted)" }}>Orçamento Enviado</span>
-            <strong style={{ color: "var(--ink)" }}>{formatarReal(aparelho.valorEnviado)}</strong>
-          </div>
-          <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
-            <span style={{ color: "var(--ink)" }}>Lucro de Peças</span>
-            <strong style={{ color: corPercentualLucro(resumo.percLucroPecas) }}>{formatarReal(resumo.lucroLiquidoPeca)}</strong>
-          </div>
-          <div className="flex items-center justify-between">
-            <span style={{ color: "var(--ink)" }}>% Lucro de Peças</span>
-            <strong style={{ color: corPercentualLucro(resumo.percLucroPecas) }}>{formatarPercentual(resumo.percLucroPecas)}</strong>
-          </div>
-          <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
-            <span style={{ color: "var(--ink)" }}>Lucro Total</span>
-            <strong style={{ color: "var(--accent2)" }}>{formatarReal(resumo.lucroTotal)}</strong>
-          </div>
-          <div className="flex items-center justify-between">
-            <span style={{ color: "var(--ink)" }}>% Lucro Total</span>
-            <strong style={{ color: corPercentualLucro(resumo.percLucroTotal) }}>{formatarPercentual(resumo.percLucroTotal)}</strong>
-          </div>
+
+          {aparelho.valorRecebidoAllied != null && (
+            <p className="text-xs" style={{ color: bateComContraProposta ? "#16a34a" : "#ea580c" }}>
+              {bateComContraProposta
+                ? "Bate com o valor da Contra Proposta recebido da Allied."
+                : `Diferença de ${formatarReal(Math.abs(diferencaParaContraProposta ?? 0))} ${
+                    (diferencaParaContraProposta ?? 0) > 0 ? "a mais" : "a menos"
+                  } do que a Contra Proposta (${formatarReal(aparelho.valorRecebidoAllied)}).`}
+            </p>
+          )}
+
+          {resumoAberto && (
+            <>
+              <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
+                <span style={{ color: "var(--muted)" }}>Custo das peças</span>
+                <strong style={{ color: "var(--ink)" }}>{formatarReal(resumo.custoTotalPecas)}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span style={{ color: "var(--muted)" }}>Imposto (ICMS)</span>
+                <strong style={{ color: "var(--ink)" }}>{formatarReal(resumo.impostoTotalPecas)}</strong>
+              </div>
+              <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
+                <span style={{ color: "var(--ink)" }}>Venda de peças (novo total)</span>
+                <strong style={{ color: "var(--ink)" }}>{formatarReal(resumo.vendaTotalPecas)}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span style={{ color: "var(--muted)" }}>Mão de obra</span>
+                {podeEditar ? (
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={textoMaoDeObra}
+                    onChange={(e) => aoEditarMaoDeObra(e.target.value)}
+                    className="rounded-md border px-2 py-1 text-right text-sm outline-none"
+                    style={estiloInput}
+                  />
+                ) : (
+                  <strong style={{ color: "var(--ink)" }}>{formatarReal(maoDeObra)}</strong>
+                )}
+              </div>
+              <div className="flex items-center justify-between">
+                <span style={{ color: "var(--muted)" }}>Orçamento Enviado</span>
+                <strong style={{ color: "var(--ink)" }}>{formatarReal(aparelho.valorEnviado)}</strong>
+              </div>
+              <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
+                <span style={{ color: "var(--ink)" }}>Lucro de Peças</span>
+                <strong style={{ color: corPercentualLucro(resumo.percLucroPecas) }}>{formatarReal(resumo.lucroLiquidoPeca)}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span style={{ color: "var(--ink)" }}>% Lucro de Peças</span>
+                <strong style={{ color: corPercentualLucro(resumo.percLucroPecas) }}>{formatarPercentual(resumo.percLucroPecas)}</strong>
+              </div>
+              <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
+                <span style={{ color: "var(--ink)" }}>Lucro Total</span>
+                <strong style={{ color: "var(--accent2)" }}>{formatarReal(resumo.lucroTotal)}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span style={{ color: "var(--ink)" }}>% Lucro Total</span>
+                <strong style={{ color: corPercentualLucro(resumo.percLucroTotal) }}>{formatarPercentual(resumo.percLucroTotal)}</strong>
+              </div>
+            </>
+          )}
 
           {erro && !confirmando && <p className="text-xs text-red-500 pt-1">{erro}</p>}
 

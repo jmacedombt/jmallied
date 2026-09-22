@@ -242,8 +242,12 @@ export default function PainelContraProposta({
                 onClick={() => setEditando(a)}
                 className="border-t cursor-pointer transition hover:brightness-110"
                 style={{
-                  borderColor: a.contra_proposta_ajustado ? "#3b82f6" : "var(--line)",
-                  background: a.contra_proposta_ajustado ? "rgba(59, 130, 246, 0.1)" : "var(--surface)",
+                  borderColor: a.contra_proposta_ajustado ? "#f97316" : "var(--line)",
+                  // laranja/amarelo bem claro (pedido explícito) — usa
+                  // opacidade baixa em vez de cor sólida pra não
+                  // atropelar o texto claro do tema escuro (mesmo padrão
+                  // já usado no azul que isso substitui).
+                  background: a.contra_proposta_ajustado ? "rgba(250, 204, 21, 0.12)" : "var(--surface)",
                 }}
                 title="Clique pra ajustar peça a peça e mão de obra"
               >
@@ -283,7 +287,7 @@ export default function PainelContraProposta({
                   {a.contra_proposta_ajustado ? (
                     <span
                       className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold"
-                      style={{ color: "#2563eb", background: "rgba(59, 130, 246, 0.15)" }}
+                      style={{ color: "#ea580c", background: "rgba(250, 204, 21, 0.18)" }}
                     >
                       <CheckCircle2 size={11} />
                       Ajustado
