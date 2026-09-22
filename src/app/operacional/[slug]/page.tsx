@@ -508,7 +508,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        "id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, contra_proposta_pecas, contra_proposta_mao_de_obra, contra_proposta_ajustado, contra_proposta_valor_recebido_allied, validacao_snapshot"
+        "id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, contra_proposta_pecas, contra_proposta_mao_de_obra, contra_proposta_ajustado, contra_proposta_valor_recebido_allied, contra_proposta_decisao, contra_proposta_motivo_recusa, validacao_snapshot"
       )
       .eq("status_operacional", status.valor)
       .order("nf_remessa_allied", { ascending: true })

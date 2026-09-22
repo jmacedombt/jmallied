@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { podeConfirmarAprovacaoOrcamento, STATUS_AG_CONTRA_PROPOSTA, STATUS_AG_RESPOSTA_REORCAMENTO } from "@/lib/orcamentos";
-import { prepararEnvioContraProposta } from "@/lib/contraProposta";
-import { persistirEEnviarLote } from "@/lib/orcamentoEnvio";
+import { podeConfirmarAprovacaoOrcamento, STATUS_AG_PECAS, STATUS_ORCAMENTO_REPROVADO } from "@/lib/orcamentos";
+import { prepararGeracaoContraProposta } from "@/lib/contraPropostaDecisao";
+import { montarPlanilhaOrcamentos } from "@/lib/email";
 
 export const maxDuration = 60;
 
-// "Enviar Contra Proposta" (Ag. Contra Proposta) — equivalente ao
-// "Confirmar Envio" de Validação de Orçamentos: revalida que todo mundo
-// do lote já foi ajustado peça a peça (prepararEnvioContraProposta),
-// avança todos pra "4 - Ag. Resposta de Reorçamento", gera/persiste o
-// Excel (mesmo formato do envio original) e manda por e-mail.
+// "Enviar Contra Proposta" (Ag. Contra Proposta) — reescrito por completo
+// (pedido explícito, substitui o antigo envio por e-mail): revalida que
+// TODO aparelho do lote já tem uma decisão (Aprovado/Reprovado — ver
+// decidir-contra-proposta), monta a planilha final combinando os 3 grupos
+// (aprovados inicialmente + Contra Proposta aceita + Contra Proposta
+// recusada — ver prepararGeracaoContraProposta), move cada aparelho pra
+// etapa certa, registra no histórico "Contra Propostas" (mesmo princípio
+// do Modelo de Retorno — snapshot das linhas, sem guardar o arquivo) e
+// devolve o Excel pronto pra download direto no navegador (sem e-mail).
 export async function POST(request: Request) {
   const supabase = createClient();
   const {
@@ -34,32 +38,64 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Selecione um lote (NF Remessa)." }, { status: 400 });
   }
 
-  const preparo = await prepararEnvioContraProposta(admin, nfRemessa);
+  const preparo = await prepararGeracaoContraProposta(admin, nfRemessa);
   if (!preparo.ok) {
     return NextResponse.json({ error: preparo.erro }, { status: preparo.status });
   }
 
-  const ids = preparo.itens.map((i) => i.id);
-  const { error: erroUpdate } = await admin
-    .from("orcamentos")
-    .update({ status_operacional: STATUS_AG_RESPOSTA_REORCAMENTO })
-    .in("id", ids)
-    .eq("status_operacional", STATUS_AG_CONTRA_PROPOSTA);
+  const agora = new Date().toISOString();
 
-  if (erroUpdate) {
-    return NextResponse.json({ error: erroUpdate.message }, { status: 400 });
+  if (preparo.idsAprovados.length > 0) {
+    const { error } = await admin
+      .from("orcamentos")
+      .update({ status_operacional: STATUS_AG_PECAS })
+      .in("id", preparo.idsAprovados);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  const linhasPlanilha = preparo.itens.map((i) => i.linha);
-  const email = await persistirEEnviarLote({
-    admin,
-    tipo: "contra_proposta",
-    nfRemessa,
-    quantidade: ids.length,
-    linhasPlanilha,
-    userId: user.id,
-    nomeArquivoPrefixo: "contra-proposta",
-  });
+  for (const { id, motivo } of preparo.idsReprovados) {
+    const { error } = await admin
+      .from("orcamentos")
+      .update({
+        status_operacional: STATUS_ORCAMENTO_REPROVADO,
+        motivo_reprova: motivo,
+        reprovado_por: user.id,
+        reprovado_em: agora,
+      })
+      .eq("id", id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  }
 
-  return NextResponse.json({ ok: true, quantidade: ids.length, email });
+  const nfRemessaArquivo = nfRemessa.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const nomeArquivo = `Contra_Proposta_${nfRemessaArquivo}.xlsx`;
+  const planilha = montarPlanilhaOrcamentos(preparo.linhas);
+
+  const { error: erroHistorico } = await admin.from("contra_proposta_geracoes").insert({
+    gerado_por: user.id,
+    nf_remessa_allied: nfRemessa,
+    quantidade_aprovados_iniciais: preparo.quantidadeAprovadosIniciais,
+    quantidade_contra_proposta_aceita: preparo.quantidadeContraPropostaAceita,
+    quantidade_reprovados: preparo.quantidadeReprovados,
+    nome_arquivo: nomeArquivo,
+    dados: { linhas: preparo.linhas },
+  });
+  // uma falha ao registrar no histórico não pode impedir a pessoa de
+  // baixar o arquivo agora — o lote já avançou de etapa de qualquer
+  // jeito; só fica sem entrada no histórico "Contra Propostas" pra essa
+  // geração específica.
+  if (erroHistorico) {
+    console.error("Falha ao registrar histórico de Contra Proposta:", erroHistorico.message);
+  }
+
+  return new NextResponse(new Uint8Array(planilha), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${nomeArquivo}"`,
+      "Cache-Control": "no-store",
+      "X-Quantidade-Aprovados-Iniciais": String(preparo.quantidadeAprovadosIniciais),
+      "X-Quantidade-Contra-Proposta-Aceita": String(preparo.quantidadeContraPropostaAceita),
+      "X-Quantidade-Reprovados": String(preparo.quantidadeReprovados),
+    },
+  });
 }

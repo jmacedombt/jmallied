@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Loader2, Send, X } from "lucide-react";
+import { Loader2, Send, X } from "lucide-react";
+import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import { type ResumoContraProposta } from "@/lib/orcamentos";
 
 function formatarReal(valor: number): string {
@@ -12,10 +13,13 @@ function formatarPercentual(valor: number): string {
 }
 
 // Pop-up de envio da Contra Proposta (Ag. Contra Proposta > Enviar
-// Contra Proposta) — resumo simplificado (mão de obra total, peça total,
-// % lucro) pedido pelo usuário, com opção de baixar o Excel antes de
-// mandar de verdade (mesmo formato do envio original, mesma trava de
-// "todos ajustados" revalidada no servidor).
+// Contra Proposta) — reescrito por completo (pedido explícito): não manda
+// mais e-mail nem move pra "4 - Ag. Resposta de Reorçamento". Confirmando,
+// o servidor gera a planilha final (mesmo formato do arquivo de aprovação
+// da Allied, combinando aprovados inicialmente + Contra Proposta aceita +
+// recusada — ver prepararGeracaoContraProposta), move cada aparelho pra
+// "5 - Ag. Peças" ou "8 - Orçamento Reprovado", registra no histórico
+// "Contra Propostas" e devolve o arquivo, baixado direto aqui.
 export default function PopupEnviarContraProposta({
   loteNf,
   quantidade,
@@ -30,38 +34,7 @@ export default function PopupEnviarContraProposta({
   onEnviado: () => void;
 }) {
   const [enviando, setEnviando] = useState(false);
-  const [gerandoPreview, setGerandoPreview] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [avisoEmail, setAvisoEmail] = useState<string | null>(null);
-
-  async function baixarPreview() {
-    setGerandoPreview(true);
-    setErro(null);
-    try {
-      const res = await fetch("/api/operacional/orcamentos/enviar-contra-proposta/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nf_remessa_allied: loteNf }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Não foi possível gerar o preview do arquivo.");
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `preview-contra-proposta-${loteNf}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível gerar o preview.");
-    } finally {
-      setGerandoPreview(false);
-    }
-  }
 
   async function enviar() {
     setEnviando(true);
@@ -72,13 +45,23 @@ export default function PopupEnviarContraProposta({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nf_remessa_allied: loteNf }),
       });
-      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setErro(data?.error || "Não foi possível enviar a Contra Proposta.");
+        const data = await res.json().catch(() => null);
+        setErro(data?.error || "Não foi possível gerar a planilha da Contra Proposta.");
         setEnviando(false);
         return;
       }
-      if (data?.email?.erro) setAvisoEmail(`O lote avançou, mas o e-mail não foi enviado: ${data.email.erro}`);
+      const disposicao = res.headers.get("Content-Disposition") ?? "";
+      const nomeArquivo = /filename="([^"]+)"/.exec(disposicao)?.[1] ?? `Contra_Proposta_${loteNf}.xlsx`;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = nomeArquivo;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
       onEnviado();
     } catch {
       setErro("Falha de conexão. Tente novamente.");
@@ -110,8 +93,9 @@ export default function PopupEnviarContraProposta({
         </div>
 
         <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
-          Lote (NF Remessa) <strong style={{ color: "var(--ink)" }}>{loteNf}</strong> — {quantidade} aparelho(s). Ao
-          enviar, todos avançam pra 4 - Ag. Resposta de Reorçamento e o Excel é mandado por e-mail.
+          Lote (NF Remessa) <strong style={{ color: "var(--ink)" }}>{loteNf}</strong> — {quantidade} aparelho(s)
+          decidido(s). Ao confirmar, a planilha final (mesmo formato do arquivo de aprovação da Allied) é gerada e
+          baixada aqui — os aprovados vão pra 5 - Ag. Peças, os recusados pra 8 - Orçamento Reprovado.
         </p>
 
         <div className="rounded-xl border p-4 space-y-1.5 text-sm" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
@@ -128,54 +112,41 @@ export default function PopupEnviarContraProposta({
             <strong style={{ color: "var(--accent2)" }}>{formatarReal(resumo.vendaTotalPecas + resumo.maoDeObra)}</strong>
           </div>
           <div className="flex items-center justify-between">
+            <span style={{ color: "var(--ink)" }}>Lucro de Peças</span>
+            <strong style={{ color: corPercentualLucro(resumo.percLucroPecas) }}>
+              {formatarReal(resumo.lucroLiquidoPeca)} ({formatarPercentual(resumo.percLucroPecas)})
+            </strong>
+          </div>
+          <div className="flex items-center justify-between">
             <span style={{ color: "var(--ink)" }}>% Lucro Total</span>
             <strong style={{ color: "var(--ink)" }}>{formatarPercentual(resumo.percLucroTotal)}</strong>
           </div>
         </div>
 
-        {avisoEmail && (
-          <p className="text-xs mt-3" style={{ color: "#b45309" }}>
-            {avisoEmail}
-          </p>
-        )}
         {erro && (
           <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mt-4">{erro}</p>
         )}
 
-        <div className="flex items-center justify-between gap-2 mt-5">
+        <div className="flex items-center justify-end gap-2 mt-5">
           <button
             type="button"
-            onClick={baixarPreview}
-            disabled={gerandoPreview || enviando}
-            title="Gera o Excel exatamente como ele sairia se você enviar agora — não grava nem manda nada."
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)] disabled:opacity-60"
-            style={{ color: "var(--muted)", border: "1px solid var(--line)" }}
+            onClick={onFechar}
+            disabled={enviando}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium transition hover:bg-[var(--surface2)] disabled:opacity-60"
+            style={{ color: "var(--muted)" }}
           >
-            {gerandoPreview ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-            {gerandoPreview ? "Gerando..." : "Preview (Excel)"}
+            Cancelar
           </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onFechar}
-              disabled={enviando}
-              className="rounded-lg px-4 py-2.5 text-sm font-medium transition hover:bg-[var(--surface2)] disabled:opacity-60"
-              style={{ color: "var(--muted)" }}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={enviar}
-              disabled={enviando}
-              className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-60"
-              style={{ background: "var(--accent)", boxShadow: "0 0 30px var(--accent-glow)" }}
-            >
-              {enviando ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              Enviar
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={enviar}
+            disabled={enviando}
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-60"
+            style={{ background: "var(--accent)", boxShadow: "0 0 30px var(--accent-glow)" }}
+          >
+            {enviando ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            {enviando ? "Gerando..." : "Confirmar e baixar"}
+          </button>
         </div>
       </div>
     </div>

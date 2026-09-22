@@ -91,12 +91,16 @@ export type LinhaPlanilhaOrcamento = {
   maoDeObra: number;
   /** valorTotalPeca + maoDeObra — 0 no RECUSADO. */
   valorTotalReparo: number;
-  /** "CONTRA PROPOSTA" só é usado no envio de Contra Proposta (Ag. Contra
-   * Proposta > Enviar Contra Proposta) — mesmo arquivo/formato, valor
-   * novo na coluna STATUS ORÇAMENTO. "COMPLEMENTAR" é o mesmo esquema,
-   * usado no envio da planilha Complementar (4 - Ag. Resposta de
-   * Reorçamento > Enviar planilha Complementar). */
-  statusOrcamento: "AGUARDANDO" | "RECUSADO" | "CONTRA PROPOSTA" | "COMPLEMENTAR";
+  /** "CONTRA PROPOSTA" só era usado no envio antigo (por e-mail) de Contra
+   * Proposta — mantido aqui por compatibilidade, mas o fluxo atual (Ag.
+   * Contra Proposta > Enviar Contra Proposta, decisão por item) já sai
+   * direto como "APROVADO" ou "RECUSADO". "COMPLEMENTAR" é o mesmo
+   * esquema, usado no envio da planilha Complementar (4 - Ag. Resposta de
+   * Reorçamento > Enviar planilha Complementar). "APROVADO" cobre tanto
+   * quem já tinha sido aprovado direto pela Allied (mantido sem
+   * alteração) quanto quem teve a Contra Proposta aceita pela equipe
+   * (valores substituídos). */
+  statusOrcamento: "AGUARDANDO" | "APROVADO" | "RECUSADO" | "CONTRA PROPOSTA" | "COMPLEMENTAR";
   /** só preenchido no RECUSADO. */
   motivoReprova: string | null;
   /** sempre igual a observacaoTecnicaReparadora. */

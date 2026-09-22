@@ -5,6 +5,7 @@ import { Check, CheckCircle2, Loader2, Minus, PackageSearch, Plus, Save, Sparkle
 import { calcularResumoContraProposta, type PecaContraProposta } from "@/lib/orcamentos";
 import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupConfirmar from "@/components/PopupConfirmar";
+import PopupMotivoReprovaContraProposta from "@/components/PopupMotivoReprovaContraProposta";
 
 function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -37,6 +38,10 @@ export type AparelhoContraProposta = {
    * arquivo de aprovação (null se ainda não subiu/não veio "Contra
    * Proposta") — só referência, não altera o ajuste peça a peça. */
   valorRecebidoAllied: number | null;
+  /** decisão já registrada (migration 0060) — null até alguém clicar
+   * Aprovado/Reprovado. */
+  decisaoAtual: "Aprovado" | "Reprovado" | null;
+  motivoRecusaAtual: string | null;
 };
 
 // Pop-up de edição peça a peça da Contra Proposta (Ag. Contra Proposta)
@@ -75,6 +80,12 @@ export default function PopupPecasContraProposta({
   // — o Total após alteração fica sempre visível no cabeçalho mesmo
   // recolhido; o + expande o detalhamento, o - recolhe de novo.
   const [resumoAberto, setResumoAberto] = useState(false);
+  // Aprovado grava as peças/mão de obra atuais do formulário + a decisão
+  // num clique só (pedido explícito); Reprovado abre o pop-up flutuante
+  // de motivo (disquete pra salvar).
+  const [aprovando, setAprovando] = useState(false);
+  const [mostrarMotivo, setMostrarMotivo] = useState(false);
+  const [erroDecisao, setErroDecisao] = useState<string | null>(null);
 
   const resumo = calcularResumoContraProposta(pecas, maoDeObra);
   // Total após alteração = novo valor das peças + mão de obra — tem que
@@ -155,6 +166,29 @@ export default function PopupPecasContraProposta({
     }
   }
 
+  async function aprovar() {
+    setAprovando(true);
+    setErroDecisao(null);
+    try {
+      const res = await fetch(`/api/operacional/orcamentos/${aparelho.id}/decidir-contra-proposta`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decisao: "Aprovado", pecas, mao_de_obra: maoDeObra }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErroDecisao(data?.error || "Não foi possível aprovar esse aparelho.");
+        setAprovando(false);
+        return;
+      }
+      setAprovando(false);
+      onAtualizado();
+    } catch {
+      setErroDecisao("Falha de conexão. Tente novamente.");
+      setAprovando(false);
+    }
+  }
+
   const estiloInput: React.CSSProperties = {
     background: "var(--surface)",
     borderColor: "var(--accent2)",
@@ -217,27 +251,60 @@ export default function PopupPecasContraProposta({
               {formatarReal(resumo.vendaTotalPecas + maoDeObra)}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              title="Aprovado"
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition"
-              style={{ background: "#16a34a" }}
-            >
-              <CheckCircle2 size={14} />
-              Aprovado
-            </button>
-            <button
-              type="button"
-              title="Reprovado"
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition"
-              style={{ background: "#ef4444" }}
-            >
-              <XCircle size={14} />
-              Reprovado
-            </button>
-          </div>
+          {podeEditar && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                title="Aprovado"
+                onClick={aprovar}
+                disabled={aprovando}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition disabled:opacity-60"
+                style={{
+                  background: "#16a34a",
+                  boxShadow: aparelho.decisaoAtual === "Aprovado" ? "0 0 0 2px rgba(255,255,255,0.5) inset" : undefined,
+                }}
+              >
+                {aprovando ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                Aprovado
+              </button>
+              <button
+                type="button"
+                title="Reprovado"
+                onClick={() => setMostrarMotivo(true)}
+                disabled={aprovando}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition disabled:opacity-60"
+                style={{
+                  background: "#ef4444",
+                  boxShadow: aparelho.decisaoAtual === "Reprovado" ? "0 0 0 2px rgba(255,255,255,0.5) inset" : undefined,
+                }}
+              >
+                <XCircle size={14} />
+                Reprovado
+              </button>
+            </div>
+          )}
         </div>
+
+        {erroDecisao && (
+          <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-3">{erroDecisao}</p>
+        )}
+
+        {aparelho.decisaoAtual && (
+          <div
+            className="flex items-start gap-1.5 rounded-lg px-2.5 py-1.5 mb-3 text-[11px]"
+            style={
+              aparelho.decisaoAtual === "Aprovado"
+                ? { background: "rgba(34, 197, 94, 0.12)", color: "#16a34a" }
+                : { background: "rgba(239, 68, 68, 0.10)", color: "#ef4444" }
+            }
+          >
+            {aparelho.decisaoAtual === "Aprovado" ? <CheckCircle2 size={12} className="mt-0.5 shrink-0" /> : <XCircle size={12} className="mt-0.5 shrink-0" />}
+            <span>
+              <strong>{aparelho.decisaoAtual === "Aprovado" ? "APROVADO" : "REPROVADO"}</strong>
+              {aparelho.decisaoAtual === "Reprovado" && aparelho.motivoRecusaAtual && <> — {aparelho.motivoRecusaAtual}</>}
+            </span>
+          </div>
+        )}
 
         {aparelho.jaAjustado && (
           <div
@@ -478,6 +545,20 @@ export default function PopupPecasContraProposta({
           erro={erro}
           onConfirmar={salvar}
           onFechar={() => !salvando && setConfirmando(false)}
+        />
+      )}
+
+      {mostrarMotivo && (
+        <PopupMotivoReprovaContraProposta
+          aparelhoId={aparelho.id}
+          trade={aparelho.trade_allied}
+          osReparadora={aparelho.os_reparadora}
+          motivoInicial={aparelho.motivoRecusaAtual ?? ""}
+          onFechar={() => setMostrarMotivo(false)}
+          onReprovado={() => {
+            setMostrarMotivo(false);
+            onAtualizado();
+          }}
         />
       )}
     </div>

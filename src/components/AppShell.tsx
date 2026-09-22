@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowLeftRight,
   Bell,
   CalendarCheck2,
   ChevronDown,
@@ -191,6 +192,12 @@ const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
       // lib/modeloRetorno.ts e a rota de API, que agora aceita esse
       // cargo só pra GET).
       { href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet },
+      // "Contra Propostas" também liberado pro ALLIED (pedido explícito,
+      // migration 0060) — é onde a versão final das Contra Propostas
+      // (depois de decidida pela equipe) fica disponível pra eles; eles
+      // não veem o detalhe peça a peça em Ag. Contra Proposta (ver
+      // aviso em PainelContraProposta.tsx), só esse resultado.
+      { href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight },
     ],
   },
   {
@@ -313,6 +320,10 @@ export default function AppShell({
   // pra Produto Entregue (mesma permissão de quem gera a planilha em
   // Ag. Emissão de Nota Fiscal — ver migration 0049).
   const podeVerModeloRetorno = !allied && !restritoOperacional && !restritoFinanceiro && podeLancarNfProdutoEntregue(perfil);
+  // "Contra Propostas" (migration 0060) — mesmo cargo que já decide a
+  // Contra Proposta (podeConfirmarAprovacaoOrcamento é o mesmo
+  // podeLancarNfProdutoEntregue por baixo, ver lib/orcamentos.ts).
+  const podeVerContraPropostas = podeVerModeloRetorno;
   // "Financeiro" (pedido explícito): Administrador, Gerente ou o cargo
   // dedicado "Financeiro" — inserido logo abaixo de "Impressão", antes
   // de "Métricas" (ver podeAcessarFinanceiro em lib/financeiro.ts).
@@ -324,8 +335,19 @@ export default function AppShell({
       : restritoFinanceiro
         ? GRUPOS_MENU_FINANCEIRO
         : GRUPOS_MENU_BASE.map((g) =>
-            g.id === "operacional" && podeVerModeloRetorno
-              ? { ...g, itens: [...g.itens, { href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet }] }
+            g.id === "operacional"
+              ? {
+                  ...g,
+                  itens: [
+                    ...g.itens,
+                    ...(podeVerModeloRetorno
+                      ? [{ href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet }]
+                      : []),
+                    ...(podeVerContraPropostas
+                      ? [{ href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight }]
+                      : []),
+                  ],
+                }
               : g
           ).flatMap((g) =>
             g.id === "impressao"

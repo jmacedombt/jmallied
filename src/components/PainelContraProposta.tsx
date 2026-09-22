@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Clock, Info, Send, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Info, Loader2, Send, XCircle } from "lucide-react";
 import {
   podeConfirmarAprovacaoOrcamento,
   calcularResumoContraProposta,
@@ -12,7 +12,9 @@ import {
 } from "@/lib/orcamentos";
 import PopupPecasContraProposta from "@/components/PopupPecasContraProposta";
 import PopupEnviarContraProposta from "@/components/PopupEnviarContraProposta";
-import { operacionalRestrito } from "@/lib/usuarios";
+import PopupMotivoReprovaContraProposta from "@/components/PopupMotivoReprovaContraProposta";
+import PopupAviso from "@/components/PopupAviso";
+import { operacionalRestrito, isAllied } from "@/lib/usuarios";
 
 function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -61,6 +63,11 @@ export type AparelhoContraPropostaLista = {
    * explícito) — null enquanto nenhum arquivo com esse valor foi
    * importado ainda. Só referência, ao lado do ajuste manual. */
   contra_proposta_valor_recebido_allied: number | null;
+  /** decisão da equipe sobre essa Contra Proposta (migration 0060) — null
+   * até alguém clicar Aprovado/Reprovado. Só quando todo aparelho do lote
+   * tiver decisão é que "Enviar Contra Proposta" libera. */
+  contra_proposta_decisao: "Aprovado" | "Reprovado" | null;
+  contra_proposta_motivo_recusa: string | null;
 };
 
 /** Valor original enviado à Allied (venda de peças + mão de obra,
@@ -109,12 +116,46 @@ export default function PainelContraProposta({
   const [loteSelecionado, setLoteSelecionado] = useState("");
   const [editando, setEditando] = useState<AparelhoContraPropostaLista | null>(null);
   const [mostrarEnvio, setMostrarEnvio] = useState(false);
+  // id do aparelho com um "Aprovado" em andamento (spinner no botão da
+  // lista) — Reprovado não precisa disso, ele abre o pop-up de motivo
+  // (mostrarMotivoDe) e o loading fica dentro daquele componente.
+  const [decidindo, setDecidindo] = useState<string | null>(null);
+  const [mostrarMotivoDe, setMostrarMotivoDe] = useState<AparelhoContraPropostaLista | null>(null);
+  const [erroDecisao, setErroDecisao] = useState<string | null>(null);
+  const [mostrarAvisoAllied, setMostrarAvisoAllied] = useState(false);
 
   const podeAjustar = podeConfirmarAprovacaoOrcamento(perfil);
   // Operacional (sem is_master) só tem função em Ag. Abertura — clicar
   // numa linha aqui ainda abre o pop-up (pra poder ver o registro), mas
   // sem poder editar nem confirmar nada.
   const apenasVisualizacao = operacionalRestrito(perfil);
+  // Login ALLIED (pedido explícito): não pode ver o detalhe peça a peça
+  // dessa etapa — clicar numa linha mostra um aviso em vez de abrir o
+  // pop-up de ajuste; a versão final só fica disponível no menu
+  // "Contra Propostas" depois que a equipe decidir tudo e enviar.
+  const allied = isAllied(perfil);
+
+  async function aprovarDireto(a: AparelhoContraPropostaLista) {
+    setDecidindo(a.id);
+    setErroDecisao(null);
+    try {
+      const res = await fetch(`/api/operacional/orcamentos/${a.id}/decidir-contra-proposta`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decisao: "Aprovado", pecas: pecasEfetivasDe(a), mao_de_obra: maoDeObraEfetivaDe(a) }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErroDecisao(data?.error || "Não foi possível aprovar esse aparelho.");
+        setDecidindo(null);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setErroDecisao("Falha de conexão. Tente novamente.");
+    }
+    setDecidindo(null);
+  }
 
   useEffect(() => {
     if (!editando) return;
@@ -135,7 +176,10 @@ export default function PainelContraProposta({
     return aparelhos.filter((a) => a.nf_remessa_allied === loteSelecionado);
   }, [aparelhos, loteSelecionado]);
 
-  const todosAjustados = filtrados.length > 0 && filtrados.every((a) => a.contra_proposta_ajustado);
+  // "Enviar Contra Proposta" só libera quando TODO aparelho do lote já
+  // tiver uma decisão (Aprovado ou Reprovado) — antes era "todo mundo
+  // ajustado", agora é "todo mundo decidido" (pedido explícito).
+  const todosDecididos = filtrados.length > 0 && filtrados.every((a) => a.contra_proposta_decisao != null);
 
   // resumo agregado do lote selecionado (mão de obra total, peça total,
   // lucro%) — mesma conta usada no pop-up individual, só somando todos.
@@ -169,33 +213,39 @@ export default function PainelContraProposta({
           </select>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setMostrarEnvio(true)}
-          disabled={!loteSelecionado || !todosAjustados || !podeAjustar}
-          title={
-            !loteSelecionado
-              ? "Selecione um lote específico pra enviar."
-              : !todosAjustados
-                ? "Ainda existem aparelhos desse lote sem o ajuste confirmado."
-                : !podeAjustar
-                  ? "Seu cargo não tem permissão pra enviar a Contra Proposta."
-                  : undefined
-          }
-          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ background: "var(--accent)" }}
-        >
-          <Send size={13} />
-          Enviar Contra Proposta
-        </button>
+        {!allied && (
+          <button
+            type="button"
+            onClick={() => setMostrarEnvio(true)}
+            disabled={!loteSelecionado || !todosDecididos || !podeAjustar}
+            title={
+              !loteSelecionado
+                ? "Selecione um lote específico pra enviar."
+                : !todosDecididos
+                  ? "Ainda existem aparelhos desse lote sem decisão (Aprovado/Reprovado)."
+                  : !podeAjustar
+                    ? "Seu cargo não tem permissão pra enviar a Contra Proposta."
+                    : undefined
+            }
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: "var(--accent)" }}
+          >
+            <Send size={13} />
+            Enviar Contra Proposta
+          </button>
+        )}
       </div>
 
-      {loteSelecionado && !todosAjustados && (
+      {loteSelecionado && !todosDecididos && !allied && (
         <p className="text-xs flex items-center gap-1.5" style={{ color: "#ea580c" }}>
           <Clock size={13} />
-          {filtrados.filter((a) => !a.contra_proposta_ajustado).length} aparelho(s) desse lote ainda sem ajuste — abra
-          cada um e confirme antes de enviar.
+          {filtrados.filter((a) => a.contra_proposta_decisao == null).length} aparelho(s) desse lote ainda sem decisão
+          — abra cada um e aprove ou reprove antes de enviar.
         </p>
+      )}
+
+      {erroDecisao && (
+        <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">{erroDecisao}</p>
       )}
 
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
@@ -220,7 +270,7 @@ export default function PainelContraProposta({
                 </span>
               </th>
               <th className="px-4 py-2.5 font-medium">Ajuste</th>
-              <th className="px-4 py-2.5 font-medium text-right">Ação</th>
+              {!allied && <th className="px-4 py-2.5 font-medium text-right">Ação</th>}
             </tr>
           </thead>
           <tbody>
@@ -239,17 +289,30 @@ export default function PainelContraProposta({
               return (
               <tr
                 key={a.id}
-                onClick={() => setEditando(a)}
+                onClick={() => (allied ? setMostrarAvisoAllied(true) : setEditando(a))}
                 className="border-t cursor-pointer transition hover:brightness-110"
                 style={{
-                  borderColor: a.contra_proposta_ajustado ? "#f97316" : "var(--line)",
-                  // laranja/amarelo bem claro (pedido explícito) — usa
-                  // opacidade baixa em vez de cor sólida pra não
-                  // atropelar o texto claro do tema escuro (mesmo padrão
-                  // já usado no azul que isso substitui).
-                  background: a.contra_proposta_ajustado ? "rgba(250, 204, 21, 0.12)" : "var(--surface)",
+                  // decisão (Aprovado/Reprovado) manda mais que o "Ajuste"
+                  // laranja — verde/vermelho, mesma opacidade baixa pra
+                  // não atropelar o texto claro do tema escuro.
+                  borderColor:
+                    a.contra_proposta_decisao === "Aprovado"
+                      ? "#22c55e"
+                      : a.contra_proposta_decisao === "Reprovado"
+                        ? "#ef4444"
+                        : a.contra_proposta_ajustado
+                          ? "#f97316"
+                          : "var(--line)",
+                  background:
+                    a.contra_proposta_decisao === "Aprovado"
+                      ? "rgba(34, 197, 94, 0.12)"
+                      : a.contra_proposta_decisao === "Reprovado"
+                        ? "rgba(239, 68, 68, 0.10)"
+                        : a.contra_proposta_ajustado
+                          ? "rgba(250, 204, 21, 0.12)"
+                          : "var(--surface)",
                 }}
-                title="Clique pra ajustar peça a peça e mão de obra"
+                title={allied ? "Clique pra saber mais" : "Clique pra ajustar peça a peça e mão de obra"}
               >
                 <td className="px-4 py-2.5 font-mono" style={{ color: "var(--muted)" }}>
                   {a.nf_remessa_allied}
@@ -302,36 +365,56 @@ export default function PainelContraProposta({
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                  {/* Aprovado/Reprovado — só os botões por enquanto
-                      (pedido explícito: "crie os botões depois vamos
-                      ativar as funções"), sem nenhuma função ligada
-                      ainda. */}
-                  <div className="inline-flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      title="Aprovado"
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#16a34a]"
-                      style={{ borderColor: "var(--line)", color: "#16a34a" }}
-                    >
-                      <CheckCircle2 size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Reprovado"
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
-                      style={{ borderColor: "var(--line)", color: "#ef4444" }}
-                    >
-                      <XCircle size={15} />
-                    </button>
-                  </div>
-                </td>
+                {!allied && (
+                  <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                    {podeAjustar ? (
+                      a.contra_proposta_decisao ? (
+                        <span
+                          className="inline-flex items-center gap-1.5 text-[11px] font-bold"
+                          style={{ color: a.contra_proposta_decisao === "Aprovado" ? "#16a34a" : "#ef4444" }}
+                        >
+                          {a.contra_proposta_decisao === "Aprovado" ? (
+                            <CheckCircle2 size={13} />
+                          ) : (
+                            <XCircle size={13} />
+                          )}
+                          {a.contra_proposta_decisao === "Aprovado" ? "APROVADO" : "REPROVADO"}
+                        </span>
+                      ) : (
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            title="Aprovado"
+                            onClick={() => aprovarDireto(a)}
+                            disabled={decidindo === a.id}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#16a34a] disabled:opacity-60"
+                            style={{ borderColor: "var(--line)", color: "#16a34a" }}
+                          >
+                            {decidindo === a.id ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                          </button>
+                          <button
+                            type="button"
+                            title="Reprovado"
+                            onClick={() => setMostrarMotivoDe(a)}
+                            disabled={decidindo === a.id}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444] disabled:opacity-60"
+                            style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                          >
+                            <XCircle size={15} />
+                          </button>
+                        </div>
+                      )
+                    ) : (
+                      <span style={{ color: "var(--muted)" }}>—</span>
+                    )}
+                  </td>
+                )}
               </tr>
               );
             })}
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
+                <td colSpan={allied ? 10 : 11} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
                   {aparelhos.length === 0 ? mensagemVazia : "Nenhum aparelho encontrado nesse lote."}
                 </td>
               </tr>
@@ -352,6 +435,8 @@ export default function PainelContraProposta({
             jaAjustado: editando.contra_proposta_ajustado,
             valorEnviado: valorEnviadoDe(editando),
             valorRecebidoAllied: editando.contra_proposta_valor_recebido_allied,
+            decisaoAtual: editando.contra_proposta_decisao,
+            motivoRecusaAtual: editando.contra_proposta_motivo_recusa,
           }}
           podeEditar={!apenasVisualizacao}
           solucoesPorPartNumber={solucoesPorPartNumber}
@@ -374,6 +459,27 @@ export default function PainelContraProposta({
             setLoteSelecionado("");
             router.refresh();
           }}
+        />
+      )}
+
+      {mostrarMotivoDe && (
+        <PopupMotivoReprovaContraProposta
+          aparelhoId={mostrarMotivoDe.id}
+          trade={mostrarMotivoDe.trade_allied}
+          osReparadora={mostrarMotivoDe.os_reparadora}
+          onFechar={() => setMostrarMotivoDe(null)}
+          onReprovado={() => {
+            setMostrarMotivoDe(null);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {mostrarAvisoAllied && (
+        <PopupAviso
+          titulo="Contra Proposta em análise"
+          mensagem="A equipe da J.Macedo está revisando as propostas recebidas da Allied. Quando a decisão estiver completa, a versão final fica disponível no menu Contra Propostas."
+          onFechar={() => setMostrarAvisoAllied(false)}
         />
       )}
     </div>
