@@ -35,7 +35,7 @@ export async function GET() {
   const { data, error } = await admin
     .from("contra_proposta_geracoes")
     .select(
-      "id, gerado_em, nf_remessa_allied, quantidade_aprovados_iniciais, quantidade_contra_proposta_aceita, quantidade_reprovados, nome_arquivo, usuarios:gerado_por (nome, sobrenome)"
+      "id, gerado_em, nf_remessa_allied, quantidade_aprovados_iniciais, quantidade_contra_proposta_aceita, quantidade_reprovados, quantidade_ja_reprovados, nome_arquivo, usuarios:gerado_por (nome, sobrenome)"
     )
     .order("gerado_em", { ascending: false })
     .limit(200);

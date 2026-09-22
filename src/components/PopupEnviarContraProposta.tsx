@@ -95,7 +95,8 @@ export default function PopupEnviarContraProposta({
         <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
           Lote (NF Remessa) <strong style={{ color: "var(--ink)" }}>{loteNf}</strong> — {quantidade} aparelho(s)
           decidido(s). Ao confirmar, a planilha final (mesmo formato do arquivo de aprovação da Allied) é gerada e
-          baixada aqui — os aprovados vão pra 5 - Ag. Peças, os recusados pra 8 - Orçamento Reprovado.
+          baixada aqui — os aprovados vão pra 5 - Ag. Peças, os recusados pra 8 - Orçamento Reprovado. Aparelhos desse
+          lote que já estavam em 8 - Orçamento Reprovado também entram, no final da planilha (só informativo).
         </p>
 
         <div className="rounded-xl border p-4 space-y-1.5 text-sm" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>

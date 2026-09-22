@@ -1,11 +1,15 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import {
   STATUS_AG_CONTRA_PROPOSTA,
+  STATUS_ORCAMENTO_REPROVADO,
   calcularResumoContraProposta,
+  calcularDetalheValidacao,
   type PecaContraProposta,
   type DetalheValidacaoOrcamento,
+  type CamposPecasOrcamento,
+  type ConfiguracaoMaoDeObra,
 } from "@/lib/orcamentos";
-import { buscarPrecosBidPorPartNumber } from "@/lib/bid";
+import { buscarPrecosBidPorPartNumber, buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
 import { formatarDataBrasilia } from "@/lib/tempo";
 import { type LinhaPlanilhaOrcamento } from "@/lib/email";
 
@@ -36,6 +40,15 @@ import { type LinhaPlanilhaOrcamento } from "@/lib/email";
  *      — nunca usa contra_proposta_pecas, que pode ter um valor
  *      proposto e recusado), status "RECUSADO", com o motivo digitado na
  *      coluna MOTIVO REPROVA.
+ *   4) "Já reprovados" (pedido explícito) — aparelhos do MESMO lote que já
+ *      estavam em "8 - Orçamento Reprovado" ANTES dessa geração (Allied
+ *      reprovou direto na resposta de orçamento, ou reprovação manual em
+ *      qualquer etapa) — entram no FINAL da planilha, com o motivo que já
+ *      estava gravado (motivo_reprova). Usa validacao_snapshot quando
+ *      existir; se o aparelho foi reprovado ANTES de chegar em Validação
+ *      de Orçamentos (nunca teve preço apurado, nunca ganhou snapshot),
+ *      recalcula ao vivo com os parâmetros atuais (mesmo fallback já
+ *      usado em prepararEnvioLote/validacaoEnvioAllied.ts).
  */
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -88,6 +101,16 @@ type LinhaContraProposta = CamposEstaticos & {
   contra_proposta_mao_de_obra: number | null;
   validacao_snapshot: DetalheValidacaoOrcamento | null;
 };
+
+const COLUNAS_PECAS_RAW =
+  "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5";
+
+type LinhaJaReprovada = CamposEstaticos &
+  CamposPecasOrcamento & {
+    id: string;
+    validacao_snapshot: DetalheValidacaoOrcamento | null;
+    motivo_reprova: string | null;
+  };
 
 function listaCampo(a: CamposEstaticos, prefixo: string): (string | null)[] {
   return Array.from({ length: 10 }, (_, i) => (a[`${prefixo}_${i + 1}`] as string | null) ?? null);
@@ -143,6 +166,7 @@ export type ResultadoPreparoGeracaoContraProposta =
       quantidadeAprovadosIniciais: number;
       quantidadeContraPropostaAceita: number;
       quantidadeReprovados: number;
+      quantidadeJaReprovados: number;
     };
 
 export async function prepararGeracaoContraProposta(
@@ -199,7 +223,80 @@ export async function prepararGeracaoContraProposta(
 
   const aprovadosIniciais = (aprovadosIniciaisBrutos ?? []) as unknown as LinhaAprovadoInicial[];
 
-  // Peça Solução (BID) de todo código usado nas 3 categorias, pro arquivo
+  // 4) "Já reprovados" (pedido explícito) — aparelhos do MESMO lote já em
+  // "8 - Orçamento Reprovado" antes dessa geração, vão no FINAL da
+  // planilha (ver comentário no topo do arquivo).
+  const { data: jaReprovadosBrutos, error: erroJaReprovados } = await admin
+    .from("orcamentos")
+    .select(`id, motivo_reprova, validacao_snapshot, ${COLUNAS_PECAS_RAW}, ${COLUNAS_ESTATICAS}`)
+    .eq("status_operacional", STATUS_ORCAMENTO_REPROVADO)
+    .eq("nf_remessa_allied", nfRemessa);
+
+  if (erroJaReprovados) {
+    return { ok: false, status: 400, erro: erroJaReprovados.message };
+  }
+
+  const jaReprovados = (jaReprovadosBrutos ?? []) as unknown as LinhaJaReprovada[];
+
+  // Nem todo "já reprovado" tem validacao_snapshot — só ganha esse
+  // congelamento quem foi reprovado exatamente estando em Validação de
+  // Orçamentos (ver comentário em [id]/reprovar/route.ts); reprovação
+  // ANTES disso nunca teve preço apurado. Pra esses casos, recalcula ao
+  // vivo com os parâmetros atuais (mesmo fallback de prepararEnvioLote em
+  // validacaoEnvioAllied.ts) — só busca configuração/custo se realmente
+  // precisar.
+  const detalheJaReprovadoPorId = new Map<string, DetalheValidacaoOrcamento | null>();
+  const semSnapshot = jaReprovados.filter((a) => !a.validacao_snapshot);
+  if (semSnapshot.length > 0) {
+    const codigosSemSnapshot = Array.from(
+      new Set(
+        semSnapshot.flatMap((a) =>
+          [
+            a.peca_1, a.peca_2, a.peca_3, a.peca_4, a.peca_5, a.peca_6, a.peca_7, a.peca_8, a.peca_9, a.peca_10,
+            a.peca_add_1, a.peca_add_2, a.peca_add_3, a.peca_add_4, a.peca_add_5,
+          ]
+            .map((c) => (typeof c === "string" ? c.trim() : c))
+            .filter((c): c is string => !!c)
+        )
+      )
+    );
+    const custosPorCodigo = new Map<string, number>();
+    if (codigosSemSnapshot.length > 0) {
+      const { data: custosBrutos } = await admin.from("pecas_vigentes").select("codigo, valor_unitario").in("codigo", codigosSemSnapshot);
+      for (const linha of (custosBrutos ?? []) as { codigo: string; valor_unitario: number }[]) {
+        custosPorCodigo.set(linha.codigo, Number(linha.valor_unitario));
+      }
+    }
+    const [{ data: configImposto }, { data: configMaoObraBruta }, { data: faixasMarkupBrutas }] = await Promise.all([
+      admin.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+      admin.from("configuracoes_mao_de_obra").select("valor_uma_peca, valor_mais_de_uma_peca").eq("id", 1).single(),
+      admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+    ]);
+    const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
+    const configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca"> = {
+      valor_uma_peca: Number(configMaoObraBruta?.valor_uma_peca ?? 0),
+      valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 0),
+    };
+    const faixasMarkupGlobal: FaixaMarkup[] = (
+      (faixasMarkupBrutas ?? []) as { valor_min: number; valor_max: number | null; multiplicador: number }[]
+    ).map((f) => ({
+      valor_min: Number(f.valor_min),
+      valor_max: f.valor_max == null ? null : Number(f.valor_max),
+      multiplicador: Number(f.multiplicador),
+    }));
+    const overridesDoLote = await buscarOverridesMarkupPorLote(admin, [nfRemessa]);
+    const faixasMarkup: FaixaMarkup[] = overridesDoLote[nfRemessa] ?? faixasMarkupGlobal;
+
+    for (const a of semSnapshot) {
+      const detalhe = calcularDetalheValidacao(a as CamposPecasOrcamento, custosPorCodigo, icmsPercentual, configMaoDeObra, faixasMarkup);
+      detalheJaReprovadoPorId.set(a.id, detalhe);
+    }
+  }
+  for (const a of jaReprovados) {
+    if (!detalheJaReprovadoPorId.has(a.id)) detalheJaReprovadoPorId.set(a.id, a.validacao_snapshot);
+  }
+
+  // Peça Solução (BID) de todo código usado nas 4 categorias, pro arquivo
   // sair no mesmo formato do envio original.
   const codigosUnicos = Array.from(
     new Set([
@@ -209,6 +306,7 @@ export async function prepararGeracaoContraProposta(
           ? (a.contra_proposta_pecas ?? []).map((p) => p.codigo)
           : (a.validacao_snapshot?.pecas ?? []).map((p) => p.codigo)
       ),
+      ...jaReprovados.flatMap((a) => (detalheJaReprovadoPorId.get(a.id)?.pecas ?? []).map((p) => p.codigo)),
     ])
   );
   const precosBid = await buscarPrecosBidPorPartNumber(admin, codigosUnicos);
@@ -303,13 +401,32 @@ export async function prepararGeracaoContraProposta(
     };
   });
 
+  const linhasJaReprovados: LinhaPlanilhaOrcamento[] = jaReprovados.map((a) => {
+    const detalhe = detalheJaReprovadoPorId.get(a.id) ?? null;
+    const { peca, custoPeca } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
+    const valorTotalPeca = detalhe?.vendaTotalPecas ?? 0;
+    const maoDeObra = detalhe?.maoDeObra ?? 0;
+    return {
+      ...linhaBase(a),
+      peca,
+      custoPeca,
+      valorTotalPeca,
+      maoDeObra,
+      valorTotalReparo: valorTotalPeca + maoDeObra,
+      statusOrcamento: "RECUSADO",
+      motivoReprova: a.motivo_reprova,
+    };
+  });
+
   return {
     ok: true,
-    linhas: [...linhasAprovadosIniciais, ...linhasContraProposta],
+    // "Já reprovados" sempre no FINAL da planilha (pedido explícito).
+    linhas: [...linhasAprovadosIniciais, ...linhasContraProposta, ...linhasJaReprovados],
     idsAprovados,
     idsReprovados,
     quantidadeAprovadosIniciais: linhasAprovadosIniciais.length,
     quantidadeContraPropostaAceita: idsAprovados.length,
     quantidadeReprovados: idsReprovados.length,
+    quantidadeJaReprovados: linhasJaReprovados.length,
   };
 }

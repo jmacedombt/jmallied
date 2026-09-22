@@ -18,6 +18,7 @@ type Geracao = {
   quantidade_aprovados_iniciais: number;
   quantidade_contra_proposta_aceita: number;
   quantidade_reprovados: number;
+  quantidade_ja_reprovados: number;
   nome_arquivo: string;
   usuarios: Usuario;
 };
@@ -113,6 +114,7 @@ export default function PainelContraPropostas() {
                 <th className="px-4 py-2.5 font-medium text-right">Aprovados iniciais</th>
                 <th className="px-4 py-2.5 font-medium text-right">Contra Proposta aceita</th>
                 <th className="px-4 py-2.5 font-medium text-right">Recusados</th>
+                <th className="px-4 py-2.5 font-medium text-right">Já reprovados</th>
                 <th className="px-4 py-2.5 font-medium text-right">Planilha</th>
               </tr>
             </thead>
@@ -136,6 +138,9 @@ export default function PainelContraPropostas() {
                   </td>
                   <td className="px-4 py-2.5 text-right" style={{ color: "#ef4444" }}>
                     {g.quantidade_reprovados}
+                  </td>
+                  <td className="px-4 py-2.5 text-right" style={{ color: "var(--muted)" }}>
+                    {g.quantidade_ja_reprovados}
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     <button

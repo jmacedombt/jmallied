@@ -76,6 +76,7 @@ export async function POST(request: Request) {
     quantidade_aprovados_iniciais: preparo.quantidadeAprovadosIniciais,
     quantidade_contra_proposta_aceita: preparo.quantidadeContraPropostaAceita,
     quantidade_reprovados: preparo.quantidadeReprovados,
+    quantidade_ja_reprovados: preparo.quantidadeJaReprovados,
     nome_arquivo: nomeArquivo,
     dados: { linhas: preparo.linhas },
   });
@@ -96,6 +97,7 @@ export async function POST(request: Request) {
       "X-Quantidade-Aprovados-Iniciais": String(preparo.quantidadeAprovadosIniciais),
       "X-Quantidade-Contra-Proposta-Aceita": String(preparo.quantidadeContraPropostaAceita),
       "X-Quantidade-Reprovados": String(preparo.quantidadeReprovados),
+      "X-Quantidade-Ja-Reprovados": String(preparo.quantidadeJaReprovados),
     },
   });
 }
