@@ -243,7 +243,7 @@ export default function PainelContraProposta({
                 <td className="px-4 py-2.5 text-right" style={{ color: "var(--muted)" }}>
                   {formatarReal(valorEnviadoDe(a))}
                 </td>
-                <td className="px-4 py-2.5 text-right font-semibold" style={{ color: "#2563eb" }}>
+                <td className="px-4 py-2.5 text-right font-semibold" style={{ color: "#16a34a" }}>
                   {a.contra_proposta_valor_recebido_allied != null
                     ? formatarReal(a.contra_proposta_valor_recebido_allied)
                     : "—"}

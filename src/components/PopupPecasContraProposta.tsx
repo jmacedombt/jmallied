@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle2, Loader2, PackageSearch, Save, X, XCircle } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Check, CheckCircle2, Loader2, PackageSearch, Save, Sparkles, X, XCircle } from "lucide-react";
 import { calcularResumoContraProposta, type PecaContraProposta } from "@/lib/orcamentos";
 import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupConfirmar from "@/components/PopupConfirmar";
@@ -74,10 +74,44 @@ export default function PopupPecasContraProposta({
 
   const resumo = calcularResumoContraProposta(pecas, maoDeObra);
 
+  // Sugestão de redução proporcional (pedido explícito) — parte sempre
+  // do "Valor original" de cada peça (nunca do que já foi editado
+  // manualmente, confirmado com o Rafael), reduz cada peça na mesma
+  // proporção (nunca soma tudo e divide igual pela quantidade) e nunca
+  // toca na mão de obra: alvo = Contra Proposta recebida da Allied menos
+  // a mão de obra atual, dividido proporcionalmente pelo valor original
+  // de cada peça. Os centavos que sobram/faltam do arredondamento vão
+  // todos pra peça de maior valor original, pra soma bater exato (mais
+  // fácil de auditar do que espalhar 1 centavo em várias peças).
+  const alvoPecas = aparelho.valorRecebidoAllied != null ? aparelho.valorRecebidoAllied - maoDeObra : null;
+  const baseSugestao = useMemo(() => pecas.reduce((soma, p) => soma + p.vendaOriginal, 0), [pecas]);
+  const sugestoesPecas = useMemo<number[] | null>(() => {
+    if (alvoPecas == null || alvoPecas < 0 || baseSugestao <= 0 || pecas.length === 0) return null;
+    const razao = alvoPecas / baseSugestao;
+    const valores = pecas.map((p) => Math.round(p.vendaOriginal * razao * 100) / 100);
+    const somaArredondada = valores.reduce((soma, v) => soma + v, 0);
+    const diferenca = Math.round((alvoPecas - somaArredondada) * 100) / 100;
+    if (diferenca !== 0) {
+      let indiceMaiorValor = 0;
+      for (let i = 1; i < pecas.length; i++) {
+        if (pecas[i].vendaOriginal > pecas[indiceMaiorValor].vendaOriginal) indiceMaiorValor = i;
+      }
+      valores[indiceMaiorValor] = Math.round((valores[indiceMaiorValor] + diferenca) * 100) / 100;
+    }
+    return valores;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alvoPecas, baseSugestao, pecas.length]);
+
   function aoEditarPeca(indice: number, texto: string) {
     setTextosVenda((atual) => atual.map((t, i) => (i === indice ? texto : t)));
     const valor = paraNumero(texto);
     setPecas((atual) => atual.map((p, i) => (i === indice ? { ...p, vendaNova: valor } : p)));
+  }
+
+  function aplicarSugestao(indice: number) {
+    const sugestao = sugestoesPecas?.[indice];
+    if (sugestao == null) return;
+    aoEditarPeca(indice, formatarInputNumero(sugestao));
   }
 
   function aoEditarMaoDeObra(texto: string) {
@@ -150,7 +184,7 @@ export default function PopupPecasContraProposta({
           <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
             Contra Proposta
           </p>
-          <p className="text-base font-semibold" style={{ color: "#2563eb" }}>
+          <p className="text-base font-bold" style={{ color: "#16a34a" }}>
             {aparelho.valorRecebidoAllied != null ? formatarReal(aparelho.valorRecebidoAllied) : "—"}
           </p>
         </div>
@@ -208,59 +242,95 @@ export default function PopupPecasContraProposta({
             Esse orçamento não tem nenhuma peça lançada — só a mão de obra abaixo entra na Contra Proposta.
           </p>
         ) : (
-          <div className="rounded-xl border overflow-hidden mb-4" style={{ borderColor: "var(--line)" }}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
-                  <th className="px-3 py-2 font-medium">#</th>
-                  <th className="px-3 py-2 font-medium">Código da peça</th>
-                  <th className="px-3 py-2 font-medium">Peça Solução</th>
-                  <th className="px-3 py-2 font-medium text-right">Custo</th>
-                  <th className="px-3 py-2 font-medium text-right">Imposto (ICMS)</th>
-                  <th className="px-3 py-2 font-medium text-right">Valor original</th>
-                  <th className="px-3 py-2 font-medium text-right">Novo valor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pecas.map((p, i) => (
-                  <tr key={p.posicao} className="border-t" style={{ borderColor: "var(--line)" }}>
-                    <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
-                      {p.posicao}
-                    </td>
-                    <td className="px-3 py-2 font-mono" style={{ color: "var(--ink)" }}>
-                      {p.codigo}
-                    </td>
-                    <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
-                      {solucoesPorPartNumber[p.codigo] ?? "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
-                      {formatarReal(p.custo)}
-                    </td>
-                    <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
-                      {formatarReal(p.imposto)}
-                    </td>
-                    <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
-                      {formatarReal(p.vendaOriginal)}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {podeEditar ? (
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={textosVenda[i]}
-                          onChange={(e) => aoEditarPeca(i, e.target.value)}
-                          className="rounded-md border px-2 py-1 text-right text-sm outline-none"
-                          style={estiloInput}
-                        />
-                      ) : (
-                        <span style={{ color: "var(--ink)" }}>{formatarReal(p.vendaNova)}</span>
-                      )}
-                    </td>
+          <>
+            {podeEditar && aparelho.valorRecebidoAllied == null && (
+              <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>
+                Sem valor recebido da Allied ainda — assim que a planilha trouxer a Contra Proposta, a sugestão de
+                redução por peça aparece aqui.
+              </p>
+            )}
+            {podeEditar && aparelho.valorRecebidoAllied != null && alvoPecas != null && alvoPecas < 0 && (
+              <p className="text-xs mb-2" style={{ color: "#ea580c" }}>
+                A mão de obra atual ({formatarReal(maoDeObra)}) já é maior que a Contra Proposta recebida
+                ({formatarReal(aparelho.valorRecebidoAllied)}) — não dá pra sugerir redução só nas peças nesse caso.
+              </p>
+            )}
+            <div className="rounded-xl border overflow-hidden mb-4" style={{ borderColor: "var(--line)" }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
+                    <th className="px-3 py-2 font-medium">#</th>
+                    <th className="px-3 py-2 font-medium">Código da peça</th>
+                    <th className="px-3 py-2 font-medium">Peça Solução</th>
+                    <th className="px-3 py-2 font-medium text-right">Custo</th>
+                    <th className="px-3 py-2 font-medium text-right">Imposto (ICMS)</th>
+                    <th className="px-3 py-2 font-medium text-right">Valor original</th>
+                    <th className="px-3 py-2 font-medium text-right">Novo valor</th>
+                    {sugestoesPecas && <th className="px-3 py-2 font-medium text-right">Sugestão</th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {pecas.map((p, i) => (
+                    <tr key={p.posicao} className="border-t" style={{ borderColor: "var(--line)" }}>
+                      <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
+                        {p.posicao}
+                      </td>
+                      <td className="px-3 py-2 font-mono" style={{ color: "var(--ink)" }}>
+                        {p.codigo}
+                      </td>
+                      <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
+                        {solucoesPorPartNumber[p.codigo] ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
+                        {formatarReal(p.custo)}
+                      </td>
+                      <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
+                        {formatarReal(p.imposto)}
+                      </td>
+                      <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
+                        {formatarReal(p.vendaOriginal)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {podeEditar ? (
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={textosVenda[i]}
+                            onChange={(e) => aoEditarPeca(i, e.target.value)}
+                            className="rounded-md border px-2 py-1 text-right text-sm outline-none"
+                            style={estiloInput}
+                          />
+                        ) : (
+                          <span style={{ color: "var(--ink)" }}>{formatarReal(p.vendaNova)}</span>
+                        )}
+                      </td>
+                      {sugestoesPecas && (
+                        <td className="px-3 py-2 text-right">
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 font-semibold" style={{ color: "#16a34a" }}>
+                              <Sparkles size={12} />
+                              {formatarReal(sugestoesPecas[i])}
+                            </span>
+                            {podeEditar && (
+                              <button
+                                type="button"
+                                title="Aplicar sugestão"
+                                onClick={() => aplicarSugestao(i)}
+                                className="inline-flex items-center justify-center w-6 h-6 rounded-md border transition hover:border-[#16a34a]"
+                                style={{ borderColor: "var(--line)", color: "#16a34a" }}
+                              >
+                                <Check size={13} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         <div className="rounded-xl border p-4 space-y-1.5 text-sm" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
@@ -297,6 +367,14 @@ export default function PopupPecasContraProposta({
           <div className="flex items-center justify-between">
             <span style={{ color: "var(--muted)" }}>Orçamento Enviado</span>
             <strong style={{ color: "var(--ink)" }}>{formatarReal(aparelho.valorEnviado)}</strong>
+          </div>
+          <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
+            <span style={{ color: "var(--ink)" }}>Lucro de Peças</span>
+            <strong style={{ color: corPercentualLucro(resumo.percLucroPecas) }}>{formatarReal(resumo.lucroLiquidoPeca)}</strong>
+          </div>
+          <div className="flex items-center justify-between">
+            <span style={{ color: "var(--ink)" }}>% Lucro de Peças</span>
+            <strong style={{ color: corPercentualLucro(resumo.percLucroPecas) }}>{formatarPercentual(resumo.percLucroPecas)}</strong>
           </div>
           <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
             <span style={{ color: "var(--ink)" }}>Lucro Total</span>
