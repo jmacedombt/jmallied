@@ -19,15 +19,36 @@ import {
 const SLUGS_OPERACIONAL_ALLIED = STATUS_OPERACIONAL.map((s) => s.slug);
 
 // chamadas de API que ALLIED pode fazer: o botão "Exportar backlog" da
-// tela Backlog (sem nenhuma coluna de custo) e o download de uma versão
+// tela Backlog (sem nenhuma coluna de custo), o download de uma versão
 // do Relatório BID já marcada como enviada (a própria rota confere de
 // novo que aquele id está mesmo marcado como enviado antes de
-// responder — ver .../relatorio/[id]/download/route.ts).
-const APIS_PERMITIDAS_ALLIED = ["/api/operacional/backlog/exportar-allied"];
+// responder — ver .../relatorio/[id]/download/route.ts), e agora
+// também o histórico "Modelo de Retorno" (pedido explícito — só venda
+// de peça/mão de obra, nunca custo/BID, ver lib/modeloRetorno.ts): a
+// listagem (GET) e o download de uma planilha específica (GET). O POST
+// dessa mesma rota de listagem (registrar uma nova emissão) continua de
+// fora — a própria rota confere de novo, no servidor, que só quem já
+// lança NF pode gravar, então nem precisa constar aqui.
+// "/api/auth/marcar-login" e "/api/auth/heartbeat" (migration 0058):
+// ALLIED também é rastreado (login/atividade) e também é deslogado
+// sozinho depois de 1h parado (pedido explícito) — só a LISTAGEM
+// "/api/usuarios/online" é que fica de fora pra esse cargo, então nem
+// entra nessa lista.
+const APIS_PERMITIDAS_ALLIED = [
+  "/api/operacional/backlog/exportar-allied",
+  "/api/operacional/modelo-retorno",
+  "/api/auth/marcar-login",
+  "/api/auth/heartbeat",
+];
 const REGEX_API_DOWNLOAD_BID_ALLIED = /^\/api\/bases\/bid\/relatorio\/[^/]+\/download$/;
+const REGEX_API_DOWNLOAD_MODELO_RETORNO_ALLIED = /^\/api\/operacional\/modelo-retorno\/[^/]+\/download$/;
 
 function apiPermitidaParaAllied(path: string): boolean {
-  return APIS_PERMITIDAS_ALLIED.includes(path) || REGEX_API_DOWNLOAD_BID_ALLIED.test(path);
+  return (
+    APIS_PERMITIDAS_ALLIED.includes(path) ||
+    REGEX_API_DOWNLOAD_BID_ALLIED.test(path) ||
+    REGEX_API_DOWNLOAD_MODELO_RETORNO_ALLIED.test(path)
+  );
 }
 
 // páginas de Métricas liberadas pro ALLIED (pedido explícito) — só a
@@ -43,6 +64,7 @@ const ROTA_BID_ALLIED = "/bases/bid/versoes-enviadas";
 function rotaPermitidaParaAllied(path: string): boolean {
   if (path === "/operacional") return true;
   if (path === "/operacional/backlog" || path.startsWith("/operacional/backlog/")) return true;
+  if (path === "/operacional/modelo-retorno" || path.startsWith("/operacional/modelo-retorno/")) return true;
   if (ROTAS_METRICAS_ALLIED.some((rota) => path === rota || path.startsWith(`${rota}/`))) return true;
   if (path === ROTA_BID_ALLIED || path.startsWith(`${ROTA_BID_ALLIED}/`)) return true;
   return SLUGS_OPERACIONAL_ALLIED.some(

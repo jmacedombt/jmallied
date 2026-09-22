@@ -2,12 +2,16 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import PainelModeloRetorno from "@/components/PainelModeloRetorno";
 import { podeLancarNfProdutoEntregue } from "@/lib/orcamentos";
+import { isAllied } from "@/lib/usuarios";
 
 // Novo submenu "Modelo de Retorno" dentro de Operacional (pedido
 // explícito) — histórico de toda planilha "Modelo de Retorno" emitida
 // em Ag. Emissão de Nota Fiscal, com data/hora, disponível por 60 dias.
 // Mesma permissão de quem já lança as NFs/gera a planilha naquela tela
-// (podeLancarNfProdutoEntregue — Supervisor/Gerente/is_master).
+// (podeLancarNfProdutoEntregue — Supervisor/Gerente/is_master) — e
+// agora também o login ALLIED (pedido explícito): a planilha só traz
+// venda de peça/mão de obra, nunca custo/BID, então não fere a regra de
+// nunca mostrar custo pro parceiro.
 export default async function ModeloRetornoPage() {
   const supabase = createClient();
   const {
@@ -30,7 +34,7 @@ export default async function ModeloRetornoPage() {
       tituloInfo="Histórico das planilhas 'Modelo de Retorno' geradas em Ag. Emissão de Nota Fiscal — cada emissão fica registrada aqui com data e hora, disponível por 60 dias."
       perfil={perfil}
     >
-      {podeLancarNfProdutoEntregue(perfil) ? (
+      {podeLancarNfProdutoEntregue(perfil) || isAllied(perfil) ? (
         <PainelModeloRetorno />
       ) : (
         <p

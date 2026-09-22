@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { podeLancarNfProdutoEntregue } from "@/lib/orcamentos";
+import { isAllied } from "@/lib/usuarios";
 import { gerarBufferModeloRetorno, type SnapshotModeloRetorno } from "@/lib/modeloRetorno";
 
 const RETENCAO_DIAS = 60;
@@ -27,7 +28,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const admin = createAdminClient();
   const { data: perfil } = await admin.from("usuarios").select("cargo, is_master").eq("id", user.id).single();
-  if (!podeLancarNfProdutoEntregue(perfil)) {
+  // ALLIED também pode baixar (pedido explícito) — a planilha só tem
+  // venda de peça/mão de obra, nunca custo/BID.
+  if (!podeLancarNfProdutoEntregue(perfil) && !isAllied(perfil)) {
     return NextResponse.json(
       { error: "Seu cargo não tem permissão pra acessar o histórico de Modelo de Retorno." },
       { status: 403 }

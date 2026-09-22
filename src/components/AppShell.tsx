@@ -35,6 +35,7 @@ import {
   TrendingUp,
   Users,
   Wallet,
+  Wifi,
   Wrench,
   X,
 } from "lucide-react";
@@ -42,6 +43,7 @@ import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import BotaoTema from "@/components/BotaoTema";
 import ColorPickerSistema from "@/components/ColorPickerSistema";
+import InactivityGuard from "@/components/InactivityGuard";
 import { podeConfirmarAnaliseEmLote, podeLancarNfProdutoEntregue } from "@/lib/orcamentos";
 import { isAllied, operacionalRestrito, financeiroRestrito } from "@/lib/usuarios";
 import { podeAcessarFinanceiro } from "@/lib/financeiro";
@@ -184,6 +186,11 @@ const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
     itens: [
       { href: "/operacional", label: "Painel", icone: LayoutGrid },
       { href: "/operacional/backlog", label: "Backlog", icone: ClipboardList },
+      // "Modelo de Retorno" liberado pro ALLIED (pedido explícito) — a
+      // planilha só tem venda de peça/mão de obra, nunca custo/BID (ver
+      // lib/modeloRetorno.ts e a rota de API, que agora aceita esse
+      // cargo só pra GET).
+      { href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet },
     ],
   },
   {
@@ -357,6 +364,10 @@ export default function AppShell({
 
   return (
     <div className="min-h-screen" style={{ background: "var(--canvas)" }}>
+      {/* Logout automático por inatividade (1h, pedido explícito) — vale
+          pra qualquer login, inclusive ALLIED. */}
+      <InactivityGuard />
+
       {/* backdrop mobile */}
       {sidebarAberta && (
         <div
@@ -414,6 +425,23 @@ export default function AppShell({
             >
               <Home size={17} />
               Início
+            </Link>
+          )}
+
+          {/* "Usuários Online" (pedido explícito) — item avulso, fora de
+              qualquer grupo, pra ficar visível pra TODO login que não
+              seja ALLIED, inclusive os cargos restritos por etapa
+              (Operacional, Triagem/OQC) e Financeiro — nenhum dos 3 vê
+              o grupo "Sistema", mas todos devem ver esse item. */}
+          {!allied && (
+            <Link
+              href="/usuarios-online"
+              onClick={() => setSidebarAberta(false)}
+              className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
+              style={pathname === "/usuarios-online" ? ESTILO_ATIVO : { color: "var(--muted)" }}
+            >
+              <Wifi size={17} />
+              Usuários Online
             </Link>
           )}
 

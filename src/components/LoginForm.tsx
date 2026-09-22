@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { usuarioParaEmailTecnico } from "@/lib/auth";
+import { CHAVE_AVISO_LOGOUT_INATIVIDADE } from "./InactivityGuard";
 import PasswordInput from "./PasswordInput";
 import PopupSolicitarResetSenha from "./PopupSolicitarResetSenha";
 
@@ -16,6 +18,22 @@ export default function LoginForm() {
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [solicitandoReset, setSolicitandoReset] = useState(false);
+  const [avisoInatividade, setAvisoInatividade] = useState(false);
+
+  // Veio parar aqui porque o InactivityGuard encerrou a sessão sozinho
+  // (1h sem nenhuma interação, pedido explícito) — mostra o aviso uma
+  // única vez e limpa a marca, pra não reaparecer num login normal
+  // logo em seguida.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(CHAVE_AVISO_LOGOUT_INATIVIDADE) === "1") {
+        sessionStorage.removeItem(CHAVE_AVISO_LOGOUT_INATIVIDADE);
+        setAvisoInatividade(true);
+      }
+    } catch {
+      // sem sessionStorage, só não mostra o aviso — não afeta o login em si
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,13 +48,19 @@ export default function LoginForm() {
       password: senha,
     });
 
-    setCarregando(false);
-
     if (error) {
+      setCarregando(false);
       setErro("Usuário ou senha inválidos.");
       return;
     }
 
+    // Registra data/hora desse login (usuarios_atividade, migration
+    // 0058) — alimenta "Usuários Online" e o próprio logout automático
+    // não depende disso pra funcionar, então nunca trava a entrada por
+    // causa desse POST (ver a rota, que já é tolerante a falha sozinha).
+    fetch("/api/auth/marcar-login", { method: "POST" }).catch(() => {});
+
+    setCarregando(false);
     router.refresh();
     router.push("/dashboard");
   }
@@ -44,6 +68,14 @@ export default function LoginForm() {
   return (
     <>
     <form onSubmit={handleSubmit} className="w-full space-y-5">
+      {avisoInatividade && (
+        <p className="flex items-start gap-2 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+          Sua sessão foi encerrada automaticamente após um período de inatividade superior a 1 hora. Por segurança,
+          faça login novamente para continuar.
+        </p>
+      )}
+
       <div className="space-y-1.5">
         <label htmlFor="usuario" className="text-xs font-medium uppercase tracking-wide text-allied-silver/70">
           Login

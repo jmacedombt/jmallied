@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { podeLancarNfProdutoEntregue } from "@/lib/orcamentos";
+import { isAllied } from "@/lib/usuarios";
 import { type ItemModeloRetorno } from "@/lib/modeloRetorno";
 
 /** Retenção de 60 dias (pedido explícito) — só um filtro de data na
@@ -13,7 +14,13 @@ function corteRetencaoIso(): string {
   return new Date(Date.now() - RETENCAO_DIAS * 24 * 60 * 60 * 1000).toISOString();
 }
 
-async function autenticarEAutorizar() {
+/** `permitirAllied`: true só na LISTAGEM (GET) — o login ALLIED agora
+ * também enxerga o histórico "Modelo de Retorno" (pedido explícito: a
+ * planilha só tem venda de peça/mão de obra, nunca custo/BID). O
+ * registro de uma nova emissão (POST) continua de fora — ninguém do
+ * ALLIED aciona "Emitir planilha de retorno", então nem precisa passar
+ * true aqui. */
+async function autenticarEAutorizar(permitirAllied = false) {
   const supabase = createClient();
   const {
     data: { user },
@@ -24,7 +31,7 @@ async function autenticarEAutorizar() {
 
   const admin = createAdminClient();
   const { data: perfil } = await admin.from("usuarios").select("cargo, is_master").eq("id", user.id).single();
-  if (!podeLancarNfProdutoEntregue(perfil)) {
+  if (!podeLancarNfProdutoEntregue(perfil) && !(permitirAllied && isAllied(perfil))) {
     return {
       erro: NextResponse.json(
         { error: "Seu cargo não tem permissão pra acessar o histórico de Modelo de Retorno." },
@@ -42,7 +49,7 @@ async function autenticarEAutorizar() {
 // pode ser grande) — só o resumo mostrado na tabela; o snapshot
 // completo só é lido na hora do download (ver [id]/download/route.ts).
 export async function GET() {
-  const auth = await autenticarEAutorizar();
+  const auth = await autenticarEAutorizar(true);
   if ("erro" in auth) return auth.erro;
 
   const { data, error } = await auth.admin
