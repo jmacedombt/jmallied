@@ -41,6 +41,7 @@ export type AparelhoContraProposta = {
 export default function PopupPecasContraProposta({
   aparelho,
   podeEditar = true,
+  solucoesPorPartNumber = {},
   onAtualizado,
   onFechar,
 }: {
@@ -49,6 +50,10 @@ export default function PopupPecasContraProposta({
    * Abertura) — os campos viram texto e o botão "Confirmar alteração"
    * some. */
   podeEditar?: boolean;
+  /** "Peça Solução" (BID) de cada código — pedido explícito, mostrada em
+   * toda tela que lista as peças de um atendimento (ver
+   * buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
   onAtualizado: () => void;
   onFechar: () => void;
 }) {
@@ -151,6 +156,7 @@ export default function PopupPecasContraProposta({
                 <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
                   <th className="px-3 py-2 font-medium">#</th>
                   <th className="px-3 py-2 font-medium">Código da peça</th>
+                  <th className="px-3 py-2 font-medium">Peça Solução</th>
                   <th className="px-3 py-2 font-medium text-right">Valor original</th>
                   <th className="px-3 py-2 font-medium text-right">Novo valor</th>
                 </tr>
@@ -163,6 +169,9 @@ export default function PopupPecasContraProposta({
                     </td>
                     <td className="px-3 py-2 font-mono" style={{ color: "var(--ink)" }}>
                       {p.codigo}
+                    </td>
+                    <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
+                      {solucoesPorPartNumber[p.codigo] ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
                       {formatarReal(p.vendaOriginal)}

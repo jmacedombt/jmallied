@@ -47,6 +47,7 @@ export default function PainelEtapaSimples({
   permiteReprovar,
   perfil = null,
   mostrarNotasFiscais = false,
+  solucoesPorPartNumber = {},
   mensagemVazia = "Nenhum aparelho nessa etapa ainda.",
 }: {
   aparelhos: AparelhoEtapaSimples[];
@@ -56,6 +57,10 @@ export default function PainelEtapaSimples({
    * pra quem tem permissão) as NFs lançadas em Ag. Emissão de Nota
    * Fiscal (ver PopupAtendimentoPecas.tsx e migration 0048). */
   mostrarNotasFiscais?: boolean;
+  /** "Peça Solução" (BID) de cada código — pedido explícito, mostrada em
+   * toda tela que lista as peças de um atendimento (ver
+   * buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
@@ -169,6 +174,7 @@ export default function PainelEtapaSimples({
           podeEditarNf={podeEditarNf}
           onNfAtualizada={() => router.refresh()}
           podeRetroceder={podeRetroceder}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           onRetrocedido={() => {
             setDetalhe(null);
             router.refresh();

@@ -55,6 +55,7 @@ export default function PopupAtendimentoPecas({
   onNfAtualizada,
   podeRetroceder = false,
   onRetrocedido,
+  solucoesPorPartNumber = {},
 }: {
   aparelho: AparelhoAtendimentoPecas;
   onFechar: () => void;
@@ -70,6 +71,10 @@ export default function PopupAtendimentoPecas({
    * `notasFiscais` (aparelho já em Produto Entregue). */
   podeRetroceder?: boolean;
   onRetrocedido?: () => void;
+  /** "Peça Solução" (BID) de cada código — pedido explícito, mostrada em
+   * toda tela que lista as peças de um atendimento (ver
+   * buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
 }) {
   const [copiado, setCopiado] = useState<string | null>(null);
   const [editandoNf, setEditandoNf] = useState<null | { tipo: "mao_de_obra" | "pecas" | "retorno"; titulo: string; valorInicial: InfoNotaFiscal | null }>(
@@ -178,6 +183,7 @@ export default function PopupAtendimentoPecas({
                 <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
                   <th className="px-3 py-2 font-medium">Posição</th>
                   <th className="px-3 py-2 font-medium">Part Number</th>
+                  <th className="px-3 py-2 font-medium">Peça Solução</th>
                   <th className="px-3 py-2 font-medium text-right">Custo</th>
                   <th className="px-3 py-2 font-medium text-right">Venda de Peça</th>
                 </tr>
@@ -205,6 +211,9 @@ export default function PopupAtendimentoPecas({
                           )}
                         </button>
                       </span>
+                    </td>
+                    <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
+                      {solucoesPorPartNumber[p.codigo] ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
                       {formatarReal(p.custo)}

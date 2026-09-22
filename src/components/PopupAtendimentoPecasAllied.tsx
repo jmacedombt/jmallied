@@ -114,6 +114,7 @@ export default function PopupAtendimentoPecasAllied({
                     <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
                       <th className="px-3 py-2 font-medium">Posição</th>
                       <th className="px-3 py-2 font-medium">Part Number</th>
+                      <th className="px-3 py-2 font-medium">Peça Solução</th>
                       <th className="px-3 py-2 font-medium text-right">Venda de Peça</th>
                     </tr>
                   </thead>
@@ -142,6 +143,9 @@ export default function PopupAtendimentoPecasAllied({
                               </button>
                             )}
                           </div>
+                        </td>
+                        <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
+                          {p.pecaSolucao ?? "—"}
                         </td>
                         <td className="px-3 py-2 text-right" style={{ color: "var(--ink)" }}>
                           {formatarReal(p.vendaPeca)}

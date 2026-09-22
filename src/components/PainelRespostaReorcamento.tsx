@@ -61,6 +61,7 @@ export default function PainelRespostaReorcamento({
   icmsPercentual,
   configMaoDeObra,
   topo,
+  solucoesPorPartNumber = {},
   mensagemVazia = "Nenhum aparelho em 4 - Ag. Resposta de Reorçamento no momento.",
 }: {
   aparelhos: AparelhoRespostaReorcamento[];
@@ -69,6 +70,10 @@ export default function PainelRespostaReorcamento({
   icmsPercentual: number;
   configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca">;
   topo: React.ReactNode;
+  /** "Peça Solução" (BID) de cada código — pedido explícito, mostrada em
+   * toda tela que lista as peças de um atendimento (ver
+   * buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
@@ -253,7 +258,13 @@ export default function PainelRespostaReorcamento({
         />
       )}
 
-      {detalheSimples && <PopupAtendimentoPecas aparelho={detalheSimples} onFechar={() => setDetalheSimples(null)} />}
+      {detalheSimples && (
+        <PopupAtendimentoPecas
+          aparelho={detalheSimples}
+          onFechar={() => setDetalheSimples(null)}
+          solucoesPorPartNumber={solucoesPorPartNumber}
+        />
+      )}
 
       {detalheReorcamento && detalheReorcamento.reorcamento_detalhe && (
         <PopupDetalheReorcamento
@@ -282,6 +293,7 @@ export default function PainelRespostaReorcamento({
           configMaoDeObra={configMaoDeObra}
           podeCadastrarBid={podeCadastrarBid}
           podeEditar={!apenasVisualizacao}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           onFechar={() => setDetalheReorcamento(null)}
           onAtualizado={() => {
             setDetalheReorcamento(null);

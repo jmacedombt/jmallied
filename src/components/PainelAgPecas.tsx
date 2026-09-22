@@ -36,10 +36,15 @@ export default function PainelAgPecas({
   topo,
   perfil = null,
   mensagemVazia = "Nenhum aparelho em 5 - Ag. Peças no momento.",
+  solucoesPorPartNumber = {},
 }: {
   aparelhos: AparelhoAgPecas[];
   topo: React.ReactNode;
   perfil?: Perfil;
+  /** "Peça Solução" (BID) de cada código — pedido explícito, mostrada em
+   * toda tela que lista as peças de um atendimento (ver
+   * buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
@@ -549,7 +554,13 @@ export default function PainelAgPecas({
         />
       )}
 
-      {detalhe && <PopupAtendimentoPecas aparelho={detalhe} onFechar={() => setDetalhe(null)} />}
+      {detalhe && (
+        <PopupAtendimentoPecas
+          aparelho={detalhe}
+          onFechar={() => setDetalhe(null)}
+          solucoesPorPartNumber={solucoesPorPartNumber}
+        />
+      )}
     </div>
   );
 }

@@ -181,6 +181,7 @@ export default function PainelValidacaoOrcamentos({
   pendentesLabel,
   topo,
   nfsComPendenciaEtapaAnterior = [],
+  solucoesPorPartNumber = {},
   mensagemVazia = "Nenhum aparelho em Validação de Orçamentos no momento.",
 }: {
   aparelhos: AparelhoValidacao[];
@@ -211,6 +212,9 @@ export default function PainelValidacaoOrcamentos({
    * pra travar "Confirmar Envio" do lote selecionado até TODO aparelho
    * dele já ter sido analisado. */
   nfsComPendenciaEtapaAnterior?: string[];
+  /** "Peça Solução" (BID) de cada código — pedido explícito, mostrada no
+   * pop-up de peças (ver buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
@@ -748,6 +752,7 @@ export default function PainelValidacaoOrcamentos({
           podeCadastrarPeca={podeCadastrarPeca}
           podeConfirmarSemPeca={podeConfirmarLote}
           podeAjustarValores={podeConfirmarLote}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           onAtualizado={() => router.refresh()}
           onFechar={() => setDetalhe(null)}
         />

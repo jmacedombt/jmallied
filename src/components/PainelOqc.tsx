@@ -39,10 +39,15 @@ export default function PainelOqc({
   topo,
   perfil = null,
   mensagemVazia = "Nenhum aparelho em OQC - Controle de Qualidade no momento.",
+  solucoesPorPartNumber = {},
 }: {
   aparelhos: AparelhoOqcLista[];
   topo: React.ReactNode;
   perfil?: Perfil;
+  /** "Peça Solução" (BID) de cada código — pedido explícito, mostrada em
+   * toda tela que lista as peças de um atendimento (ver
+   * buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
@@ -531,7 +536,13 @@ export default function PainelOqc({
         />
       )}
 
-      {detalhe && <PopupAtendimentoPecas aparelho={detalhe} onFechar={() => setDetalhe(null)} />}
+      {detalhe && (
+        <PopupAtendimentoPecas
+          aparelho={detalhe}
+          onFechar={() => setDetalhe(null)}
+          solucoesPorPartNumber={solucoesPorPartNumber}
+        />
+      )}
     </div>
   );
 }

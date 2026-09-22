@@ -32,11 +32,16 @@ export default function PainelProdutoEntregue({
   lotes,
   aparelhosPorLote,
   perfil,
+  solucoesPorPartNumber = {},
   mensagemVazia = "Nenhum lote com aparelho entregue ainda.",
 }: {
   lotes: LinhaProdutoEntregueLote[];
   aparelhosPorLote: Record<string, AparelhoEtapaSimples[]>;
   perfil: Perfil;
+  /** "Peça Solução" (BID) de cada código — pedido explícito, mostrada em
+   * toda tela que lista as peças de um atendimento (ver
+   * buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
   mensagemVazia?: string;
 }) {
   const [loteAberto, setLoteAberto] = useState<string | null>(null);
@@ -125,6 +130,7 @@ export default function PainelProdutoEntregue({
               permiteReprovar={false}
               perfil={perfil}
               mostrarNotasFiscais
+              solucoesPorPartNumber={solucoesPorPartNumber}
               mensagemVazia="Nenhum aparelho entregue nesse lote."
             />
           </div>

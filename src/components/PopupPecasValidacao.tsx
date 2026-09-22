@@ -100,6 +100,7 @@ export default function PopupPecasValidacao({
   podeCadastrarPeca,
   podeConfirmarSemPeca,
   podeAjustarValores,
+  solucoesPorPartNumber = {},
   onAtualizado,
   onFechar,
 }: {
@@ -112,6 +113,10 @@ export default function PopupPecasValidacao({
    * Líquido da Peça, Mão de obra e Lucro Total no resumo — mesmo cargo
    * que já confirma o envio de um lote. */
   podeAjustarValores: boolean;
+  /** "Peça Solução" (BID) de cada código — pedido explícito, mostrada
+   * em toda tela que lista as peças de um atendimento (ver
+   * buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
   onAtualizado: () => void;
   onFechar: () => void;
 }) {
@@ -376,6 +381,7 @@ export default function PopupPecasValidacao({
                 <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
                   <th className="px-3 py-2 font-medium">#</th>
                   <th className="px-3 py-2 font-medium">Código da peça</th>
+                  <th className="px-3 py-2 font-medium">Peça Solução</th>
                   <th className="px-3 py-2 font-medium text-right">Custo (Base Peças)</th>
                   <th className="px-3 py-2 font-medium text-right">Imposto (ICMS)</th>
                   <th className="px-3 py-2 font-medium text-right">Venda de Peças</th>
@@ -404,6 +410,9 @@ export default function PopupPecasValidacao({
                       </td>
                       <td className="px-3 py-2 font-mono" style={{ color: "var(--ink)" }}>
                         {p.codigo}
+                      </td>
+                      <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
+                        {solucoesPorPartNumber[p.codigo] ?? "—"}
                       </td>
                       <td className="px-3 py-2 text-right" style={{ color: p.custo == null ? "#ef4444" : "var(--ink)" }}>
                         {p.custo == null ? (

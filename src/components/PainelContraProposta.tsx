@@ -30,11 +30,15 @@ export default function PainelContraProposta({
   aparelhos,
   perfil,
   topo,
+  solucoesPorPartNumber = {},
   mensagemVazia = "Nenhum aparelho em Ag. Contra Proposta no momento.",
 }: {
   aparelhos: AparelhoContraPropostaLista[];
   perfil: { cargo: string; is_master: boolean } | null;
   topo: React.ReactNode;
+  /** "Peça Solução" (BID) de cada código — pedido explícito, mostrada no
+   * pop-up de peças (ver buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
@@ -213,6 +217,7 @@ export default function PainelContraProposta({
             jaAjustado: editando.contra_proposta_ajustado,
           }}
           podeEditar={!apenasVisualizacao}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           onAtualizado={() => {
             setEditando(null);
             router.refresh();

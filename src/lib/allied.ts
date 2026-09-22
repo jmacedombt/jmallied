@@ -15,6 +15,12 @@ export type PecaSeguraAllied = {
   posicao: string | null;
   codigo: string | null;
   vendaPeca: number | null;
+  /** "Peça Solução" (BID) — pedido explícito, mostrada em todo pop-up
+   * que lista as peças de um atendimento, também pro login ALLIED (ver
+   * buscarSolucoesPorPartNumber em lib/bid.ts). Buscada e embutida à
+   * parte, depois de buscarAparelhosAllied — a RPC em si continua sem
+   * trazer nenhuma coluna de custo/BID. */
+  pecaSolucao: string | null;
 };
 
 export type AparelhoOperacionalAllied = {

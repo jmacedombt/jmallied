@@ -35,7 +35,7 @@ import { type AparelhoEtapaSimples } from "@/components/PainelEtapaSimples";
 import PainelProdutoEntregue, { type LinhaProdutoEntregueLote } from "@/components/PainelProdutoEntregue";
 import PainelOperacionalAllied from "@/components/PainelOperacionalAllied";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
-import { buscarPrecosBidPorPartNumber, buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
+import { buscarPrecosBidPorPartNumber, buscarSolucoesPorPartNumber, buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
 import { pecasVigentes } from "@/lib/exportN3";
 import { isAllied } from "@/lib/usuarios";
 import { buscarAparelhosAllied, buscarProdutoEntreguePorLote } from "@/lib/allied";
@@ -163,7 +163,21 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     // com nenhuma linha, então busca as 2 e organiza em blocos separados
     // (Aprovados / Recusados), igual a tela interna PainelAgEmissaoNf.
     const ehEmissaoNf = status.slug === "ag-emissao-nf";
-    const aparelhos = await buscarAparelhosAllied(supabase, ehEmissaoNf ? [...GRUPO_STATUS_AG_EMISSAO_NF] : status.valor);
+    const aparelhosBrutos = await buscarAparelhosAllied(supabase, ehEmissaoNf ? [...GRUPO_STATUS_AG_EMISSAO_NF] : status.valor);
+
+    // "Peça Solução" (BID) de cada código dessa etapa (pedido explícito
+    // — mostrar também pro login ALLIED) — buscada à parte da RPC
+    // orcamentos_allied_listar, que continua sem trazer nenhuma coluna
+    // de custo/BID (ver lib/allied.ts).
+    const codigosAllied = aparelhosBrutos
+      .flatMap((a) => (a.pecas ?? []).map((p) => p.codigo))
+      .filter((c): c is string => !!c);
+    const solucoesAllied = await buscarSolucoesPorPartNumber(supabase, codigosAllied);
+    const aparelhos = aparelhosBrutos.map((a) => ({
+      ...a,
+      pecas: (a.pecas ?? []).map((p) => ({ ...p, pecaSolucao: p.codigo ? (solucoesAllied[p.codigo] ?? null) : null })),
+    }));
+
     const etapaNumerada = /^\d/.test(status.valor);
     return (
       <AppShell titulo={status.label} perfil={perfil}>
@@ -396,6 +410,10 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const overridesPorLote = await buscarOverridesMarkupPorLote(supabase, nfsDistintas);
     const ultimaImportacaoGspn: string | null = ultimaImportacaoGspnBruta?.importado_em ?? null;
 
+    // "Peça Solução" (BID) de cada código nessa etapa (pedido explícito
+    // — mostrar em todo pop-up que lista peças de um atendimento).
+    const solucoesPorPartNumber = await buscarSolucoesPorPartNumber(supabase, codigosUnicos);
+
     const listaAparelhos: AparelhoValidacao[] = listaBruta.map((a) => {
       const faixasDoLote = overridesPorLote[a.nf_remessa_allied] ?? faixasMarkup;
       const detalheAutomatico = calcularDetalheValidacao(
@@ -444,6 +462,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
           ultimaImportacaoGspn={ultimaImportacaoGspn}
           icmsPercentual={icmsPercentual}
           nfsComPendenciaEtapaAnterior={nfsComPendenciaEtapaAnterior}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           mensagemVazia="Nenhum aparelho em Validação de Orçamentos no momento."
           topo={voltar}
           pendentesLabel={
@@ -495,6 +514,9 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       .order("nf_remessa_allied", { ascending: true })
       .order("updated_at", { ascending: false });
 
+    const codigosContraProposta = (aparelhos ?? []).flatMap((a) => (a.contra_proposta_pecas ?? []).map((p: { codigo: string }) => p.codigo));
+    const solucoesPorPartNumber = await buscarSolucoesPorPartNumber(supabase, codigosContraProposta);
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelContraProposta
@@ -506,6 +528,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
               {badgeContador(aparelhos?.length ?? 0)}
             </>
           }
+          solucoesPorPartNumber={solucoesPorPartNumber}
           mensagemVazia="Nenhum aparelho em Ag. Contra Proposta no momento."
         />
       </AppShell>
@@ -542,6 +565,12 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 0),
     };
 
+    // "Peça Solução" (BID) das peças ORIGINAIS de cada aparelho (as
+    // adicionais do Reorçamento já têm seu próprio lookup ao vivo em
+    // PopupDetalheReorcamento.tsx) — pedido explícito.
+    const codigos4RespostaReorcamento = listaAparelhos.flatMap((a) => (a.validacao_snapshot?.pecas ?? []).map((p) => p.codigo));
+    const solucoesPorPartNumber = await buscarSolucoesPorPartNumber(supabase, codigos4RespostaReorcamento);
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelRespostaReorcamento
@@ -550,6 +579,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
           faixasMarkup={faixasMarkup}
           icmsPercentual={icmsPercentual}
           configMaoDeObra={configMaoDeObra}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           topo={
             <>
               {voltar}
@@ -628,11 +658,17 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
 
     const cardPrevisaoEl = await cardPrevisao(status.valor);
 
+    // "Peça Solução" (BID) de cada código nessa etapa (pedido explícito
+    // — mostrar em todo pop-up que lista peças de um atendimento).
+    const codigos5AgPecas = ((aparelhos ?? []) as AparelhoAgPecas[]).flatMap((a) => (a.validacao_snapshot?.pecas ?? []).map((p) => p.codigo));
+    const solucoesPorPartNumber = await buscarSolucoesPorPartNumber(supabase, codigos5AgPecas);
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelAgPecas
           aparelhos={(aparelhos ?? []) as AparelhoAgPecas[]}
           perfil={perfil}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           topo={
             <>
               {voltar}
@@ -700,6 +736,16 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
 
     const cardPrevisaoEl = await cardPrevisao(status.valor);
 
+    // "Peça Solução" (BID) de cada código nessa etapa (peça normal +
+    // peça adicional já preenchida — pedido explícito).
+    const codigos6AgReparo = listaAparelhos
+      .flatMap((a) => [
+        ...(a.validacao_snapshot?.pecas ?? []).map((p) => p.codigo),
+        a.peca_add_1, a.peca_add_2, a.peca_add_3, a.peca_add_4, a.peca_add_5,
+      ])
+      .filter((c): c is string => !!c);
+    const solucoesPorPartNumber = await buscarSolucoesPorPartNumber(supabase, codigos6AgReparo);
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelAgReparo
@@ -709,6 +755,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
           faixasMarkup={faixasMarkup}
           icmsPercentual={icmsPercentual}
           configMaoDeObra={configMaoDeObra}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           topo={
             <>
               {voltar}
@@ -734,11 +781,16 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
 
     const cardPrevisaoEl = await cardPrevisao(status.valor);
 
+    // "Peça Solução" (BID) de cada código nessa etapa (pedido explícito).
+    const codigosOqc = ((aparelhos ?? []) as AparelhoOqcLista[]).flatMap((a) => (a.validacao_snapshot?.pecas ?? []).map((p) => p.codigo));
+    const solucoesPorPartNumber = await buscarSolucoesPorPartNumber(supabase, codigosOqc);
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelOqc
           aparelhos={(aparelhos ?? []) as AparelhoOqcLista[]}
           perfil={perfil}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           topo={
             <>
               {voltar}
@@ -763,11 +815,19 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
 
     const cardPrevisaoEl = await cardPrevisao(status.valor);
 
+    // "Peça Solução" (BID) de cada código nessa etapa — mesma cascata de
+    // valor VIGENTE usada no "Exportar para o N3" (reorçamento aprovado
+    // > contra proposta ajustada > validação original, ver
+    // pecasVigentes em lib/exportN3.ts).
+    const partNumbers7Finalizado = ((aparelhos ?? []) as AparelhoReparoFinalizado[]).flatMap((a) => pecasVigentes(a).map((p) => p.codigo));
+    const solucoesPorPartNumber = await buscarSolucoesPorPartNumber(supabase, partNumbers7Finalizado);
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <PainelReparoFinalizado
           aparelhos={(aparelhos ?? []) as AparelhoReparoFinalizado[]}
           perfil={perfil}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           topo={
             <>
               {voltar}
@@ -868,6 +928,10 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       .map((l) => ({ nfRemessa: l.nf_remessa_allied, totalLote: l.totalLote, quantidadeEntregue: l.quantidadeEntregue }))
       .sort((a, b) => b.nfRemessa.localeCompare(a.nfRemessa, "pt-BR", { numeric: true }));
 
+    // "Peça Solução" (BID) de cada código dos aparelhos entregues (pedido explícito).
+    const codigosProdutoEntregue = entregues.flatMap((a) => ((a as AparelhoEtapaSimples).validacao_snapshot?.pecas ?? []).map((p) => p.codigo));
+    const solucoesPorPartNumber = await buscarSolucoesPorPartNumber(supabase, codigosProdutoEntregue);
+
     return (
       <AppShell titulo={status.label} perfil={perfil}>
         <div className="flex items-center flex-wrap">
@@ -878,6 +942,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
           lotes={lotes}
           aparelhosPorLote={aparelhosPorLote}
           perfil={perfil}
+          solucoesPorPartNumber={solucoesPorPartNumber}
           mensagemVazia="Nenhum lote com aparelho entregue ainda."
         />
       </AppShell>

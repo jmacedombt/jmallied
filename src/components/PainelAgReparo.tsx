@@ -58,6 +58,7 @@ export default function PainelAgReparo({
   faixasMarkup,
   icmsPercentual,
   configMaoDeObra,
+  solucoesPorPartNumber = {},
   mensagemVazia = "Nenhum aparelho em 6 - Ag. Reparo no momento.",
 }: {
   aparelhos: AparelhoAgReparo[];
@@ -70,6 +71,10 @@ export default function PainelAgReparo({
   faixasMarkup: FaixaMarkup[];
   icmsPercentual: number;
   configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca">;
+  /** "Peça Solução" (BID) de cada código — pedido explícito, mostrada em
+   * toda tela que lista as peças de um atendimento (ver
+   * buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
   mensagemVazia?: string;
 }) {
   const router = useRouter();
@@ -532,7 +537,13 @@ export default function PainelAgReparo({
         />
       )}
 
-      {detalhe && <PopupAtendimentoPecas aparelho={detalhe} onFechar={() => setDetalhe(null)} />}
+      {detalhe && (
+        <PopupAtendimentoPecas
+          aparelho={detalhe}
+          onFechar={() => setDetalhe(null)}
+          solucoesPorPartNumber={solucoesPorPartNumber}
+        />
+      )}
 
       {verHistoricoOqc && (
         <PopupHistoricoOqc

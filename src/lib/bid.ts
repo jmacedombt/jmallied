@@ -229,6 +229,24 @@ export async function buscarPrecosBidPorPartNumber(
   return resultado;
 }
 
+/** Só a "Peça Solução" (BID) de cada Part Number, sem custo nenhum —
+ * mesmo lookup de buscarPrecosBidPorPartNumber, só que devolve um mapa
+ * enxuto (codigo -> solução) pronto pra passar direto como prop pros
+ * pop-ups de peças (pedido explícito: mostrar a Peça Solução em todo
+ * pop-up que lista peças de um atendimento). Código sem solução
+ * cadastrada no BID simplesmente não entra no mapa. */
+export async function buscarSolucoesPorPartNumber(
+  supabase: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  partNumbers: (string | null)[]
+): Promise<Record<string, string>> {
+  const precos = await buscarPrecosBidPorPartNumber(supabase, partNumbers);
+  const solucoes: Record<string, string> = {};
+  for (const [codigo, info] of Object.entries(precos)) {
+    if (info.peca_solucao) solucoes[codigo] = info.peca_solucao;
+  }
+  return solucoes;
+}
+
 // ---- Override de Faixas de Markup por lote (ver migration 0050) ----
 
 /** Busca o override de Faixas de Markup gravado por lote (NF Remessa) —

@@ -163,6 +163,7 @@ export default function PopupPecasOrcamento({
               <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
                 <th className="px-3 py-2 font-medium">#</th>
                 <th className="px-3 py-2 font-medium">Peça</th>
+                <th className="px-3 py-2 font-medium">Peça Solução</th>
                 <th className="px-3 py-2 font-medium text-right">Valor</th>
               </tr>
             </thead>
@@ -181,6 +182,9 @@ export default function PopupPecasOrcamento({
                   </td>
                   <td className="px-3 py-2" style={{ color: peca ? "var(--ink)" : "var(--muted)" }}>
                     {peca || "—"}
+                  </td>
+                  <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
+                    {peca ? info?.peca_solucao ?? "—" : "—"}
                   </td>
                   <td className="px-3 py-2 text-right">
                     {!peca && <span style={{ color: "var(--muted)" }}>{formatarReal(custoGravado)}</span>}

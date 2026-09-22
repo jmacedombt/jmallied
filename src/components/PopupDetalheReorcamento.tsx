@@ -64,6 +64,7 @@ export default function PopupDetalheReorcamento({
   configMaoDeObra,
   podeCadastrarBid,
   podeEditar = true,
+  solucoesPorPartNumber = {},
   onFechar,
   onAtualizado,
 }: {
@@ -79,6 +80,11 @@ export default function PopupDetalheReorcamento({
    * Abertura) — trava a edição das peças adicionais mesmo se o
    * reorçamento ainda não foi enviado pra Allied. */
   podeEditar?: boolean;
+  /** "Peça Solução" (BID) de cada código das peças ORIGINAIS (as
+   * adicionais já têm seu próprio lookup ao vivo — pecaSolucaoMap acima)
+   * — pedido explícito, mostrada em toda tela que lista as peças de um
+   * atendimento (ver buscarSolucoesPorPartNumber em lib/bid.ts). */
+  solucoesPorPartNumber?: Record<string, string>;
   onFechar: () => void;
   onAtualizado: () => void;
 }) {
@@ -234,6 +240,7 @@ export default function PopupDetalheReorcamento({
                   <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
                     <th className="px-3 py-1.5 font-medium">Posição</th>
                     <th className="px-3 py-1.5 font-medium">Código</th>
+                    <th className="px-3 py-1.5 font-medium">Peça Solução</th>
                     <th className="px-3 py-1.5 font-medium text-right">Custo</th>
                     <th className="px-3 py-1.5 font-medium text-right">Venda de Peça</th>
                   </tr>
@@ -246,6 +253,9 @@ export default function PopupDetalheReorcamento({
                       </td>
                       <td className="px-3 py-1.5 font-mono" style={{ color: "var(--ink)" }}>
                         {p.codigo}
+                      </td>
+                      <td className="px-3 py-1.5" style={{ color: "var(--muted)" }}>
+                        {(p.codigo && solucoesPorPartNumber[p.codigo]) ?? "—"}
                       </td>
                       <td className="px-3 py-1.5 text-right" style={{ color: "var(--muted)" }}>
                         {formatarReal(p.custo)}
