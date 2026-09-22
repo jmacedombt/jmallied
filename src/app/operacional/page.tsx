@@ -14,14 +14,13 @@ import {
   CircleX,
   Receipt,
   PackageCheck,
-  Wallet,
+  Layers,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
 import { STATUS_OPERACIONAL, GRUPO_STATUS_AG_EMISSAO_NF } from "@/lib/orcamentos";
 import { buscarProdutoEntreguePorLote } from "@/lib/allied";
-import { formatarReal } from "@/lib/metricas";
 
 const ICONES: Record<string, typeof Inbox> = {
   "ag-abertura": Inbox,
@@ -78,11 +77,9 @@ export default async function OperacionalPage() {
     perfil = data;
   }
 
-  const [{ data: contagens }, { data: valorTotalAtivoBruto }] = await Promise.all([
-    supabase.rpc("orcamentos_metricas_status") as unknown as Promise<{ data: ContagemStatus[] | null }>,
-    supabase.rpc("orcamentos_valor_total_ativo") as unknown as Promise<{ data: number | string | null }>,
-  ]);
-  const valorTotalAtivo = valorTotalAtivoBruto != null ? Number(valorTotalAtivoBruto) : 0;
+  const { data: contagens } = (await supabase.rpc("orcamentos_metricas_status")) as {
+    data: ContagemStatus[] | null;
+  };
 
   const mapaContagens = new Map<string, number>();
   for (const c of contagens ?? []) {
@@ -122,11 +119,11 @@ export default async function OperacionalPage() {
         Clique em um Card para ver os aparelhos de cada etapa.
       </p>
 
-      {/* Card de destaque com o valor total das ordens de serviço em
-          aberto no sistema (pedido explícito) — soma o valor gravado na
-          importação de cada OS (existe em qualquer etapa), em TODOS os
-          status menos "Produto Entregue", que só acumula pra sempre e
-          não representa o que ainda está em aberto. */}
+      {/* Card de destaque com a quantidade total de orçamentos em aberto
+          no sistema (pedido explícito) — soma a quantidade de TODOS os
+          cards abaixo, menos o último ("Produto Entregue"), que só
+          acumula pra sempre e não representa o que ainda está em aberto.
+          totalPipelineAtivo já é exatamente essa soma (ver acima). */}
       <div
         className="relative mb-6 rounded-2xl overflow-hidden px-6 py-5 sm:px-8 sm:py-6"
         style={{
@@ -148,11 +145,11 @@ export default async function OperacionalPage() {
             className="shrink-0 rounded-xl p-3 sm:p-3.5"
             style={{ background: "var(--accent-glow)", boxShadow: "0 0 24px var(--accent-glow)" }}
           >
-            <Wallet size={26} strokeWidth={2} style={{ color: "var(--accent2)" }} />
+            <Layers size={26} strokeWidth={2} style={{ color: "var(--accent2)" }} />
           </div>
           <div className="min-w-0">
             <p className="text-[11px] sm:text-xs uppercase font-semibold tracking-[0.12em] mb-1" style={{ color: "var(--muted)" }}>
-              Valor total em aberto no sistema
+              Quantidade de Orçamentos em aberto
             </p>
             <p
               className="text-3xl sm:text-4xl font-extrabold leading-none tracking-tight tabular-nums"
@@ -164,10 +161,7 @@ export default async function OperacionalPage() {
                 textShadow: "0 2px 18px var(--accent-glow)",
               }}
             >
-              {formatarReal(valorTotalAtivo)}
-            </p>
-            <p className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
-              Soma de todas as ordens de serviço em andamento — não inclui o card &quot;Produto Entregue&quot;.
+              {totalPipelineAtivo.toLocaleString("pt-BR")}
             </p>
           </div>
         </div>
