@@ -14,12 +14,14 @@ import {
   CircleX,
   Receipt,
   PackageCheck,
+  Wallet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
 import { STATUS_OPERACIONAL, GRUPO_STATUS_AG_EMISSAO_NF } from "@/lib/orcamentos";
 import { buscarProdutoEntreguePorLote } from "@/lib/allied";
+import { formatarReal } from "@/lib/metricas";
 
 const ICONES: Record<string, typeof Inbox> = {
   "ag-abertura": Inbox,
@@ -76,9 +78,11 @@ export default async function OperacionalPage() {
     perfil = data;
   }
 
-  const { data: contagens } = (await supabase.rpc("orcamentos_metricas_status")) as {
-    data: ContagemStatus[] | null;
-  };
+  const [{ data: contagens }, { data: valorTotalAtivoBruto }] = await Promise.all([
+    supabase.rpc("orcamentos_metricas_status") as unknown as Promise<{ data: ContagemStatus[] | null }>,
+    supabase.rpc("orcamentos_valor_total_ativo") as unknown as Promise<{ data: number | string | null }>,
+  ]);
+  const valorTotalAtivo = valorTotalAtivoBruto != null ? Number(valorTotalAtivoBruto) : 0;
 
   const mapaContagens = new Map<string, number>();
   for (const c of contagens ?? []) {
@@ -117,6 +121,57 @@ export default async function OperacionalPage() {
       <p className="text-sm mb-5" style={{ color: "var(--muted)" }}>
         Clique em um Card para ver os aparelhos de cada etapa.
       </p>
+
+      {/* Card de destaque com o valor total das ordens de serviço em
+          aberto no sistema (pedido explícito) — soma o valor gravado na
+          importação de cada OS (existe em qualquer etapa), em TODOS os
+          status menos "Produto Entregue", que só acumula pra sempre e
+          não representa o que ainda está em aberto. */}
+      <div
+        className="relative mb-6 rounded-2xl overflow-hidden px-6 py-5 sm:px-8 sm:py-6"
+        style={{
+          background: "linear-gradient(135deg, var(--surface2), var(--surface))",
+          border: "1px solid var(--line)",
+          boxShadow: "0 0 50px var(--accent-glow), 0 18px 40px rgba(0,0,0,0.30), 0 4px 10px rgba(0,0,0,0.22)",
+        }}
+      >
+        <span
+          className="absolute inset-x-0 top-0 h-[3px]"
+          style={{ background: "linear-gradient(90deg, var(--accent), var(--accent2))" }}
+        />
+        <span
+          className="pointer-events-none absolute -top-16 -right-16 w-56 h-56 rounded-full"
+          style={{ background: "var(--accent-glow)", filter: "blur(10px)" }}
+        />
+        <div className="relative flex items-center gap-4 sm:gap-5">
+          <div
+            className="shrink-0 rounded-xl p-3 sm:p-3.5"
+            style={{ background: "var(--accent-glow)", boxShadow: "0 0 24px var(--accent-glow)" }}
+          >
+            <Wallet size={26} strokeWidth={2} style={{ color: "var(--accent2)" }} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] sm:text-xs uppercase font-semibold tracking-[0.12em] mb-1" style={{ color: "var(--muted)" }}>
+              Valor total em aberto no sistema
+            </p>
+            <p
+              className="text-3xl sm:text-4xl font-extrabold leading-none tracking-tight tabular-nums"
+              style={{
+                background: "linear-gradient(135deg, var(--ink), var(--accent2))",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
+                textShadow: "0 2px 18px var(--accent-glow)",
+              }}
+            >
+              {formatarReal(valorTotalAtivo)}
+            </p>
+            <p className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
+              Soma de todas as ordens de serviço em andamento — não inclui o card &quot;Produto Entregue&quot;.
+            </p>
+          </div>
+        </div>
+      </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {STATUS_OPERACIONAL.map((status) => {
