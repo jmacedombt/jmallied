@@ -99,7 +99,7 @@ export default async function MetricasOrcamentosPage({
   return (
     <AppShell
       titulo="Orçamentos"
-      tituloInfo='Classifica cada orçamento fechado no período em 4 resultados — Aprovado de primeira, Reprovado de primeira, Contra proposta aceita e Contra proposta recusada — usando o histórico de status (mesma base do R-TAT). "Contra proposta" é qualquer orçamento que passou por "4 - Ag. Resposta de Reorçamento" antes de fechar.'
+      tituloInfo='Classifica cada orçamento fechado no período em 4 resultados — Aprovado de primeira, Reprovado de primeira, Contra proposta aceita e Contra proposta recusada — usando o histórico de status (mesma base do R-TAT). "Contra proposta" é qualquer orçamento que passou por Ag. Contra Proposta (decisão Aprovado/Reprovado registrada) ou, nos lotes mais antigos, por "4 - Ag. Resposta de Reorçamento" (fluxo anterior).'
       perfil={perfil}
     >
       {voltar}
