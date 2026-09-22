@@ -2,11 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Clock, Send } from "lucide-react";
-import { podeConfirmarAprovacaoOrcamento, calcularResumoContraProposta, type PecaContraProposta } from "@/lib/orcamentos";
+import { CheckCircle2, Clock, Send, XCircle } from "lucide-react";
+import {
+  podeConfirmarAprovacaoOrcamento,
+  calcularResumoContraProposta,
+  montarPecasContraPropostaIniciais,
+  type PecaContraProposta,
+  type DetalheValidacaoOrcamento,
+} from "@/lib/orcamentos";
 import PopupPecasContraProposta from "@/components/PopupPecasContraProposta";
 import PopupEnviarContraProposta from "@/components/PopupEnviarContraProposta";
 import { operacionalRestrito } from "@/lib/usuarios";
+
+function formatarReal(valor: number): string {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
 
 export type AparelhoContraPropostaLista = {
   id: string;
@@ -19,7 +29,30 @@ export type AparelhoContraPropostaLista = {
   contra_proposta_pecas: PecaContraProposta[] | null;
   contra_proposta_mao_de_obra: number | null;
   contra_proposta_ajustado: boolean;
+  /** snapshot congelado em Validação de Orçamentos — usado como
+   * fallback pra montar peças/mão de obra "efetivas" enquanto ninguém
+   * salvou nenhum ajuste de Contra Proposta ainda (contra_proposta_pecas
+   * só é gravado quando alguém confirma uma alteração no pop-up — ver
+   * montarPecasContraPropostaIniciais em lib/orcamentos.ts). Sem esse
+   * fallback, um aparelho recém-chegado em Ag. Contra Proposta aparecia
+   * sem nenhuma peça/custo/imposto ao clicar. */
+  validacao_snapshot: DetalheValidacaoOrcamento | null;
 };
+
+/** Peças "efetivas" de um aparelho pra Contra Proposta: usa o que já foi
+ * salvo (contra_proposta_pecas) quando existir; senão monta a partir do
+ * snapshot de Validação de Orçamentos — mesmo custo/imposto/venda
+ * original já calculado lá (ver comentário do campo acima). */
+function pecasEfetivasDe(a: AparelhoContraPropostaLista): PecaContraProposta[] {
+  if (a.contra_proposta_pecas && a.contra_proposta_pecas.length > 0) return a.contra_proposta_pecas;
+  return a.validacao_snapshot ? montarPecasContraPropostaIniciais(a.validacao_snapshot) : [];
+}
+
+/** Mesma lógica de fallback pra mão de obra — fica null até alguém
+ * ajustar e salvar. */
+function maoDeObraEfetivaDe(a: AparelhoContraPropostaLista): number {
+  return a.contra_proposta_mao_de_obra ?? a.validacao_snapshot?.maoDeObra ?? 0;
+}
 
 // "Ag. Contra Proposta" — aparelhos que a Allied respondeu com Contra
 // Proposta em "3 - Ag. Resposta de Orçamento". Cada um precisa ser
@@ -76,8 +109,8 @@ export default function PainelContraProposta({
   // resumo agregado do lote selecionado (mão de obra total, peça total,
   // lucro%) — mesma conta usada no pop-up individual, só somando todos.
   const resumoLote = useMemo(() => {
-    const todasPecas: PecaContraProposta[] = filtrados.flatMap((a) => a.contra_proposta_pecas ?? []);
-    const maoDeObraTotal = filtrados.reduce((soma, a) => soma + Number(a.contra_proposta_mao_de_obra ?? 0), 0);
+    const todasPecas: PecaContraProposta[] = filtrados.flatMap(pecasEfetivasDe);
+    const maoDeObraTotal = filtrados.reduce((soma, a) => soma + maoDeObraEfetivaDe(a), 0);
     return calcularResumoContraProposta(todasPecas, maoDeObraTotal);
   }, [filtrados]);
 
@@ -143,11 +176,22 @@ export default function PainelContraProposta({
               <th className="px-4 py-2.5 font-medium">OS Care Allied</th>
               <th className="px-4 py-2.5 font-medium">Modelo comercial</th>
               <th className="px-4 py-2.5 font-medium">SKU</th>
+              <th className="px-4 py-2.5 font-medium text-right">Custo</th>
+              <th className="px-4 py-2.5 font-medium text-right">Contra Proposta</th>
               <th className="px-4 py-2.5 font-medium">Ajuste</th>
+              <th className="px-4 py-2.5 font-medium text-right">Ação</th>
             </tr>
           </thead>
           <tbody>
-            {filtrados.map((a) => (
+            {filtrados.map((a) => {
+              // "Custo" e "Contra Proposta" à direita (pedido explícito) —
+              // mesma conta do pop-up (calcularResumoContraProposta), com
+              // fallback pro snapshot de Validação enquanto o aparelho
+              // ainda não teve nenhum ajuste salvo (ver pecasEfetivasDe).
+              const pecas = pecasEfetivasDe(a);
+              const maoDeObra = maoDeObraEfetivaDe(a);
+              const resumo = calcularResumoContraProposta(pecas, maoDeObra);
+              return (
               <tr
                 key={a.id}
                 onClick={() => setEditando(a)}
@@ -173,6 +217,12 @@ export default function PainelContraProposta({
                 <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
                   {a.sku}
                 </td>
+                <td className="px-4 py-2.5 text-right" style={{ color: "var(--muted)" }}>
+                  {formatarReal(resumo.custoTotalPecas)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-semibold" style={{ color: "var(--accent2)" }}>
+                  {formatarReal(resumo.vendaTotalPecas + resumo.maoDeObra)}
+                </td>
                 <td className="px-4 py-2.5">
                   {a.contra_proposta_ajustado ? (
                     <span
@@ -192,11 +242,36 @@ export default function PainelContraProposta({
                     </span>
                   )}
                 </td>
+                <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                  {/* Aprovado/Reprovado — só os botões por enquanto
+                      (pedido explícito: "crie os botões depois vamos
+                      ativar as funções"), sem nenhuma função ligada
+                      ainda. */}
+                  <div className="inline-flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      title="Aprovado"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#16a34a]"
+                      style={{ borderColor: "var(--line)", color: "#16a34a" }}
+                    >
+                      <CheckCircle2 size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Reprovado"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[#ef4444]"
+                      style={{ borderColor: "var(--line)", color: "#ef4444" }}
+                    >
+                      <XCircle size={15} />
+                    </button>
+                  </div>
+                </td>
               </tr>
-            ))}
+              );
+            })}
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
+                <td colSpan={9} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
                   {aparelhos.length === 0 ? mensagemVazia : "Nenhum aparelho encontrado nesse lote."}
                 </td>
               </tr>
@@ -212,8 +287,8 @@ export default function PainelContraProposta({
             nf_remessa_allied: editando.nf_remessa_allied,
             os_reparadora: editando.os_reparadora,
             trade_allied: editando.trade_allied,
-            pecasIniciais: editando.contra_proposta_pecas ?? [],
-            maoDeObraInicial: Number(editando.contra_proposta_mao_de_obra ?? 0),
+            pecasIniciais: pecasEfetivasDe(editando),
+            maoDeObraInicial: maoDeObraEfetivaDe(editando),
             jaAjustado: editando.contra_proposta_ajustado,
           }}
           podeEditar={!apenasVisualizacao}

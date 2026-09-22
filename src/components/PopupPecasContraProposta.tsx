@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Loader2, PackageSearch, Save, X } from "lucide-react";
+import { CheckCircle2, Loader2, PackageSearch, Save, X, XCircle } from "lucide-react";
 import { calcularResumoContraProposta, type PecaContraProposta } from "@/lib/orcamentos";
 import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupConfirmar from "@/components/PopupConfirmar";
@@ -131,9 +131,47 @@ export default function PopupPecasContraProposta({
           </button>
         </div>
 
-        <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+        <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
           {aparelho.trade_allied} · OS Reparadora {aparelho.os_reparadora || "—"} · NF Remessa {aparelho.nf_remessa_allied}
         </p>
+
+        {/* Valor da Contra Proposta em destaque + Aprovado/Reprovado
+            (pedido explícito) — só os botões por enquanto, sem nenhuma
+            função ligada ainda ("crie os botões depois vamos ativar as
+            funções"). */}
+        <div
+          className="flex items-center justify-between gap-3 flex-wrap rounded-xl border px-4 py-3 mb-3"
+          style={{ borderColor: "var(--accent2)", background: "var(--accent-glow)" }}
+        >
+          <div>
+            <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              Valor da Contra Proposta
+            </p>
+            <p className="text-xl font-bold" style={{ color: "var(--accent2)" }}>
+              {formatarReal(resumo.vendaTotalPecas + maoDeObra)}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              title="Aprovado"
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition"
+              style={{ background: "#16a34a" }}
+            >
+              <CheckCircle2 size={14} />
+              Aprovado
+            </button>
+            <button
+              type="button"
+              title="Reprovado"
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition"
+              style={{ background: "#ef4444" }}
+            >
+              <XCircle size={14} />
+              Reprovado
+            </button>
+          </div>
+        </div>
 
         {aparelho.jaAjustado && (
           <div
@@ -157,6 +195,8 @@ export default function PopupPecasContraProposta({
                   <th className="px-3 py-2 font-medium">#</th>
                   <th className="px-3 py-2 font-medium">Código da peça</th>
                   <th className="px-3 py-2 font-medium">Peça Solução</th>
+                  <th className="px-3 py-2 font-medium text-right">Custo</th>
+                  <th className="px-3 py-2 font-medium text-right">Imposto (ICMS)</th>
                   <th className="px-3 py-2 font-medium text-right">Valor original</th>
                   <th className="px-3 py-2 font-medium text-right">Novo valor</th>
                 </tr>
@@ -172,6 +212,12 @@ export default function PopupPecasContraProposta({
                     </td>
                     <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
                       {solucoesPorPartNumber[p.codigo] ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
+                      {formatarReal(p.custo)}
+                    </td>
+                    <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
+                      {formatarReal(p.imposto)}
                     </td>
                     <td className="px-3 py-2 text-right" style={{ color: "var(--muted)" }}>
                       {formatarReal(p.vendaOriginal)}

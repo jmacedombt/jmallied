@@ -508,13 +508,20 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        "id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, contra_proposta_pecas, contra_proposta_mao_de_obra, contra_proposta_ajustado"
+        "id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, contra_proposta_pecas, contra_proposta_mao_de_obra, contra_proposta_ajustado, validacao_snapshot"
       )
       .eq("status_operacional", status.valor)
       .order("nf_remessa_allied", { ascending: true })
       .order("updated_at", { ascending: false });
 
-    const codigosContraProposta = (aparelhos ?? []).flatMap((a) => (a.contra_proposta_pecas ?? []).map((p: { codigo: string }) => p.codigo));
+    // códigos das peças "efetivas" (contra_proposta_pecas já salvo, ou o
+    // snapshot de Validação enquanto nada foi ajustado ainda — mesmo
+    // fallback usado em PainelContraProposta.tsx pra não abrir o pop-up
+    // vazio).
+    const codigosContraProposta = (aparelhos ?? []).flatMap((a) => {
+      const pecas = a.contra_proposta_pecas && a.contra_proposta_pecas.length > 0 ? a.contra_proposta_pecas : (a.validacao_snapshot?.pecas ?? []);
+      return (pecas as { codigo: string }[]).map((p) => p.codigo);
+    });
     const solucoesPorPartNumber = await buscarSolucoesPorPartNumber(supabase, codigosContraProposta);
 
     return (
