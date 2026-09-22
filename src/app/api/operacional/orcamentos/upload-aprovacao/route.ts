@@ -58,7 +58,10 @@ export async function POST(request: Request) {
 
   // última ocorrência de cada OS Reparadora vence (se a Allied mandar a
   // mesma linha duas vezes, ou uma correção mais abaixo no arquivo).
-  const resultadoPorOs = new Map<string, "Aprovado" | "Contra Proposta" | "Reprovado">();
+  const resultadoPorOs = new Map<
+    string,
+    { resultado: "Aprovado" | "Contra Proposta" | "Reprovado"; valorContraProposta: number | null }
+  >();
   let linhasNaoReconhecidas = 0;
   for (const linha of linhasDados) {
     const lida = lerLinhaAprovacao(linha);
@@ -66,7 +69,7 @@ export async function POST(request: Request) {
       linhasNaoReconhecidas += 1;
       continue;
     }
-    resultadoPorOs.set(lida.osReparadora, lida.resultado);
+    resultadoPorOs.set(lida.osReparadora, { resultado: lida.resultado, valorContraProposta: lida.valorContraPropostaAllied });
   }
 
   const osReparadoras = Array.from(resultadoPorOs.keys());
@@ -99,12 +102,20 @@ export async function POST(request: Request) {
   const agora = new Date().toISOString();
   const contagem = { Aprovado: 0, "Contra Proposta": 0, Reprovado: 0 };
 
-  for (const [osReparadora, resultado] of resultadoPorOs.entries()) {
+  for (const [osReparadora, { resultado, valorContraProposta }] of resultadoPorOs.entries()) {
     const id = aparelhosEncontrados.get(osReparadora);
     if (!id) continue;
     const { error } = await admin
       .from("orcamentos")
-      .update({ resultado_aprovacao_allied: resultado, resultado_aprovacao_definido_em: agora })
+      .update({
+        resultado_aprovacao_allied: resultado,
+        resultado_aprovacao_definido_em: agora,
+        // valor que a Allied contra-propôs (coluna BS, pedido
+        // explícito) — grava null quando o resultado não é "Contra
+        // Proposta", pra limpar um valor antigo se a linha mudar de
+        // status num reenvio do arquivo.
+        contra_proposta_valor_recebido_allied: valorContraProposta,
+      })
       .eq("id", id);
     if (!error) contagem[resultado] += 1;
   }

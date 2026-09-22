@@ -30,6 +30,13 @@ export type AparelhoContraProposta = {
   pecasIniciais: PecaContraProposta[];
   maoDeObraInicial: number;
   jaAjustado: boolean;
+  /** valor total (peças + mão de obra) enviado originalmente pra Allied,
+   * vindo do snapshot de Validação — só referência. */
+  valorEnviado: number;
+  /** valor total que a Allied contra-propôs, lido da coluna BS do
+   * arquivo de aprovação (null se ainda não subiu/não veio "Contra
+   * Proposta") — só referência, não altera o ajuste peça a peça. */
+  valorRecebidoAllied: number | null;
 };
 
 // Pop-up de edição peça a peça da Contra Proposta (Ag. Contra Proposta)
@@ -134,6 +141,28 @@ export default function PopupPecasContraProposta({
         <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
           {aparelho.trade_allied} · OS Reparadora {aparelho.os_reparadora || "—"} · NF Remessa {aparelho.nf_remessa_allied}
         </p>
+
+        {/* Orçamento Enviado / Valor Allied — só referência (pedido
+            explícito), ao lado do que já existia, sem mexer no ajuste
+            peça a peça manual abaixo. */}
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="rounded-xl border px-4 py-2.5" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+            <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              Orçamento Enviado
+            </p>
+            <p className="text-base font-semibold" style={{ color: "var(--ink)" }}>
+              {formatarReal(aparelho.valorEnviado)}
+            </p>
+          </div>
+          <div className="rounded-xl border px-4 py-2.5" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+            <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              Recebido da Allied
+            </p>
+            <p className="text-base font-semibold" style={{ color: "var(--ink)" }}>
+              {aparelho.valorRecebidoAllied != null ? formatarReal(aparelho.valorRecebidoAllied) : "—"}
+            </p>
+          </div>
+        </div>
 
         {/* Valor da Contra Proposta em destaque + Aprovado/Reprovado
             (pedido explícito) — só os botões por enquanto, sem nenhuma

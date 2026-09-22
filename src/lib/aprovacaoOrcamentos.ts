@@ -9,16 +9,38 @@
  * "OS Reparadora", coluna BQ = "STATUS ORÇAMENTO". Nesse arquivo de
  * exemplo algumas linhas têm "IMEI NÃO AUTORIZADO" em vez de uma OS
  * Reparadora válida — são descartadas normalmente por `osReparadoraValida`.
+ *
+ * Pedido explícito (depois desse arquivo de exemplo): quando a coluna BQ
+ * vier "Contra Proposta"/variações, a coluna BS traz o valor total
+ * (peças + mão de obra já somados) que a Allied contra-propôs pra
+ * aquele OS Reparadora — lido aqui e gravado só como referência (ver
+ * migration 0059_contra_proposta_valor_recebido.sql e a rota
+ * upload-aprovacao), sem mexer no ajuste peça a peça que a equipe já
+ * fazia manualmente em Ag. Contra Proposta.
  */
 import { osReparadoraValida, type ResultadoAprovacaoAllied } from "@/lib/orcamentos";
 
 // colunas do arquivo de aprovação (0-indexed).
 export const COL_APROVACAO_OS_REPARADORA = 3; // D — "OS Reparadora"
 export const COL_APROVACAO_STATUS = 68; // BQ — "STATUS ORÇAMENTO"
+export const COL_APROVACAO_CONTRA_PROPOSTA_VALOR = 70; // BS — valor da Contra Proposta (só quando BQ = "Contra Proposta")
 
 function textoOuNull(v: unknown): string | null {
   const t = String(v ?? "").trim();
   return t === "" ? null : t;
+}
+
+// aceita tanto célula já numérica (comum quando o Excel formata a
+// coluna como número) quanto texto no padrão BR ("1.234,56") — mesmo
+// parser tolerante já usado nos pop-ups de ajuste manual do sistema.
+function paraNumeroOuNull(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  const texto = String(v).trim();
+  if (!texto) return null;
+  const limpo = texto.replace(/\./g, "").replace(",", ".").trim();
+  const n = Number(limpo);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**
@@ -43,6 +65,11 @@ export function normalizarResultadoAprovacao(v: unknown): ResultadoAprovacaoAlli
 export type LinhaAprovacaoImportada = {
   osReparadora: string;
   resultado: Exclude<ResultadoAprovacaoAllied, "Aguardando">;
+  /** valor total (peças + mão de obra) que a Allied contra-propôs
+   * (coluna BS) — só lido quando resultado === "Contra Proposta"; null
+   * nos outros casos, ou se a célula vier vazia/ilegível mesmo com
+   * "Contra Proposta" marcado. */
+  valorContraPropostaAllied: number | null;
 };
 
 /** Lê uma linha bruta (array de células) do arquivo de aprovação — null
@@ -55,5 +82,8 @@ export function lerLinhaAprovacao(linha: unknown[]): LinhaAprovacaoImportada | n
   const resultado = normalizarResultadoAprovacao(linha[COL_APROVACAO_STATUS]);
   if (!resultado || resultado === "Aguardando") return null;
 
-  return { osReparadora, resultado };
+  const valorContraPropostaAllied =
+    resultado === "Contra Proposta" ? paraNumeroOuNull(linha[COL_APROVACAO_CONTRA_PROPOSTA_VALOR]) : null;
+
+  return { osReparadora, resultado, valorContraPropostaAllied };
 }

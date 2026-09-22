@@ -35,9 +35,24 @@ export type AparelhoContraPropostaLista = {
    * só é gravado quando alguém confirma uma alteração no pop-up — ver
    * montarPecasContraPropostaIniciais em lib/orcamentos.ts). Sem esse
    * fallback, um aparelho recém-chegado em Ag. Contra Proposta aparecia
-   * sem nenhuma peça/custo/imposto ao clicar. */
+   * sem nenhuma peça/custo/imposto ao clicar. Também é a fonte do
+   * "Orçamento Enviado" (venda de peças + mão de obra original, o que
+   * de fato foi mandado pra Allied).
+   */
   validacao_snapshot: DetalheValidacaoOrcamento | null;
+  /** valor total (peças + mão de obra) que a Allied contra-propôs,
+   * lido da coluna BS do upload de aprovação de orçamentos (pedido
+   * explícito) — null enquanto nenhum arquivo com esse valor foi
+   * importado ainda. Só referência, ao lado do ajuste manual. */
+  contra_proposta_valor_recebido_allied: number | null;
 };
+
+/** Valor original enviado à Allied (venda de peças + mão de obra,
+ * congelado em Validação de Orçamentos) — referência fixa, nunca muda
+ * com o ajuste manual da Contra Proposta. */
+function valorEnviadoDe(a: AparelhoContraPropostaLista): number {
+  return (a.validacao_snapshot?.vendaTotalPecas ?? 0) + (a.validacao_snapshot?.maoDeObra ?? 0);
+}
 
 /** Peças "efetivas" de um aparelho pra Contra Proposta: usa o que já foi
  * salvo (contra_proposta_pecas) quando existir; senão monta a partir do
@@ -177,6 +192,8 @@ export default function PainelContraProposta({
               <th className="px-4 py-2.5 font-medium">Modelo comercial</th>
               <th className="px-4 py-2.5 font-medium">SKU</th>
               <th className="px-4 py-2.5 font-medium text-right">Custo</th>
+              <th className="px-4 py-2.5 font-medium text-right">Orçamento Enviado</th>
+              <th className="px-4 py-2.5 font-medium text-right">Valor Allied</th>
               <th className="px-4 py-2.5 font-medium text-right">Contra Proposta</th>
               <th className="px-4 py-2.5 font-medium">Ajuste</th>
               <th className="px-4 py-2.5 font-medium text-right">Ação</th>
@@ -219,6 +236,14 @@ export default function PainelContraProposta({
                 </td>
                 <td className="px-4 py-2.5 text-right" style={{ color: "var(--muted)" }}>
                   {formatarReal(resumo.custoTotalPecas)}
+                </td>
+                <td className="px-4 py-2.5 text-right" style={{ color: "var(--muted)" }}>
+                  {formatarReal(valorEnviadoDe(a))}
+                </td>
+                <td className="px-4 py-2.5 text-right" style={{ color: "var(--muted)" }}>
+                  {a.contra_proposta_valor_recebido_allied != null
+                    ? formatarReal(a.contra_proposta_valor_recebido_allied)
+                    : "—"}
                 </td>
                 <td className="px-4 py-2.5 text-right font-semibold" style={{ color: "var(--accent2)" }}>
                   {formatarReal(resumo.vendaTotalPecas + resumo.maoDeObra)}
@@ -271,7 +296,7 @@ export default function PainelContraProposta({
             })}
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
+                <td colSpan={11} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
                   {aparelhos.length === 0 ? mensagemVazia : "Nenhum aparelho encontrado nesse lote."}
                 </td>
               </tr>
@@ -290,6 +315,8 @@ export default function PainelContraProposta({
             pecasIniciais: pecasEfetivasDe(editando),
             maoDeObraInicial: maoDeObraEfetivaDe(editando),
             jaAjustado: editando.contra_proposta_ajustado,
+            valorEnviado: valorEnviadoDe(editando),
+            valorRecebidoAllied: editando.contra_proposta_valor_recebido_allied,
           }}
           podeEditar={!apenasVisualizacao}
           solucoesPorPartNumber={solucoesPorPartNumber}
