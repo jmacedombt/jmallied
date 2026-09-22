@@ -142,26 +142,17 @@ export default function PopupPecasContraProposta({
           {aparelho.trade_allied} · OS Reparadora {aparelho.os_reparadora || "—"} · NF Remessa {aparelho.nf_remessa_allied}
         </p>
 
-        {/* Orçamento Enviado / Valor Allied — só referência (pedido
-            explícito), ao lado do que já existia, sem mexer no ajuste
-            peça a peça manual abaixo. */}
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div className="rounded-xl border px-4 py-2.5" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
-            <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-              Orçamento Enviado
-            </p>
-            <p className="text-base font-semibold" style={{ color: "var(--ink)" }}>
-              {formatarReal(aparelho.valorEnviado)}
-            </p>
-          </div>
-          <div className="rounded-xl border px-4 py-2.5" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
-            <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-              Recebido da Allied
-            </p>
-            <p className="text-base font-semibold" style={{ color: "var(--ink)" }}>
-              {aparelho.valorRecebidoAllied != null ? formatarReal(aparelho.valorRecebidoAllied) : "—"}
-            </p>
-          </div>
+        {/* Contra Proposta (valor recebido da Allied, coluna BS) — só
+            referência (pedido explícito), em destaque em azul igual à
+            coluna da lista. "Orçamento Enviado" saiu daqui e foi pro
+            Resumo, logo abaixo de Mão de obra. */}
+        <div className="rounded-xl border px-4 py-2.5 mb-3" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+          <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+            Contra Proposta
+          </p>
+          <p className="text-base font-semibold" style={{ color: "#2563eb" }}>
+            {aparelho.valorRecebidoAllied != null ? formatarReal(aparelho.valorRecebidoAllied) : "—"}
+          </p>
         </div>
 
         {/* Valor da Contra Proposta em destaque + Aprovado/Reprovado
@@ -302,6 +293,10 @@ export default function PopupPecasContraProposta({
             ) : (
               <strong style={{ color: "var(--ink)" }}>{formatarReal(maoDeObra)}</strong>
             )}
+          </div>
+          <div className="flex items-center justify-between">
+            <span style={{ color: "var(--muted)" }}>Orçamento Enviado</span>
+            <strong style={{ color: "var(--ink)" }}>{formatarReal(aparelho.valorEnviado)}</strong>
           </div>
           <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
             <span style={{ color: "var(--ink)" }}>Lucro Total</span>

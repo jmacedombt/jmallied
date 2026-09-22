@@ -193,7 +193,6 @@ export default function PainelContraProposta({
               <th className="px-4 py-2.5 font-medium">SKU</th>
               <th className="px-4 py-2.5 font-medium text-right">Custo</th>
               <th className="px-4 py-2.5 font-medium text-right">Orçamento Enviado</th>
-              <th className="px-4 py-2.5 font-medium text-right">Valor Allied</th>
               <th className="px-4 py-2.5 font-medium text-right">Contra Proposta</th>
               <th className="px-4 py-2.5 font-medium">Ajuste</th>
               <th className="px-4 py-2.5 font-medium text-right">Ação</th>
@@ -201,10 +200,14 @@ export default function PainelContraProposta({
           </thead>
           <tbody>
             {filtrados.map((a) => {
-              // "Custo" e "Contra Proposta" à direita (pedido explícito) —
-              // mesma conta do pop-up (calcularResumoContraProposta), com
-              // fallback pro snapshot de Validação enquanto o aparelho
-              // ainda não teve nenhum ajuste salvo (ver pecasEfetivasDe).
+              // "Custo" à direita (pedido explícito) — mesma conta do
+              // pop-up (calcularResumoContraProposta), com fallback pro
+              // snapshot de Validação enquanto o aparelho ainda não teve
+              // nenhum ajuste salvo (ver pecasEfetivasDe). A coluna
+              // "Contra Proposta" da lista agora é o valor recebido da
+              // Allied (contra_proposta_valor_recebido_allied) — a antiga
+              // coluna com o total calculado peça a peça foi removida por
+              // ser redundante com ela (pedido explícito).
               const pecas = pecasEfetivasDe(a);
               const maoDeObra = maoDeObraEfetivaDe(a);
               const resumo = calcularResumoContraProposta(pecas, maoDeObra);
@@ -240,13 +243,10 @@ export default function PainelContraProposta({
                 <td className="px-4 py-2.5 text-right" style={{ color: "var(--muted)" }}>
                   {formatarReal(valorEnviadoDe(a))}
                 </td>
-                <td className="px-4 py-2.5 text-right" style={{ color: "var(--muted)" }}>
+                <td className="px-4 py-2.5 text-right font-semibold" style={{ color: "#2563eb" }}>
                   {a.contra_proposta_valor_recebido_allied != null
                     ? formatarReal(a.contra_proposta_valor_recebido_allied)
                     : "—"}
-                </td>
-                <td className="px-4 py-2.5 text-right font-semibold" style={{ color: "var(--accent2)" }}>
-                  {formatarReal(resumo.vendaTotalPecas + resumo.maoDeObra)}
                 </td>
                 <td className="px-4 py-2.5">
                   {a.contra_proposta_ajustado ? (
@@ -296,7 +296,7 @@ export default function PainelContraProposta({
             })}
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
+                <td colSpan={10} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
                   {aparelhos.length === 0 ? mensagemVazia : "Nenhum aparelho encontrado nesse lote."}
                 </td>
               </tr>
