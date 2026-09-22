@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { podeConfirmarAprovacaoOrcamento, STATUS_AG_RESPOSTA_ORCAMENTO } from "@/lib/orcamentos";
+import {
+  podeConfirmarAprovacaoOrcamento,
+  STATUS_AG_RESPOSTA_ORCAMENTO,
+  STATUS_AG_CONTRA_PROPOSTA,
+} from "@/lib/orcamentos";
 import { lerLinhaAprovacao } from "@/lib/aprovacaoOrcamentos";
 
 export const maxDuration = 60;
@@ -14,6 +18,13 @@ const TAMANHO_LOTE = 300;
 // resultado (resultado_aprovacao_allied) — não move de etapa ainda, isso
 // só acontece quando a pessoa clica em "Confirmar" na tela (ver rota
 // confirmar-resultado-aprovacao).
+//
+// Também casa com aparelho que JÁ ESTÁ em "Ag. Contra Proposta" (não só
+// os que ainda estão esperando) — só pra poder reescrever o valor
+// recebido da Allied (coluna BS) quando o mesmo arquivo/um arquivo
+// corrigido é subido de novo depois que o item já avançou de etapa; sem
+// isso, um aparelho que já tinha sido movido pra Ag. Contra Proposta
+// antes desse campo existir nunca teria como receber o valor.
 export async function POST(request: Request) {
   const supabase = createClient();
   const {
@@ -83,16 +94,17 @@ export async function POST(request: Request) {
     );
   }
 
-  // só casa com aparelho que estiver DE FATO esperando em "3 - Ag.
-  // Resposta de Orçamento" agora — OS Reparadora de outra etapa (ou que
-  // nunca existiu) não é alterada.
+  // casa com aparelho que estiver esperando em "3 - Ag. Resposta de
+  // Orçamento" OU que já esteja em "Ag. Contra Proposta" (ver comentário
+  // acima) — OS Reparadora de qualquer outra etapa (ou que nunca
+  // existiu) não é alterada.
   const aparelhosEncontrados = new Map<string, string>(); // os_reparadora -> id
   for (let i = 0; i < osReparadoras.length; i += TAMANHO_LOTE) {
     const lote = osReparadoras.slice(i, i + TAMANHO_LOTE);
     const { data } = await admin
       .from("orcamentos")
       .select("id, os_reparadora")
-      .eq("status_operacional", STATUS_AG_RESPOSTA_ORCAMENTO)
+      .in("status_operacional", [STATUS_AG_RESPOSTA_ORCAMENTO, STATUS_AG_CONTRA_PROPOSTA])
       .in("os_reparadora", lote);
     for (const row of data ?? []) {
       if (row.os_reparadora) aparelhosEncontrados.set(row.os_reparadora, row.id);
