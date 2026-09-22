@@ -153,7 +153,7 @@ export default function PopupPecasContraProposta({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }}>
       <div
-        className="w-full max-w-2xl rounded-2xl border shadow-2xl p-6"
+        className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border shadow-2xl p-6"
         style={{ background: "var(--surface)", borderColor: "var(--line)" }}
       >
         <div className="flex items-center justify-between mb-1">
@@ -255,8 +255,12 @@ export default function PopupPecasContraProposta({
                 ({formatarReal(aparelho.valorRecebidoAllied)}) — não dá pra sugerir redução só nas peças nesse caso.
               </p>
             )}
-            <div className="rounded-xl border overflow-hidden mb-4" style={{ borderColor: "var(--line)" }}>
-              <table className="w-full text-sm">
+            {/* overflow-x-auto (em vez de overflow-hidden) — com a coluna
+                de Sugestão a mais, a tabela pode ficar mais larga que o
+                pop-up; assim ela rola por dentro do card em vez de
+                estourar pra fora (bug reportado). */}
+            <div className="rounded-xl border overflow-x-auto mb-4" style={{ borderColor: "var(--line)" }}>
+              <table className="w-full text-sm" style={{ minWidth: "56rem" }}>
                 <thead>
                   <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
                     <th className="px-3 py-2 font-medium">#</th>
@@ -266,7 +270,7 @@ export default function PopupPecasContraProposta({
                     <th className="px-3 py-2 font-medium text-right">Imposto (ICMS)</th>
                     <th className="px-3 py-2 font-medium text-right">Valor original</th>
                     <th className="px-3 py-2 font-medium text-right">Novo valor</th>
-                    {sugestoesPecas && <th className="px-3 py-2 font-medium text-right">Sugestão</th>}
+                    {sugestoesPecas && <th className="px-3 py-2 font-medium text-right whitespace-nowrap">Sugestão</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -305,7 +309,7 @@ export default function PopupPecasContraProposta({
                         )}
                       </td>
                       {sugestoesPecas && (
-                        <td className="px-3 py-2 text-right">
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
                           <div className="inline-flex items-center gap-1.5">
                             <span className="inline-flex items-center gap-1 font-semibold" style={{ color: "#16a34a" }}>
                               <Sparkles size={12} />

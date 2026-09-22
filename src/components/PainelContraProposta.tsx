@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Clock, Send, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Info, Send, XCircle } from "lucide-react";
 import {
   podeConfirmarAprovacaoOrcamento,
   calcularResumoContraProposta,
@@ -16,6 +16,22 @@ import { operacionalRestrito } from "@/lib/usuarios";
 
 function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+function formatarPercentual(valor: number): string {
+  return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
+/** % Dif. (pedido explícito): quanto a Allied contra-propôs a menos (ou
+ * a mais) em relação ao que foi enviado no orçamento —
+ * (Valor recebido − Valor enviado) ÷ Valor enviado × 100. Negativo
+ * significa que veio menor do que o enviado (o caso normal de uma
+ * contra proposta). null enquanto não tem valor recebido da Allied
+ * ainda, ou se o orçamento enviado for zero (não dá pra dividir). */
+function percDifDe(a: AparelhoContraPropostaLista): number | null {
+  if (a.contra_proposta_valor_recebido_allied == null) return null;
+  const enviado = valorEnviadoDe(a);
+  if (enviado === 0) return null;
+  return ((a.contra_proposta_valor_recebido_allied - enviado) / enviado) * 100;
 }
 
 export type AparelhoContraPropostaLista = {
@@ -194,6 +210,15 @@ export default function PainelContraProposta({
               <th className="px-4 py-2.5 font-medium text-right">Custo</th>
               <th className="px-4 py-2.5 font-medium text-right">Orçamento Enviado</th>
               <th className="px-4 py-2.5 font-medium text-right">Contra Proposta</th>
+              <th className="px-4 py-2.5 font-medium text-right">
+                <span
+                  className="inline-flex items-center justify-end gap-1 cursor-help"
+                  title="Percentual entre o valor enviado no orçamento e o valor recebido na Contra Proposta: (Valor recebido − Valor enviado) ÷ Valor enviado × 100. Negativo significa que a Allied contra-propôs um valor menor do que o enviado."
+                >
+                  % Dif.
+                  <Info size={12} />
+                </span>
+              </th>
               <th className="px-4 py-2.5 font-medium">Ajuste</th>
               <th className="px-4 py-2.5 font-medium text-right">Ação</th>
             </tr>
@@ -248,6 +273,12 @@ export default function PainelContraProposta({
                     ? formatarReal(a.contra_proposta_valor_recebido_allied)
                     : "—"}
                 </td>
+                <td
+                  className="px-4 py-2.5 text-right font-semibold"
+                  style={{ color: percDifDe(a) == null ? "var(--muted)" : percDifDe(a)! < 0 ? "#dc2626" : "#16a34a" }}
+                >
+                  {percDifDe(a) != null ? formatarPercentual(percDifDe(a)!) : "—"}
+                </td>
                 <td className="px-4 py-2.5">
                   {a.contra_proposta_ajustado ? (
                     <span
@@ -296,7 +327,7 @@ export default function PainelContraProposta({
             })}
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
+                <td colSpan={11} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
                   {aparelhos.length === 0 ? mensagemVazia : "Nenhum aparelho encontrado nesse lote."}
                 </td>
               </tr>
