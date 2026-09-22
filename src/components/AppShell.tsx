@@ -35,7 +35,6 @@ import {
   TrendingUp,
   Users,
   Wallet,
-  Wifi,
   Wrench,
   X,
 } from "lucide-react";
@@ -44,6 +43,7 @@ import Avatar from "@/components/Avatar";
 import BotaoTema from "@/components/BotaoTema";
 import ColorPickerSistema from "@/components/ColorPickerSistema";
 import InactivityGuard from "@/components/InactivityGuard";
+import IndicadorUsuariosOnline from "@/components/IndicadorUsuariosOnline";
 import { podeConfirmarAnaliseEmLote, podeLancarNfProdutoEntregue } from "@/lib/orcamentos";
 import { isAllied, operacionalRestrito, financeiroRestrito } from "@/lib/usuarios";
 import { podeAcessarFinanceiro } from "@/lib/financeiro";
@@ -428,23 +428,6 @@ export default function AppShell({
             </Link>
           )}
 
-          {/* "Usuários Online" (pedido explícito) — item avulso, fora de
-              qualquer grupo, pra ficar visível pra TODO login que não
-              seja ALLIED, inclusive os cargos restritos por etapa
-              (Operacional, Triagem/OQC) e Financeiro — nenhum dos 3 vê
-              o grupo "Sistema", mas todos devem ver esse item. */}
-          {!allied && (
-            <Link
-              href="/usuarios-online"
-              onClick={() => setSidebarAberta(false)}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
-              style={pathname === "/usuarios-online" ? ESTILO_ATIVO : { color: "var(--muted)" }}
-            >
-              <Wifi size={17} />
-              Usuários Online
-            </Link>
-          )}
-
           {grupos.map((grupo) => {
             const IconeGrupo = grupo.icone;
             const aberto = gruposAbertos[grupo.id];
@@ -578,6 +561,11 @@ export default function AppShell({
                 {cargoExibido}
               </p>
             </div>
+            {/* "Usuários Online" (pedido explícito) — bullet verde com
+                brilho/pulso de "ligado" ao lado do nome, em vez de item
+                de menu. Clicar abre o pop-up com a lista (ver
+                IndicadorUsuariosOnline.tsx). Some pro login ALLIED. */}
+            {!allied && <IndicadorUsuariosOnline />}
           </div>
 
           <ColorPickerSistema />
