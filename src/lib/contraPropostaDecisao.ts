@@ -166,6 +166,146 @@ function montarPosicoesAceitas(
   return { peca, custoPeca };
 }
 
+/**
+ * Todos os aparelhos do MESMO lote (NF Remessa) que estão HOJE em
+ * "8 - Orçamento Reprovado" — reprovados antes OU depois de uma geração
+ * de Contra Proposta desse lote (pedido explícito: um aparelho que só
+ * foi reprovado DEPOIS que a Contra Proposta já tinha sido gerada — por
+ * exemplo, a Allied demorou pra responder e só reprovou depois — ainda
+ * assim tem que aparecer na planilha, na posição certa da ordem
+ * original; senão fica de fora de qualquer planilha pra sempre).
+ *
+ * Standalone (faz sua própria busca de preço BID) — usada pela correção
+ * de planilhas já geradas (corrigirOrdemPlanilhas.ts) pra descobrir e
+ * ADICIONAR, num histórico antigo, quem ficou de fora na hora. Não é
+ * usada na geração normal (prepararGeracaoContraProposta já resolve seu
+ * próprio grupo "já reprovados" inline, sempre com o retrato mais
+ * recente no momento em que É gerada).
+ */
+export async function montarLinhasJaReprovadas(
+  admin: AdminClient,
+  nfRemessa: string
+): Promise<{ ok: true; linhas: LinhaComOrdem[] } | { ok: false; status: number; erro: string }> {
+  const { data: jaReprovadosBrutos, error: erroJaReprovados } = await admin
+    .from("orcamentos")
+    .select(`id, motivo_reprova, validacao_snapshot, ${COLUNAS_PECAS_RAW}, ${COLUNAS_ESTATICAS}`)
+    .eq("status_operacional", STATUS_ORCAMENTO_REPROVADO)
+    .eq("nf_remessa_allied", nfRemessa)
+    .order("ordem_planilha", { ascending: true, nullsFirst: false });
+
+  if (erroJaReprovados) {
+    return { ok: false, status: 400, erro: erroJaReprovados.message };
+  }
+
+  const jaReprovados = (jaReprovadosBrutos ?? []) as unknown as LinhaJaReprovada[];
+  if (jaReprovados.length === 0) {
+    return { ok: true, linhas: [] };
+  }
+
+  // Mesmo fallback de recálculo ao vivo usado em
+  // prepararGeracaoContraProposta — nem todo "já reprovado" tem
+  // validacao_snapshot (só quem foi reprovado estando em Validação de
+  // Orçamentos ganha esse congelamento).
+  const detalhePorId = new Map<string, DetalheValidacaoOrcamento | null>();
+  const semSnapshot = jaReprovados.filter((a) => !a.validacao_snapshot);
+  if (semSnapshot.length > 0) {
+    const codigosSemSnapshot = Array.from(
+      new Set(
+        semSnapshot.flatMap((a) =>
+          [
+            a.peca_1, a.peca_2, a.peca_3, a.peca_4, a.peca_5, a.peca_6, a.peca_7, a.peca_8, a.peca_9, a.peca_10,
+            a.peca_add_1, a.peca_add_2, a.peca_add_3, a.peca_add_4, a.peca_add_5,
+          ]
+            .map((c) => (typeof c === "string" ? c.trim() : c))
+            .filter((c): c is string => !!c)
+        )
+      )
+    );
+    const custosPorCodigo = new Map<string, number>();
+    if (codigosSemSnapshot.length > 0) {
+      const { data: custosBrutos } = await admin.from("pecas_vigentes").select("codigo, valor_unitario").in("codigo", codigosSemSnapshot);
+      for (const linha of (custosBrutos ?? []) as { codigo: string; valor_unitario: number }[]) {
+        custosPorCodigo.set(linha.codigo, Number(linha.valor_unitario));
+      }
+    }
+    const [{ data: configImposto }, { data: configMaoObraBruta }, { data: faixasMarkupBrutas }] = await Promise.all([
+      admin.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+      admin.from("configuracoes_mao_de_obra").select("valor_uma_peca, valor_mais_de_uma_peca").eq("id", 1).single(),
+      admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+    ]);
+    const icmsPercentual = Number(configImposto?.icms_percentual ?? 0);
+    const configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca"> = {
+      valor_uma_peca: Number(configMaoObraBruta?.valor_uma_peca ?? 0),
+      valor_mais_de_uma_peca: Number(configMaoObraBruta?.valor_mais_de_uma_peca ?? 0),
+    };
+    const faixasMarkupGlobal: FaixaMarkup[] = (
+      (faixasMarkupBrutas ?? []) as { valor_min: number; valor_max: number | null; multiplicador: number }[]
+    ).map((f) => ({
+      valor_min: Number(f.valor_min),
+      valor_max: f.valor_max == null ? null : Number(f.valor_max),
+      multiplicador: Number(f.multiplicador),
+    }));
+    const overridesDoLote = await buscarOverridesMarkupPorLote(admin, [nfRemessa]);
+    const faixasMarkup: FaixaMarkup[] = overridesDoLote[nfRemessa] ?? faixasMarkupGlobal;
+
+    for (const a of semSnapshot) {
+      const detalhe = calcularDetalheValidacao(a as CamposPecasOrcamento, custosPorCodigo, icmsPercentual, configMaoDeObra, faixasMarkup);
+      detalhePorId.set(a.id, detalhe);
+    }
+  }
+  for (const a of jaReprovados) {
+    if (!detalhePorId.has(a.id)) detalhePorId.set(a.id, a.validacao_snapshot);
+  }
+
+  const codigosUnicos = Array.from(
+    new Set(jaReprovados.flatMap((a) => (detalhePorId.get(a.id)?.pecas ?? []).map((p) => p.codigo)))
+  );
+  const precosBid = await buscarPrecosBidPorPartNumber(admin, codigosUnicos);
+  function pecaSolucaoOuCodigo(codigo: string): string {
+    return precosBid[codigo]?.peca_solucao ?? codigo;
+  }
+
+  const dataFormatada = formatarDataBrasilia(new Date().toISOString());
+
+  const linhas: LinhaComOrdem[] = jaReprovados.map((a) => {
+    const detalhe = detalhePorId.get(a.id) ?? null;
+    const { peca, custoPeca } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
+    const valorTotalPeca = detalhe?.vendaTotalPecas ?? 0;
+    const maoDeObra = detalhe?.maoDeObra ?? 0;
+    const linha: LinhaPlanilhaOrcamento = {
+      reparadorTerceiro: a.reparador_terceiro,
+      nfRemessaAllied: nfRemessa,
+      dataRespostaOrcamento: dataFormatada,
+      osReparadora: a.os_reparadora,
+      imeiReparadora: a.imei_reparadora,
+      atendimento: a.atendimento,
+      osCareAllied: a.os_care_allied,
+      tradeAllied: a.trade_allied,
+      imeiAllied: a.imei_allied,
+      classificacaoAllied: a.classificacao_allied,
+      sku: a.sku,
+      descricaoCompleta: a.descricao_completa,
+      modeloComercial: a.modelo_comercial,
+      descricaoDefeito: listaCampo(a, "descricao_defeito"),
+      pecaDefeito: listaCampo(a, "peca_defeito"),
+      observacaoTecnicaReparadora: a.observacao_tecnica_reparadora,
+      pecaAdd: [null, null, null, null, null],
+      custoPecaAdd: [null, null, null, null, null],
+      obs: a.observacao_tecnica_reparadora,
+      peca,
+      custoPeca,
+      valorTotalPeca,
+      maoDeObra,
+      valorTotalReparo: valorTotalPeca + maoDeObra,
+      statusOrcamento: "RECUSADO",
+      motivoReprova: a.motivo_reprova,
+    };
+    return { linha, ordemPlanilha: a.ordem_planilha };
+  });
+
+  return { ok: true, linhas };
+}
+
 export type ResultadoPreparoGeracaoContraProposta =
   | { ok: false; status: number; erro: string }
   | {

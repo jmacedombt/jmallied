@@ -354,6 +354,11 @@ export default function PainelManutencaoBanco() {
             <p className="text-xs" style={{ color: "var(--muted)" }}>
               Contra Proposta: {resultadoOrdem.geracoesCorrigidas} de {resultadoOrdem.geracoesVerificadas} geração/gerações corrigida(s).
             </p>
+            {resultadoOrdem.geracoesAparelhosAdicionados > 0 && (
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                {resultadoOrdem.geracoesAparelhosAdicionados} aparelho(s) que só foram reprovados depois da geração original foram adicionados às planilhas.
+              </p>
+            )}
             {(resultadoOrdem.enviosComFalha.length > 0 || resultadoOrdem.geracoesComFalha.length > 0) && (
               <div className="pt-1.5 mt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
                 <p className="text-xs font-medium mb-1" style={{ color: "#ef4444" }}>
