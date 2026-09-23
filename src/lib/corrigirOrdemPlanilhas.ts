@@ -14,10 +14,11 @@ import { createAdminClient } from "@/lib/supabase/server";
  * POSIÇÃO das linhas que já existiam, usando ordem_planilha (já
  * corrigido, migration 0065) como critério. Reordenação estável: quem
  * não tem ordem_planilha (aparelho de um lote que ainda não foi
- * corrigido) mantém a posição relativa que já tinha, só vai pro final
- * do próprio grupo — nunca perde/duplica linha, nunca mistura os
- * grupos (Aprovados / Recusados, ou os 4 grupos da Contra Proposta)
- * entre si.
+ * corrigido) mantém a posição relativa que já tinha, só vai pro final.
+ *
+ * (pedido explícito) A planilha inteira sai intercalada na ordem
+ * original — aprovado, reprovado, já reprovado, tanto faz — sem separar
+ * em blocos por status/grupo; nunca perde/duplica linha.
  *
  * Rodado uma vez (manual, botão em Sistema > Manutenção do Banco) —
  * idempotente: rodar de novo não muda nada que já esteja corrigido.
@@ -74,8 +75,8 @@ export async function corrigirOrdemPlanilhasJaGeradas(admin: AdminClient): Promi
 
 // ---- "Confirmar Envio" (orcamento_envios, tipo="orcamento") ----------
 // arquivo já gerado fica salvo como .xlsx de verdade no Storage — pra
-// corrigir, baixa, reordena as linhas (mantendo o bloco AGUARDANDO
-// antes do bloco RECUSADO, igual o formato original) e sobrescreve o
+// corrigir, baixa, reordena TODAS as linhas juntas (sem separar
+// AGUARDANDO/RECUSADO em blocos — pedido explícito) e sobrescreve o
 // mesmo arquivo.
 async function corrigirEnviosOrcamento(admin: AdminClient, resultado: ResultadoCorrecaoOrdem) {
   const { data: envios, error } = await admin
@@ -103,8 +104,7 @@ async function corrigirEnviosOrcamento(admin: AdminClient, resultado: ResultadoC
 
       const cabecalho = linhasBrutas[0] as string[];
       const idxTrade = cabecalho.indexOf("Trade Allied");
-      const idxStatus = cabecalho.indexOf("STATUS ORÇAMENTO");
-      if (idxTrade === -1 || idxStatus === -1) continue; // formato inesperado, não mexe
+      if (idxTrade === -1) continue; // formato inesperado, não mexe
 
       const linhaTotais = linhasBrutas[linhasBrutas.length - 1];
       const linhasDados = linhasBrutas.slice(1, -1);
@@ -116,14 +116,10 @@ async function corrigirEnviosOrcamento(admin: AdminClient, resultado: ResultadoC
         .eq("nf_remessa_allied", envio.nf_remessa_allied);
       const mapaOrdem = construirMapaOrdem((ordens ?? []) as { trade_allied: string; ordem_planilha: number | null }[]);
 
-      const aguardando = linhasDados.filter((l) => l[idxStatus] === "AGUARDANDO");
-      const recusado = linhasDados.filter((l) => l[idxStatus] !== "AGUARDANDO");
-
       const tradeDaLinha = (l: unknown[]) => String(l[idxTrade] ?? "");
-      const aguardandoOrdenado = ordenarPorMapa(aguardando, tradeDaLinha, mapaOrdem);
-      const recusadoOrdenado = ordenarPorMapa(recusado, tradeDaLinha, mapaOrdem);
+      const linhasOrdenadas = ordenarPorMapa(linhasDados, tradeDaLinha, mapaOrdem);
 
-      const novasLinhas = [cabecalho, ...aguardandoOrdenado, ...recusadoOrdenado, linhaTotais];
+      const novasLinhas = [cabecalho, ...linhasOrdenadas, linhaTotais];
 
       const novaPlanilha = XLSX.utils.aoa_to_sheet(novasLinhas);
       novaPlanilha["!cols"] = cabecalho.map(() => ({ wch: 16 }));
@@ -152,18 +148,14 @@ async function corrigirEnviosOrcamento(admin: AdminClient, resultado: ResultadoC
 
 // ---- "Enviar Contra Proposta" (contra_proposta_geracoes) --------------
 // aqui não tem arquivo salvo, só o snapshot (dados.linhas) — reordena o
-// próprio jsonb, sem mexer em mais nada da geração. As quantidades já
-// gravadas (quantidade_aprovados_iniciais etc.) dão o tamanho exato de
-// cada um dos 4 grupos, na mesma ordem em que prepararGeracaoContraProposta
-// monta o array — garante que reordenar não mistura grupo com grupo.
+// próprio jsonb inteiro de uma vez, sem mexer em mais nada da geração.
+// (pedido explícito) NÃO separa mais em grupos (aprovados iniciais /
+// contra proposta / já reprovados) — reordena o array TODO junto, fica
+// tudo intercalado pela ordem original da planilha.
 type LinhaContraPropostaSnapshot = { tradeAllied?: string } & Record<string, unknown>;
 
 async function corrigirContraPropostaGeracoes(admin: AdminClient, resultado: ResultadoCorrecaoOrdem) {
-  const { data: geracoes, error } = await admin
-    .from("contra_proposta_geracoes")
-    .select(
-      "id, nf_remessa_allied, dados, quantidade_aprovados_iniciais, quantidade_contra_proposta_aceita, quantidade_reprovados, quantidade_ja_reprovados"
-    );
+  const { data: geracoes, error } = await admin.from("contra_proposta_geracoes").select("id, nf_remessa_allied, dados");
 
   if (error || !geracoes) return;
 
@@ -180,36 +172,8 @@ async function corrigirContraPropostaGeracoes(admin: AdminClient, resultado: Res
         .eq("nf_remessa_allied", geracao.nf_remessa_allied);
       const mapaOrdem = construirMapaOrdem((ordens ?? []) as { trade_allied: string; ordem_planilha: number | null }[]);
 
-      // IMPORTANTE: são só 3 blocos no array salvo, não 4 — ver
-      // prepararGeracaoContraProposta (contraPropostaDecisao.ts):
-      // "Contra Proposta aceita" e "Contra Proposta recusada" NÃO são dois
-      // blocos separados, são o MESMO bloco (linhasContraProposta), um
-      // único map() sobre a mesma busca (contraProposta), que já sai
-      // intercalado (aceita e recusada juntos) na ordem da planilha. A
-      // 1ª versão dessa correção tratava como 4 blocos e SEPARAVA esse
-      // bloco em dois, quebrando a intercalação correta — corrigido aqui.
-      const tamanhos = [
-        Number(geracao.quantidade_aprovados_iniciais ?? 0),
-        Number(geracao.quantidade_contra_proposta_aceita ?? 0) + Number(geracao.quantidade_reprovados ?? 0),
-        Number(geracao.quantidade_ja_reprovados ?? 0),
-      ];
-
-      // se a soma dos blocos não bate com o tamanho real do array salvo,
-      // o formato é mais antigo/diferente do esperado — não arrisca
-      // reordenar errado, pula essa geração.
-      if (tamanhos.reduce((a, b) => a + b, 0) !== linhas.length) continue;
-
       const tradeDaLinha = (l: LinhaContraPropostaSnapshot) => String(l.tradeAllied ?? "");
-
-      let cursor = 0;
-      const novosGrupos: LinhaContraPropostaSnapshot[][] = [];
-      for (const tamanho of tamanhos) {
-        const grupo = linhas.slice(cursor, cursor + tamanho);
-        novosGrupos.push(ordenarPorMapa(grupo, tradeDaLinha, mapaOrdem));
-        cursor += tamanho;
-      }
-
-      const novasLinhas = novosGrupos.flat();
+      const novasLinhas = ordenarPorMapa(linhas, tradeDaLinha, mapaOrdem);
 
       const { error: erroUpdate } = await admin
         .from("contra_proposta_geracoes")

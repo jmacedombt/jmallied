@@ -12,14 +12,15 @@ import {
 import { buscarPrecosBidPorPartNumber, buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
 import { formatarDataBrasilia } from "@/lib/tempo";
 import { type LinhaPlanilhaOrcamento } from "@/lib/email";
+import { type LinhaComOrdem, montarLinhasNaOrdemOriginal } from "@/lib/validacaoEnvioAllied";
 
 /**
  * Monta a planilha final de "Enviar Contra Proposta" (Ag. Contra Proposta)
  * — substitui por completo o antigo fluxo por e-mail (prepararEnvioContraProposta
  * em lib/contraProposta.ts, que fica sem uso a partir daqui, mas não foi
- * apagado). Combina, pra um lote (NF Remessa), os 3 grupos que precisam
- * sair juntos no MESMO arquivo, no mesmo formato que a Allied usa pra
- * aprovação de orçamentos (ver CABECALHO_PLANILHA_ORCAMENTOS em
+ * apagado). Combina, pra um lote (NF Remessa), 3 grupos de aparelhos que
+ * precisam sair juntos no MESMO arquivo, no mesmo formato que a Allied usa
+ * pra aprovação de orçamentos (ver CABECALHO_PLANILHA_ORCAMENTOS em
  * lib/email.ts):
  *
  *   1) "Aprovados inicialmente" — resultado_aprovacao_allied = "Aprovado"
@@ -31,24 +32,29 @@ import { type LinhaPlanilhaOrcamento } from "@/lib/email";
  *      esse grupo, não quem a Allied reprovou direto (esses já foram pra
  *      "8 - Orçamento Reprovado" com motivo fixo e são um fluxo
  *      encerrado, fora do escopo da Contra Proposta).
- *   2) "Contra Proposta aceita" — aparelhos ainda em Ag. Contra Proposta
- *      com contra_proposta_decisao = "Aprovado": usa contra_proposta_pecas
- *      /contra_proposta_mao_de_obra (congelados no momento da decisão),
- *      status "APROVADO".
- *   3) "Contra Proposta recusada" — contra_proposta_decisao = "Reprovado":
- *      mantém os valores ORIGINAIS (validacao_snapshot, igual ao grupo 1
- *      — nunca usa contra_proposta_pecas, que pode ter um valor
- *      proposto e recusado), status "RECUSADO", com o motivo digitado na
- *      coluna MOTIVO REPROVA.
- *   4) "Já reprovados" (pedido explícito) — aparelhos do MESMO lote que já
- *      estavam em "8 - Orçamento Reprovado" ANTES dessa geração (Allied
- *      reprovou direto na resposta de orçamento, ou reprovação manual em
- *      qualquer etapa) — entram no FINAL da planilha, com o motivo que já
- *      estava gravado (motivo_reprova). Usa validacao_snapshot quando
- *      existir; se o aparelho foi reprovado ANTES de chegar em Validação
- *      de Orçamentos (nunca teve preço apurado, nunca ganhou snapshot),
- *      recalcula ao vivo com os parâmetros atuais (mesmo fallback já
- *      usado em prepararEnvioLote/validacaoEnvioAllied.ts).
+ *   2) "Contra Proposta aceita/recusada" — aparelhos ainda em Ag. Contra
+ *      Proposta: contra_proposta_decisao = "Aprovado" usa
+ *      contra_proposta_pecas/contra_proposta_mao_de_obra (congelados no
+ *      momento da decisão), status "APROVADO"; contra_proposta_decisao =
+ *      "Reprovado" mantém os valores ORIGINAIS (validacao_snapshot, igual
+ *      ao grupo 1 — nunca usa contra_proposta_pecas, que pode ter um
+ *      valor proposto e recusado), status "RECUSADO", com o motivo
+ *      digitado na coluna MOTIVO REPROVA.
+ *   3) "Já reprovados" — aparelhos do MESMO lote que já estavam em
+ *      "8 - Orçamento Reprovado" ANTES dessa geração (Allied reprovou
+ *      direto na resposta de orçamento, ou reprovação manual em qualquer
+ *      etapa) — com o motivo que já estava gravado (motivo_reprova). Usa
+ *      validacao_snapshot quando existir; se o aparelho foi reprovado
+ *      ANTES de chegar em Validação de Orçamentos (nunca teve preço
+ *      apurado, nunca ganhou snapshot), recalcula ao vivo com os
+ *      parâmetros atuais (mesmo fallback já usado em
+ *      prepararEnvioLote/validacaoEnvioAllied.ts).
+ *
+ * (pedido explícito) A planilha final NÃO separa esses 3 grupos em blocos
+ * — sai tudo na ordem ORIGINAL da planilha de Base de Orçamentos
+ * (ordem_planilha), intercalado, independente de aprovado/reprovado/já
+ * reprovado — ver montarLinhasNaOrdemOriginal (compartilhado com
+ * validacaoEnvioAllied.ts).
  */
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -70,6 +76,7 @@ const COLUNAS_ESTATICAS = [
   "observacao_tecnica_reparadora",
   ...CAMPOS_DESCRICAO_DEFEITO,
   ...CAMPOS_PECA_DEFEITO,
+  "ordem_planilha",
 ].join(", ");
 
 type CamposEstaticos = {
@@ -85,6 +92,7 @@ type CamposEstaticos = {
   descricao_completa: string | null;
   modelo_comercial: string | null;
   observacao_tecnica_reparadora: string | null;
+  ordem_planilha: number | null;
   [chave: string]: unknown;
 };
 
@@ -175,11 +183,12 @@ export async function prepararGeracaoContraProposta(
 ): Promise<ResultadoPreparoGeracaoContraProposta> {
   // .order("ordem_planilha") em TODAS as buscas dessa função (pedido
   // explícito): a planilha final da Contra Proposta tem que sair sempre
-  // na mesma ordem da planilha original de Base de Orçamentos, em cada
-  // um dos 4 grupos (aprovados iniciais / aceita / recusada / já
-  // reprovados). Aparelhos importados antes dessa coluna existir ficam
-  // com ordem_planilha null e vão pro final de cada grupo (nullsFirst:
-  // false) — mesmo critério usado em validacaoEnvioAllied.ts.
+  // na mesma ordem da planilha original de Base de Orçamentos, com os 3
+  // grupos (aprovados iniciais / aceita+recusada / já reprovados)
+  // totalmente intercalados entre si (ver montarLinhasNaOrdemOriginal no
+  // fim da função). Aparelhos importados antes dessa coluna existir
+  // ficam com ordem_planilha null e vão pro final (nullsFirst: false) —
+  // mesmo critério usado em validacaoEnvioAllied.ts.
   const { data: contraPropostaBruta, error: erroContraProposta } = await admin
     .from("orcamentos")
     .select(
@@ -232,9 +241,10 @@ export async function prepararGeracaoContraProposta(
 
   const aprovadosIniciais = (aprovadosIniciaisBrutos ?? []) as unknown as LinhaAprovadoInicial[];
 
-  // 4) "Já reprovados" (pedido explícito) — aparelhos do MESMO lote já em
-  // "8 - Orçamento Reprovado" antes dessa geração, vão no FINAL da
-  // planilha (ver comentário no topo do arquivo).
+  // 3) "Já reprovados" — aparelhos do MESMO lote já em "8 - Orçamento
+  // Reprovado" antes dessa geração (ver comentário no topo do arquivo).
+  // Entram intercalados com os outros grupos pela ordem_planilha, não
+  // mais fixos no final.
   const { data: jaReprovadosBrutos, error: erroJaReprovados } = await admin
     .from("orcamentos")
     .select(`id, motivo_reprova, validacao_snapshot, ${COLUNAS_PECAS_RAW}, ${COLUNAS_ESTATICAS}`)
@@ -353,12 +363,12 @@ export async function prepararGeracaoContraProposta(
     };
   }
 
-  const linhasAprovadosIniciais: LinhaPlanilhaOrcamento[] = aprovadosIniciais.map((a) => {
+  const linhasAprovadosIniciais: LinhaComOrdem[] = aprovadosIniciais.map((a) => {
     const detalhe = a.validacao_snapshot;
     const { peca, custoPeca } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
     const valorTotalPeca = detalhe?.vendaTotalPecas ?? 0;
     const maoDeObra = detalhe?.maoDeObra ?? 0;
-    return {
+    const linha: LinhaPlanilhaOrcamento = {
       ...linhaBase(a),
       peca,
       custoPeca,
@@ -368,19 +378,20 @@ export async function prepararGeracaoContraProposta(
       statusOrcamento: "APROVADO",
       motivoReprova: null,
     };
+    return { linha, ordemPlanilha: a.ordem_planilha };
   });
 
   const idsAprovados: string[] = [];
   const idsReprovados: { id: string; motivo: string }[] = [];
 
-  const linhasContraProposta: LinhaPlanilhaOrcamento[] = contraProposta.map((a) => {
+  const linhasContraProposta: LinhaComOrdem[] = contraProposta.map((a) => {
     if (a.contra_proposta_decisao === "Aprovado") {
       idsAprovados.push(a.id);
       const pecas = a.contra_proposta_pecas ?? [];
       const maoDeObra = Number(a.contra_proposta_mao_de_obra ?? 0);
       const resumo = calcularResumoContraProposta(pecas, maoDeObra);
       const { peca, custoPeca } = montarPosicoesAceitas(pecas, pecaSolucaoOuCodigo);
-      return {
+      const linha: LinhaPlanilhaOrcamento = {
         ...linhaBase(a),
         peca,
         custoPeca,
@@ -390,6 +401,7 @@ export async function prepararGeracaoContraProposta(
         statusOrcamento: "APROVADO",
         motivoReprova: null,
       };
+      return { linha, ordemPlanilha: a.ordem_planilha };
     }
 
     // Reprovado — mantém valores ORIGINAIS (nunca contra_proposta_pecas).
@@ -399,7 +411,7 @@ export async function prepararGeracaoContraProposta(
     const { peca, custoPeca } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
     const valorTotalPeca = detalhe?.vendaTotalPecas ?? 0;
     const maoDeObra = detalhe?.maoDeObra ?? 0;
-    return {
+    const linha: LinhaPlanilhaOrcamento = {
       ...linhaBase(a),
       peca,
       custoPeca,
@@ -409,14 +421,15 @@ export async function prepararGeracaoContraProposta(
       statusOrcamento: "RECUSADO",
       motivoReprova: motivo,
     };
+    return { linha, ordemPlanilha: a.ordem_planilha };
   });
 
-  const linhasJaReprovados: LinhaPlanilhaOrcamento[] = jaReprovados.map((a) => {
+  const linhasJaReprovados: LinhaComOrdem[] = jaReprovados.map((a) => {
     const detalhe = detalheJaReprovadoPorId.get(a.id) ?? null;
     const { peca, custoPeca } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
     const valorTotalPeca = detalhe?.vendaTotalPecas ?? 0;
     const maoDeObra = detalhe?.maoDeObra ?? 0;
-    return {
+    const linha: LinhaPlanilhaOrcamento = {
       ...linhaBase(a),
       peca,
       custoPeca,
@@ -426,12 +439,15 @@ export async function prepararGeracaoContraProposta(
       statusOrcamento: "RECUSADO",
       motivoReprova: a.motivo_reprova,
     };
+    return { linha, ordemPlanilha: a.ordem_planilha };
   });
 
   return {
     ok: true,
-    // "Já reprovados" sempre no FINAL da planilha (pedido explícito).
-    linhas: [...linhasAprovadosIniciais, ...linhasContraProposta, ...linhasJaReprovados],
+    // (pedido explícito) planilha final TODA na ordem original, aprovados
+    // iniciais / contra proposta / já reprovados intercalados — sem
+    // separar em blocos por grupo.
+    linhas: montarLinhasNaOrdemOriginal(linhasAprovadosIniciais, linhasContraProposta, linhasJaReprovados),
     idsAprovados,
     idsReprovados,
     quantidadeAprovadosIniciais: linhasAprovadosIniciais.length,
