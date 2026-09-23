@@ -122,11 +122,17 @@ export type ResultadoPreparoEnvio =
  *   3) o BID precisa refletir o mesmo valor que a Base Peças tem agora.
  */
 export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): Promise<ResultadoPreparoEnvio> {
+  // .order("ordem_planilha") (pedido explícito): a planilha de envio pra
+  // Allied tem que sair sempre na mesma ordem da planilha original de
+  // Base de Orçamentos — sem isso, a ordem daqui saía arbitrária (sem
+  // nenhum ORDER BY). Aparelhos importados antes dessa coluna existir
+  // ficam com ordem_planilha null e vão pro final (nullsFirst: false).
   const { data: aparelhos, error: erroBusca } = await admin
     .from("orcamentos")
     .select(`id, validacao_confirmado_sem_peca, ${COLUNAS_ESTATICAS}, ${COLUNAS_PECAS}`)
     .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS)
-    .eq("nf_remessa_allied", nfRemessa);
+    .eq("nf_remessa_allied", nfRemessa)
+    .order("ordem_planilha", { ascending: true, nullsFirst: false });
 
   if (erroBusca) {
     return { ok: false, status: 400, erro: erroBusca.message };
@@ -146,7 +152,8 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
     .from("orcamentos")
     .select(`${COLUNAS_ESTATICAS}, ${COLUNAS_PECAS}, validacao_snapshot`)
     .eq("status_operacional", STATUS_ORCAMENTO_REPROVADO)
-    .eq("nf_remessa_allied", nfRemessa);
+    .eq("nf_remessa_allied", nfRemessa)
+    .order("ordem_planilha", { ascending: true, nullsFirst: false });
 
   if (erroReprovados) {
     return { ok: false, status: 400, erro: erroReprovados.message };

@@ -58,6 +58,15 @@ export async function POST(request: Request) {
   // pra mudanças futuras na Base Peças/markup/ICMS não alterarem
   // retroativamente o valor que já foi informado ao cliente. Roda em
   // paralelo, em grupos pequenos, pra não estourar o tempo de execução.
+  // (pedido explícito) a planilha final tem que sair na mesma ordem da
+  // planilha original — preparo.itensConfirmaveis já vem nessa ordem
+  // (ordem_planilha, ver prepararEnvioLote), mas empurrar pra
+  // linhasConfirmadas de DENTRO do callback assíncrono (como era antes)
+  // reordena pela ordem em que cada update TERMINA, não pela ordem do
+  // array — embaralha de novo. Por isso cada grupo devolve o resultado
+  // na mesma posição do item (Promise.all preserva a ordem do array de
+  // entrada, mesmo que as promises terminem fora de ordem) e só DEPOIS
+  // filtra, em ordem, pra dentro de linhasConfirmadas.
   let quantidade = 0;
   const linhasConfirmadas: LinhaPlanilhaOrcamento[] = [];
   for (let i = 0; i < preparo.itensConfirmaveis.length; i += TAMANHO_LOTE_UPDATE_PARALELO) {
@@ -77,11 +86,13 @@ export async function POST(request: Request) {
           })
           .eq("id", item.id)
           .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS);
-        if (!error) linhasConfirmadas.push(item.linha);
-        return !error;
+        return { ok: !error, linha: item.linha };
       })
     );
-    quantidade += resultados.filter(Boolean).length;
+    for (const r of resultados) {
+      if (r.ok) linhasConfirmadas.push(r.linha);
+    }
+    quantidade += resultados.filter((r) => r.ok).length;
   }
 
   const linhasPlanilha = [...linhasConfirmadas, ...preparo.linhasReprovados];

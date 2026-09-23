@@ -287,7 +287,12 @@ export async function POST(request: Request) {
           }),
         ]);
 
-        const linhasComCalculo = linhasParaInserir.map((l) => {
+        // `indice` = posição desse aparelho dentro do arquivo (já sem
+        // duplicadas), na mesma ordem em que aparece na planilha original
+        // — vira `ordem_planilha`, usado depois pra gerar a planilha de
+        // Confirmar Envio e a de Contra Proposta sempre nessa mesma ordem
+        // (pedido explícito).
+        const linhasComCalculo = linhasParaInserir.map((l, indice) => {
           const { valorTotalPeca, maoDeObra, valorTotalReparo } = calcularValoresOrcamento(
             l.peca,
             l.peca_add,
@@ -337,6 +342,7 @@ export async function POST(request: Request) {
             motivo_reprova: l.motivo_reprova,
             obs: l.obs,
             pre_ordem: l.pre_ordem,
+            ordem_planilha: indice,
             reincidente: ehReincidente(l),
             lote_id: lote.id,
           };

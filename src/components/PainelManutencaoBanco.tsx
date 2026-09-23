@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Database, Loader2, RefreshCw, Timer, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowUpDown, CheckCircle2, Database, Loader2, RefreshCw, Timer, Trash2 } from "lucide-react";
 import {
   GRUPOS_ZERAR,
   MESES_COMPACTACAO_PADRAO,
@@ -11,6 +11,7 @@ import {
   type TamanhoTabela,
 } from "@/lib/manutencao";
 import PopupConfirmarZerar from "@/components/PopupConfirmarZerar";
+import type { ResultadoCorrecaoOrdem } from "@/lib/corrigirOrdemPlanilhas";
 
 function Cartao({ titulo, icone: Icone, children }: { titulo: string; icone: typeof Database; children: React.ReactNode }) {
   return (
@@ -44,6 +45,10 @@ export default function PainelManutencaoBanco() {
   const [carregandoCompactar, setCarregandoCompactar] = useState(false);
   const [erroCompactar, setErroCompactar] = useState<string | null>(null);
   const [resultadoCompactar, setResultadoCompactar] = useState<LinhaCompactacao[] | null>(null);
+
+  const [carregandoOrdem, setCarregandoOrdem] = useState(false);
+  const [erroOrdem, setErroOrdem] = useState<string | null>(null);
+  const [resultadoOrdem, setResultadoOrdem] = useState<ResultadoCorrecaoOrdem | null>(null);
 
   const buscarTamanho = useCallback(async () => {
     setCarregandoTamanho(true);
@@ -119,6 +124,25 @@ export default function PainelManutencaoBanco() {
       setErroCompactar("Falha de conexão. Tente novamente.");
     } finally {
       setCarregandoCompactar(false);
+    }
+  }
+
+  async function rodarCorrecaoOrdem() {
+    setCarregandoOrdem(true);
+    setErroOrdem(null);
+    setResultadoOrdem(null);
+    try {
+      const res = await fetch("/api/sistema/manutencao/corrigir-ordem-planilhas", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErroOrdem(data?.error || "Não foi possível rodar a correção.");
+        return;
+      }
+      setResultadoOrdem(data.resultado ?? null);
+    } catch {
+      setErroOrdem("Falha de conexão. Tente novamente.");
+    } finally {
+      setCarregandoOrdem(false);
     }
   }
 
@@ -289,6 +313,59 @@ export default function PainelManutencaoBanco() {
                 </p>
               )}
             </div>
+          </div>
+        )}
+      </Cartao>
+
+      <Cartao titulo="Corrigir ordem das planilhas já geradas" icone={ArrowUpDown}>
+        <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+          As planilhas de &quot;Confirmar Envio&quot; (Histórico de Envios) e &quot;Enviar Contra Proposta&quot; agora sempre
+          saem na mesma ordem da planilha original de Base de Orçamentos. Essa correção reordena, sem recalcular nada
+          (nenhuma peça, valor ou decisão muda), as que já tinham sido geradas antes dessa mudança. Pode rodar mais de
+          uma vez sem problema — o que já estiver certo não muda.
+        </p>
+        <button
+          type="button"
+          onClick={rodarCorrecaoOrdem}
+          disabled={carregandoOrdem}
+          className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-60"
+          style={{ background: "var(--accent)", boxShadow: "0 0 30px var(--accent-glow)" }}
+        >
+          {carregandoOrdem ? <Loader2 size={14} className="animate-spin" /> : <ArrowUpDown size={14} />}
+          Rodar correção agora
+        </button>
+
+        {erroOrdem && (
+          <p className="text-xs text-red-400 mt-3 flex items-start gap-1.5">
+            <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+            {erroOrdem}
+          </p>
+        )}
+
+        {resultadoOrdem && (
+          <div className="rounded-xl border p-3.5 mt-3 space-y-1.5" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+            <p className="text-xs font-medium flex items-center gap-1.5" style={{ color: "#22c55e" }}>
+              <CheckCircle2 size={13} />
+              Concluído.
+            </p>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Confirmar Envio: {resultadoOrdem.enviosCorrigidos} de {resultadoOrdem.enviosVerificados} planilha(s) corrigida(s).
+            </p>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Contra Proposta: {resultadoOrdem.geracoesCorrigidas} de {resultadoOrdem.geracoesVerificadas} geração/gerações corrigida(s).
+            </p>
+            {(resultadoOrdem.enviosComFalha.length > 0 || resultadoOrdem.geracoesComFalha.length > 0) && (
+              <div className="pt-1.5 mt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
+                <p className="text-xs font-medium mb-1" style={{ color: "#ef4444" }}>
+                  Falharam (não foram alteradas):
+                </p>
+                {[...resultadoOrdem.enviosComFalha, ...resultadoOrdem.geracoesComFalha].map((f) => (
+                  <p key={f.id} className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+                    NF {f.nf_remessa_allied}: {f.erro}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </Cartao>

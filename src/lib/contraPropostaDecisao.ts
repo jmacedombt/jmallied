@@ -173,13 +173,21 @@ export async function prepararGeracaoContraProposta(
   admin: AdminClient,
   nfRemessa: string
 ): Promise<ResultadoPreparoGeracaoContraProposta> {
+  // .order("ordem_planilha") em TODAS as buscas dessa função (pedido
+  // explícito): a planilha final da Contra Proposta tem que sair sempre
+  // na mesma ordem da planilha original de Base de Orçamentos, em cada
+  // um dos 4 grupos (aprovados iniciais / aceita / recusada / já
+  // reprovados). Aparelhos importados antes dessa coluna existir ficam
+  // com ordem_planilha null e vão pro final de cada grupo (nullsFirst:
+  // false) — mesmo critério usado em validacaoEnvioAllied.ts.
   const { data: contraPropostaBruta, error: erroContraProposta } = await admin
     .from("orcamentos")
     .select(
       `id, contra_proposta_decisao, contra_proposta_motivo_recusa, contra_proposta_pecas, contra_proposta_mao_de_obra, validacao_snapshot, ${COLUNAS_ESTATICAS}`
     )
     .eq("status_operacional", STATUS_AG_CONTRA_PROPOSTA)
-    .eq("nf_remessa_allied", nfRemessa);
+    .eq("nf_remessa_allied", nfRemessa)
+    .order("ordem_planilha", { ascending: true, nullsFirst: false });
 
   if (erroContraProposta) {
     return { ok: false, status: 400, erro: erroContraProposta.message };
@@ -215,7 +223,8 @@ export async function prepararGeracaoContraProposta(
     .from("orcamentos")
     .select(`id, validacao_snapshot, ${COLUNAS_ESTATICAS}`)
     .eq("nf_remessa_allied", nfRemessa)
-    .eq("resultado_aprovacao_allied", "Aprovado");
+    .eq("resultado_aprovacao_allied", "Aprovado")
+    .order("ordem_planilha", { ascending: true, nullsFirst: false });
 
   if (erroAprovadosIniciais) {
     return { ok: false, status: 400, erro: erroAprovadosIniciais.message };
@@ -230,7 +239,8 @@ export async function prepararGeracaoContraProposta(
     .from("orcamentos")
     .select(`id, motivo_reprova, validacao_snapshot, ${COLUNAS_PECAS_RAW}, ${COLUNAS_ESTATICAS}`)
     .eq("status_operacional", STATUS_ORCAMENTO_REPROVADO)
-    .eq("nf_remessa_allied", nfRemessa);
+    .eq("nf_remessa_allied", nfRemessa)
+    .order("ordem_planilha", { ascending: true, nullsFirst: false });
 
   if (erroJaReprovados) {
     return { ok: false, status: 400, erro: erroJaReprovados.message };
