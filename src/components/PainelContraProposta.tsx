@@ -7,6 +7,7 @@ import {
   podeConfirmarAprovacaoOrcamento,
   calcularResumoContraProposta,
   montarPecasContraPropostaIniciais,
+  MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA,
   type PecaContraProposta,
   type DetalheValidacaoOrcamento,
 } from "@/lib/orcamentos";
@@ -467,6 +468,9 @@ export default function PainelContraProposta({
           aparelhoId={mostrarMotivoDe.id}
           trade={mostrarMotivoDe.trade_allied}
           osReparadora={mostrarMotivoDe.os_reparadora}
+          // (pedido explícito) já vem preenchido com a frase padrão —
+          // continua editável, só que agora normalmente é só confirmar.
+          motivoInicial={MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA}
           onFechar={() => setMostrarMotivoDe(null)}
           onReprovado={() => {
             setMostrarMotivoDe(null);

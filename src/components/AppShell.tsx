@@ -15,6 +15,7 @@ import {
   FileSpreadsheet,
   FileText,
   HardDrive,
+  History,
   Home,
   Info,
   KeyRound,
@@ -198,6 +199,17 @@ const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
       // não veem o detalhe peça a peça em Ag. Contra Proposta (ver
       // aviso em PainelContraProposta.tsx), só esse resultado.
       { href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight },
+      // "Orçamentos Enviados" e "Validação de Orçamento (Allied)"
+      // também liberados pro ALLIED (pedido explícito) — o primeiro é o
+      // mesmo arquivo que a Allied já recebe pra aprovar (sem
+      // custo/BID); o segundo é só o resumo (quantidade/percentual por
+      // resultado) do arquivo que a própria Allied manda de volta.
+      { href: "/operacional/orcamentos-enviados", label: "Orçamentos Enviados", icone: History },
+      {
+        href: "/operacional/validacao-orcamento-allied",
+        label: "Validação de Orçamento (Allied)",
+        icone: ShieldCheck,
+      },
     ],
   },
   {
@@ -324,6 +336,12 @@ export default function AppShell({
   // Contra Proposta (podeConfirmarAprovacaoOrcamento é o mesmo
   // podeLancarNfProdutoEntregue por baixo, ver lib/orcamentos.ts).
   const podeVerContraPropostas = podeVerModeloRetorno;
+  // "Orçamentos Enviados" e "Validação de Orçamento (Allied)" (pedido
+  // explícito) — mesmo cargo de quem já confirma o envio/sobe o arquivo
+  // de aprovação (podeConfirmarAnaliseEmLote/podeConfirmarAprovacaoOrcamento,
+  // o mesmo alias por baixo).
+  const podeVerOrcamentosEnviados = !allied && !restritoOperacional && !restritoFinanceiro && podeConfirmarAnaliseEmLote(perfil);
+  const podeVerValidacaoOrcamentoAllied = podeVerOrcamentosEnviados;
   // "Financeiro" (pedido explícito): Administrador, Gerente ou o cargo
   // dedicado "Financeiro" — inserido logo abaixo de "Impressão", antes
   // de "Métricas" (ver podeAcessarFinanceiro em lib/financeiro.ts).
@@ -345,6 +363,18 @@ export default function AppShell({
                       : []),
                     ...(podeVerContraPropostas
                       ? [{ href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight }]
+                      : []),
+                    ...(podeVerOrcamentosEnviados
+                      ? [{ href: "/operacional/orcamentos-enviados", label: "Orçamentos Enviados", icone: History }]
+                      : []),
+                    ...(podeVerValidacaoOrcamentoAllied
+                      ? [
+                          {
+                            href: "/operacional/validacao-orcamento-allied",
+                            label: "Validação de Orçamento (Allied)",
+                            icone: ShieldCheck,
+                          },
+                        ]
                       : []),
                   ],
                 }

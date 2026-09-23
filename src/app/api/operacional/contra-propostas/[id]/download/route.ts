@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { podeConfirmarAprovacaoOrcamento } from "@/lib/orcamentos";
 import { isAllied } from "@/lib/usuarios";
-import { montarPlanilhaOrcamentos, type LinhaPlanilhaOrcamento } from "@/lib/email";
+import { type LinhaPlanilhaOrcamento } from "@/lib/email";
+import { montarPlanilhaContraProposta } from "@/lib/planilhaContraProposta";
 
 // Baixa de novo (remontando, não guardando o arquivo — mesmo princípio do
 // Modelo de Retorno) uma planilha "Contra Propostas" já gerada, a partir
@@ -39,7 +40,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
 
   const dados = registro.dados as { linhas: LinhaPlanilhaOrcamento[] };
-  const buffer = montarPlanilhaOrcamentos(dados.linhas ?? []);
+  const buffer = await montarPlanilhaContraProposta(dados.linhas ?? []);
 
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,

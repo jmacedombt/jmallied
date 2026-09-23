@@ -199,6 +199,15 @@ export const STATUS_OQC = STATUS_OPERACIONAL.find((s) => s.slug === "oqc-control
 export const STATUS_REPARO_FINALIZADO = STATUS_OPERACIONAL.find((s) => s.slug === "7-reparo-finalizado")!.valor;
 export const STATUS_ORCAMENTO_REPROVADO = STATUS_OPERACIONAL.find((s) => s.slug === "8-orcamento-reprovado")!.valor;
 
+// Frase padrão do motivo de recusa da Contra Proposta (pedido explícito)
+// — pré-preenche o pop-up de "Reprovar Contra Proposta"
+// (PopupMotivoReprovaContraProposta) porque, na prática, praticamente
+// toda recusa é por esse mesmo motivo; a pessoa ainda pode editar antes
+// de confirmar, pra um caso diferente. Usada também na correção
+// retroativa dos registros já recusados antes dessa frase existir (ver
+// migration 0066 e corrigirOrdemPlanilhas.ts).
+export const MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA = "Contra Proposta Recusada - Abaixo dos custos de peças";
+
 // Os 2 status REAIS que vivem dentro da etapa/tela "Ag. Emissão de Nota
 // Fiscal" (slug "ag-emissao-nf") — não vêm de STATUS_OPERACIONAL.find()
 // porque o "valor" daquela entrada é só um rótulo de tela, nunca gravado

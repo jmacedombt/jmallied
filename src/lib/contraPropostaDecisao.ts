@@ -101,6 +101,11 @@ type CamposEstaticos = {
 type LinhaAprovadoInicial = CamposEstaticos & {
   id: string;
   validacao_snapshot: DetalheValidacaoOrcamento | null;
+  /** quando o resultado (Aprovado/Reprovado/Contra Proposta) foi gravado
+   * pelo Upload (aprovação de orçamentos) — data do arquivo que a Allied
+   * mandou, não da confirmação em tela (ver upload-aprovacao/route.ts).
+   * Usada na coluna OBS (pedido explícito: "Allied Aprovou em: DD/MM/AAAA"). */
+  resultado_aprovacao_definido_em: string | null;
 };
 
 type LinhaContraProposta = CamposEstaticos & {
@@ -372,7 +377,7 @@ export async function prepararGeracaoContraProposta(
 
   const { data: aprovadosIniciaisBrutos, error: erroAprovadosIniciais } = await admin
     .from("orcamentos")
-    .select(`id, validacao_snapshot, ${COLUNAS_ESTATICAS}`)
+    .select(`id, validacao_snapshot, resultado_aprovacao_definido_em, ${COLUNAS_ESTATICAS}`)
     .eq("nf_remessa_allied", nfRemessa)
     .eq("resultado_aprovacao_allied", "Aprovado")
     .order("ordem_planilha", { ascending: true, nullsFirst: false });
@@ -510,6 +515,15 @@ export async function prepararGeracaoContraProposta(
     const { peca, custoPeca } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
     const valorTotalPeca = detalhe?.vendaTotalPecas ?? 0;
     const maoDeObra = detalhe?.maoDeObra ?? 0;
+    // (pedido explícito) OBS = "Allied Aprovou em: DD/MM/AAAA", usando a
+    // data em que o Upload (aprovação de orçamentos) gravou esse
+    // resultado — substitui a observação técnica do reparador nessa
+    // coluna, só pra esse grupo. Sem a data (registro antigo, de antes
+    // desse campo existir), mantém a observação técnica de antes, pra
+    // não deixar a célula em branco.
+    const obsAprovado = a.resultado_aprovacao_definido_em
+      ? `Allied Aprovou em: ${formatarDataBrasilia(a.resultado_aprovacao_definido_em)}`
+      : a.observacao_tecnica_reparadora;
     const linha: LinhaPlanilhaOrcamento = {
       ...linhaBase(a),
       peca,
@@ -519,6 +533,7 @@ export async function prepararGeracaoContraProposta(
       valorTotalReparo: valorTotalPeca + maoDeObra,
       statusOrcamento: "APROVADO",
       motivoReprova: null,
+      obs: obsAprovado,
     };
     return { linha, ordemPlanilha: a.ordem_planilha };
   });
@@ -533,6 +548,22 @@ export async function prepararGeracaoContraProposta(
       const maoDeObra = Number(a.contra_proposta_mao_de_obra ?? 0);
       const resumo = calcularResumoContraProposta(pecas, maoDeObra);
       const { peca, custoPeca } = montarPosicoesAceitas(pecas, pecaSolucaoOuCodigo);
+      // (pedido explícito) destaca em vermelho negrito só a(s) posição(ões)
+      // de peça cujo valor a Contra Proposta REALMENTE mudou em relação
+      // ao valor original enviado (validacao_snapshot) — compara posição
+      // a posição, não a linha inteira.
+      const valorOriginalPorPosicao = new Map<number, number>();
+      for (const p of a.validacao_snapshot?.pecas ?? []) {
+        const indice = Number(p.posicao) - 1;
+        if (Number.isInteger(indice) && indice >= 0 && indice < 10 && p.vendaPeca != null) {
+          valorOriginalPorPosicao.set(indice, p.vendaPeca);
+        }
+      }
+      const pecaAlterada = Array.from({ length: 10 }, (_, indice) => {
+        if (custoPeca[indice] == null) return false;
+        const original = valorOriginalPorPosicao.get(indice);
+        return original === undefined || Math.abs(original - (custoPeca[indice] as number)) > 0.001;
+      });
       const linha: LinhaPlanilhaOrcamento = {
         ...linhaBase(a),
         peca,
@@ -542,6 +573,10 @@ export async function prepararGeracaoContraProposta(
         valorTotalReparo: resumo.vendaTotalPecas + resumo.maoDeObra,
         statusOrcamento: "APROVADO",
         motivoReprova: null,
+        // (pedido explícito) substitui a observação técnica nessa coluna
+        // só pra quem teve a Contra Proposta aceita.
+        obs: "Contra Proposta Aceita",
+        pecaAlterada,
       };
       return { linha, ordemPlanilha: a.ordem_planilha };
     }

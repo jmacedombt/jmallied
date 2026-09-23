@@ -97,26 +97,30 @@ export async function POST(request: Request) {
   // casa com aparelho que estiver esperando em "3 - Ag. Resposta de
   // Orçamento" OU que já esteja em "Ag. Contra Proposta" (ver comentário
   // acima) — OS Reparadora de qualquer outra etapa (ou que nunca
-  // existiu) não é alterada.
-  const aparelhosEncontrados = new Map<string, string>(); // os_reparadora -> id
+  // existiu) não é alterada. Guarda também o nf_remessa_allied de cada
+  // um (pedido explícito) pro resumo por NF do histórico desse upload —
+  // um único arquivo normalmente mistura vários lotes.
+  const aparelhosEncontrados = new Map<string, { id: string; nfRemessaAllied: string }>(); // os_reparadora -> {id, nf}
   for (let i = 0; i < osReparadoras.length; i += TAMANHO_LOTE) {
     const lote = osReparadoras.slice(i, i + TAMANHO_LOTE);
     const { data } = await admin
       .from("orcamentos")
-      .select("id, os_reparadora")
+      .select("id, os_reparadora, nf_remessa_allied")
       .in("status_operacional", [STATUS_AG_RESPOSTA_ORCAMENTO, STATUS_AG_CONTRA_PROPOSTA])
       .in("os_reparadora", lote);
     for (const row of data ?? []) {
-      if (row.os_reparadora) aparelhosEncontrados.set(row.os_reparadora, row.id);
+      if (row.os_reparadora) aparelhosEncontrados.set(row.os_reparadora, { id: row.id, nfRemessaAllied: row.nf_remessa_allied });
     }
   }
 
   const agora = new Date().toISOString();
   const contagem = { Aprovado: 0, "Contra Proposta": 0, Reprovado: 0 };
+  const contagemPorNf = new Map<string, { total: number; Aprovado: number; "Contra Proposta": number; Reprovado: number }>();
 
   for (const [osReparadora, { resultado, valorContraProposta }] of resultadoPorOs.entries()) {
-    const id = aparelhosEncontrados.get(osReparadora);
-    if (!id) continue;
+    const encontrado = aparelhosEncontrados.get(osReparadora);
+    if (!encontrado) continue;
+    const { id, nfRemessaAllied } = encontrado;
     const { error } = await admin
       .from("orcamentos")
       .update({
@@ -129,11 +133,60 @@ export async function POST(request: Request) {
         contra_proposta_valor_recebido_allied: valorContraProposta,
       })
       .eq("id", id);
-    if (!error) contagem[resultado] += 1;
+    if (!error) {
+      contagem[resultado] += 1;
+      const atual = contagemPorNf.get(nfRemessaAllied) ?? { total: 0, Aprovado: 0, "Contra Proposta": 0, Reprovado: 0 };
+      atual.total += 1;
+      atual[resultado] += 1;
+      contagemPorNf.set(nfRemessaAllied, atual);
+    }
   }
 
   const casadas = contagem.Aprovado + contagem["Contra Proposta"] + contagem.Reprovado;
   const naoEncontradas = osReparadoras.length - casadas;
+
+  // (pedido explícito) guarda o histórico desse upload — o arquivo em si
+  // (storage) + o resumo já calculado, com detalhamento por NF Remessa —
+  // uma falha aqui não pode impedir o resultado de já ter sido gravado
+  // nos orçamentos acima, só fica sem registro no histórico dessa vez.
+  try {
+    const timestamp = agora.replace(/[^0-9]/g, "");
+    const arquivoPath = `${timestamp}-${arquivo.name.replace(/[^a-zA-Z0-9.\-_]+/g, "_")}`;
+    const bytesArquivo = Buffer.from(await arquivo.arrayBuffer());
+    const { error: erroUpload } = await admin.storage
+      .from("aprovacoes-orcamentos")
+      .upload(arquivoPath, bytesArquivo, {
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        upsert: false,
+      });
+
+    const resumoPorNf = Array.from(contagemPorNf.entries())
+      .map(([nfRemessaAllied, c]) => ({
+        nf_remessa_allied: nfRemessaAllied,
+        total: c.total,
+        aprovados: c.Aprovado,
+        contra_proposta: c["Contra Proposta"],
+        reprovados: c.Reprovado,
+      }))
+      .sort((a, b) => a.nf_remessa_allied.localeCompare(b.nf_remessa_allied));
+
+    await admin.from("orcamento_aprovacoes_uploads").insert({
+      arquivo_path: erroUpload ? null : arquivoPath,
+      nome_arquivo: arquivo.name,
+      enviado_por: user.id,
+      enviado_em: agora,
+      linhas_no_arquivo: linhasDados.length,
+      linhas_nao_reconhecidas: linhasNaoReconhecidas,
+      casadas,
+      nao_encontradas: naoEncontradas,
+      aprovados: contagem.Aprovado,
+      contra_proposta: contagem["Contra Proposta"],
+      reprovados: contagem.Reprovado,
+      resumo_por_nf: resumoPorNf,
+    });
+  } catch (erroHistorico) {
+    console.error("Falha ao registrar histórico de upload de aprovação:", erroHistorico);
+  }
 
   return NextResponse.json({
     linhasNoArquivo: linhasDados.length,

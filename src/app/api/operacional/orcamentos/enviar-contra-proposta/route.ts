@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { podeConfirmarAprovacaoOrcamento, STATUS_AG_PECAS, STATUS_ORCAMENTO_REPROVADO } from "@/lib/orcamentos";
 import { prepararGeracaoContraProposta } from "@/lib/contraPropostaDecisao";
-import { montarPlanilhaOrcamentos } from "@/lib/email";
+import { montarPlanilhaContraProposta } from "@/lib/planilhaContraProposta";
 
 export const maxDuration = 60;
 
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
 
   const nfRemessaArquivo = nfRemessa.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const nomeArquivo = `Contra_Proposta_${nfRemessaArquivo}.xlsx`;
-  const planilha = montarPlanilhaOrcamentos(preparo.linhas);
+  const planilha = await montarPlanilhaContraProposta(preparo.linhas);
 
   const { error: erroHistorico } = await admin.from("contra_proposta_geracoes").insert({
     gerado_por: user.id,

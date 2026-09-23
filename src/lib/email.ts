@@ -103,11 +103,25 @@ export type LinhaPlanilhaOrcamento = {
   statusOrcamento: "AGUARDANDO" | "APROVADO" | "RECUSADO" | "CONTRA PROPOSTA" | "COMPLEMENTAR";
   /** só preenchido no RECUSADO. */
   motivoReprova: string | null;
-  /** sempre igual a observacaoTecnicaReparadora. */
+  /** normalmente igual a observacaoTecnicaReparadora — mas a Contra
+   * Proposta sobrescreve com um texto próprio em 2 casos (pedido
+   * explícito, ver contraPropostaDecisao.ts): "Contra Proposta Aceita"
+   * (aceita) e "Allied Aprovou em: DD/MM/AAAA" (aprovado inicialmente). */
   obs: string | null;
+  /** 10 posições (opcional, só usado na planilha de Contra Proposta) —
+   * true na posição de peça cujo valor a Contra Proposta aceita ALTEROU
+   * em relação ao valor original enviado (pedido explícito: destaque em
+   * vermelho negrito só no que mudou) — ver montarPlanilhaContraProposta
+   * em lib/planilhaContraProposta.ts. Ausente/undefined em qualquer
+   * linha que não seja "Contra Proposta aceita com alteração de valor". */
+  pecaAlterada?: boolean[];
 };
 
-const CABECALHO_PLANILHA_ORCAMENTOS = [
+// Exportado (pedido explícito) pra lib/planilhaContraProposta.ts poder
+// remontar o MESMO cabeçalho/ordem de colunas usando ExcelJS (a única
+// forma de aplicar cor de fundo/negrito nas células — a biblioteca "xlsx"
+// usada aqui embaixo, na versão gratuita, não grava estilo nenhum).
+export const CABECALHO_PLANILHA_ORCAMENTOS = [
   "Reparador Terceiro",
   "NF Remessa Allied",
   "Data Resposta Orçamento",

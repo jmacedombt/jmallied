@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { montarLinhasJaReprovadas } from "@/lib/contraPropostaDecisao";
 import { montarLinhasNaOrdemOriginal, type LinhaComOrdem } from "@/lib/validacaoEnvioAllied";
 import { type LinhaPlanilhaOrcamento } from "@/lib/email";
+import { MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA } from "@/lib/orcamentos";
 
 /**
  * Corrige a ORDEM das linhas em planilhas que já foram geradas ANTES da
@@ -72,6 +73,10 @@ export type ResultadoCorrecaoOrdem = {
   // e foram adicionados na planilha da Contra Proposta — ver
   // montarLinhasJaReprovadas.
   geracoesAparelhosAdicionados: number;
+  // linhas de Contra Proposta recusada cujo motivo foi reescrito pra
+  // frase padrão (pedido explícito, migration 0066 faz o mesmo na
+  // tabela orcamentos — aqui é só o snapshot já gerado).
+  geracoesMotivoCorrigido: number;
   geracoesComFalha: { id: string; nf_remessa_allied: string; erro: string }[];
 };
 
@@ -83,6 +88,7 @@ export async function corrigirOrdemPlanilhasJaGeradas(admin: AdminClient): Promi
     geracoesVerificadas: 0,
     geracoesCorrigidas: 0,
     geracoesAparelhosAdicionados: 0,
+    geracoesMotivoCorrigido: 0,
     geracoesComFalha: [],
   };
 
@@ -193,6 +199,19 @@ async function corrigirContraPropostaGeracoes(admin: AdminClient, resultado: Res
         .eq("nf_remessa_allied", geracao.nf_remessa_allied);
       const mapaOrdem = construirMapaOrdem((ordens ?? []) as { trade_allied: string; ordem_planilha: number | null }[]);
 
+      // (pedido explícito) quem teve a Contra Proposta reprovada passa a
+      // ter o motivo padrão, mesmo nas planilhas já geradas — migration
+      // 0066 já corrigiu a tabela orcamentos, aqui só reflete o mesmo no
+      // snapshot já salvo.
+      const { data: reprovadosContraProposta } = await admin
+        .from("orcamentos")
+        .select("trade_allied")
+        .eq("nf_remessa_allied", geracao.nf_remessa_allied)
+        .eq("contra_proposta_decisao", "Reprovado");
+      const tradesMotivoPadrao = new Set(
+        ((reprovadosContraProposta ?? []) as { trade_allied: string }[]).map((r) => r.trade_allied)
+      );
+
       // (pedido explícito) além de reordenar, descobre quem já está HOJE
       // em "8 - Orçamento Reprovado" desse lote mas ainda não tinha
       // entrado nesse snapshot — só foi reprovado DEPOIS dessa geração —
@@ -205,10 +224,16 @@ async function corrigirContraPropostaGeracoes(admin: AdminClient, resultado: Res
         ? resultadoJaReprovados.linhas.filter((item) => !tradesJaNoSnapshot.has(item.linha.tradeAllied ?? ""))
         : [];
 
-      const grupoExistente: LinhaComOrdem[] = linhasExistentes.map((l) => ({
-        linha: l as unknown as LinhaPlanilhaOrcamento,
-        ordemPlanilha: mapaOrdem.get(String(l.tradeAllied ?? "")) ?? null,
-      }));
+      let motivoCorrigidoNestaGeracao = 0;
+      const grupoExistente: LinhaComOrdem[] = linhasExistentes.map((l) => {
+        const trade = String(l.tradeAllied ?? "");
+        const linha = { ...l } as unknown as LinhaPlanilhaOrcamento;
+        if (tradesMotivoPadrao.has(trade) && linha.motivoReprova !== MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA) {
+          linha.motivoReprova = MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA;
+          motivoCorrigidoNestaGeracao++;
+        }
+        return { linha, ordemPlanilha: mapaOrdem.get(trade) ?? null };
+      });
 
       const novasLinhas = montarLinhasNaOrdemOriginal(
         grupoExistente,
@@ -226,6 +251,7 @@ async function corrigirContraPropostaGeracoes(admin: AdminClient, resultado: Res
 
       resultado.geracoesCorrigidas++;
       resultado.geracoesAparelhosAdicionados += faltando.length;
+      resultado.geracoesMotivoCorrigido += motivoCorrigidoNestaGeracao;
     } catch (erro) {
       resultado.geracoesComFalha.push({
         id: geracao.id,

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Check, CheckCircle2, Loader2, Minus, PackageSearch, Plus, Save, Sparkles, X, XCircle } from "lucide-react";
-import { calcularResumoContraProposta, type PecaContraProposta } from "@/lib/orcamentos";
+import { calcularResumoContraProposta, MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA, type PecaContraProposta } from "@/lib/orcamentos";
 import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupConfirmar from "@/components/PopupConfirmar";
 import PopupMotivoReprovaContraProposta from "@/components/PopupMotivoReprovaContraProposta";
@@ -553,7 +553,10 @@ export default function PopupPecasContraProposta({
           aparelhoId={aparelho.id}
           trade={aparelho.trade_allied}
           osReparadora={aparelho.os_reparadora}
-          motivoInicial={aparelho.motivoRecusaAtual ?? ""}
+          // (pedido explícito) sem decisão ainda, ou reprovando de novo
+          // sem motivo salvo, já vem com a frase padrão — continua
+          // editável.
+          motivoInicial={aparelho.motivoRecusaAtual ?? MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA}
           onFechar={() => setMostrarMotivo(false)}
           onReprovado={() => {
             setMostrarMotivo(false);

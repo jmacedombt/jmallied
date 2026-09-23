@@ -39,23 +39,38 @@ const SLUGS_OPERACIONAL_ALLIED = STATUS_OPERACIONAL.map((s) => s.slug);
 // Retorno: só a leitura do histórico da planilha FINAL (já sem
 // custo/BID), nunca o detalhe peça a peça de Ag. Contra Proposta (esse
 // continua bloqueado pro ALLIED, ver PainelContraProposta.tsx).
+// "/api/operacional/orcamentos/historico-envios" (GET listagem, usada
+// pelo novo submenu "Orçamentos Enviados") e o download de um envio
+// específico (GET) — mesmo arquivo que a Allied já recebe pra aprovar,
+// sem custo/BID (pedido explícito, também visível pro cargo ALLIED).
+// "/api/operacional/orcamentos/aprovacoes-uploads" (GET listagem, usada
+// pelo novo submenu "Validação de Orçamento (Allied)") e o download do
+// arquivo original de um upload específico (GET) — só o resumo
+// (quantidade/percentual por resultado), sem custo/BID (pedido
+// explícito, também visível pro cargo ALLIED).
 const APIS_PERMITIDAS_ALLIED = [
   "/api/operacional/backlog/exportar-allied",
   "/api/operacional/modelo-retorno",
   "/api/operacional/contra-propostas",
+  "/api/operacional/orcamentos/historico-envios",
+  "/api/operacional/orcamentos/aprovacoes-uploads",
   "/api/auth/marcar-login",
   "/api/auth/heartbeat",
 ];
 const REGEX_API_DOWNLOAD_BID_ALLIED = /^\/api\/bases\/bid\/relatorio\/[^/]+\/download$/;
 const REGEX_API_DOWNLOAD_MODELO_RETORNO_ALLIED = /^\/api\/operacional\/modelo-retorno\/[^/]+\/download$/;
 const REGEX_API_DOWNLOAD_CONTRA_PROPOSTAS_ALLIED = /^\/api\/operacional\/contra-propostas\/[^/]+\/download$/;
+const REGEX_API_DOWNLOAD_HISTORICO_ENVIOS_ALLIED = /^\/api\/operacional\/orcamentos\/historico-envios\/[^/]+\/download$/;
+const REGEX_API_DOWNLOAD_APROVACOES_UPLOADS_ALLIED = /^\/api\/operacional\/orcamentos\/aprovacoes-uploads\/[^/]+\/download$/;
 
 function apiPermitidaParaAllied(path: string): boolean {
   return (
     APIS_PERMITIDAS_ALLIED.includes(path) ||
     REGEX_API_DOWNLOAD_BID_ALLIED.test(path) ||
     REGEX_API_DOWNLOAD_MODELO_RETORNO_ALLIED.test(path) ||
-    REGEX_API_DOWNLOAD_CONTRA_PROPOSTAS_ALLIED.test(path)
+    REGEX_API_DOWNLOAD_CONTRA_PROPOSTAS_ALLIED.test(path) ||
+    REGEX_API_DOWNLOAD_HISTORICO_ENVIOS_ALLIED.test(path) ||
+    REGEX_API_DOWNLOAD_APROVACOES_UPLOADS_ALLIED.test(path)
   );
 }
 
@@ -74,6 +89,9 @@ function rotaPermitidaParaAllied(path: string): boolean {
   if (path === "/operacional/backlog" || path.startsWith("/operacional/backlog/")) return true;
   if (path === "/operacional/modelo-retorno" || path.startsWith("/operacional/modelo-retorno/")) return true;
   if (path === "/operacional/contra-propostas" || path.startsWith("/operacional/contra-propostas/")) return true;
+  if (path === "/operacional/orcamentos-enviados" || path.startsWith("/operacional/orcamentos-enviados/")) return true;
+  if (path === "/operacional/validacao-orcamento-allied" || path.startsWith("/operacional/validacao-orcamento-allied/"))
+    return true;
   if (ROTAS_METRICAS_ALLIED.some((rota) => path === rota || path.startsWith(`${rota}/`))) return true;
   if (path === ROTA_BID_ALLIED || path.startsWith(`${ROTA_BID_ALLIED}/`)) return true;
   return SLUGS_OPERACIONAL_ALLIED.some(
