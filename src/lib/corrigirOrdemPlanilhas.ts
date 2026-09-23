@@ -180,16 +180,23 @@ async function corrigirContraPropostaGeracoes(admin: AdminClient, resultado: Res
         .eq("nf_remessa_allied", geracao.nf_remessa_allied);
       const mapaOrdem = construirMapaOrdem((ordens ?? []) as { trade_allied: string; ordem_planilha: number | null }[]);
 
+      // IMPORTANTE: são só 3 blocos no array salvo, não 4 — ver
+      // prepararGeracaoContraProposta (contraPropostaDecisao.ts):
+      // "Contra Proposta aceita" e "Contra Proposta recusada" NÃO são dois
+      // blocos separados, são o MESMO bloco (linhasContraProposta), um
+      // único map() sobre a mesma busca (contraProposta), que já sai
+      // intercalado (aceita e recusada juntos) na ordem da planilha. A
+      // 1ª versão dessa correção tratava como 4 blocos e SEPARAVA esse
+      // bloco em dois, quebrando a intercalação correta — corrigido aqui.
       const tamanhos = [
         Number(geracao.quantidade_aprovados_iniciais ?? 0),
-        Number(geracao.quantidade_contra_proposta_aceita ?? 0),
-        Number(geracao.quantidade_reprovados ?? 0),
+        Number(geracao.quantidade_contra_proposta_aceita ?? 0) + Number(geracao.quantidade_reprovados ?? 0),
         Number(geracao.quantidade_ja_reprovados ?? 0),
       ];
 
-      // se a soma dos 4 grupos não bate com o tamanho real do array
-      // salvo, o formato é mais antigo/diferente do esperado — não
-      // arrisca reordenar errado, pula essa geração.
+      // se a soma dos blocos não bate com o tamanho real do array salvo,
+      // o formato é mais antigo/diferente do esperado — não arrisca
+      // reordenar errado, pula essa geração.
       if (tamanhos.reduce((a, b) => a + b, 0) !== linhas.length) continue;
 
       const tradeDaLinha = (l: LinhaContraPropostaSnapshot) => String(l.tradeAllied ?? "");
