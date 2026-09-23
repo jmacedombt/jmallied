@@ -188,28 +188,32 @@ const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
     itens: [
       { href: "/operacional", label: "Painel", icone: LayoutGrid },
       { href: "/operacional/backlog", label: "Backlog", icone: ClipboardList },
-      // "Modelo de Retorno" liberado pro ALLIED (pedido explícito) — a
-      // planilha só tem venda de peça/mão de obra, nunca custo/BID (ver
-      // lib/modeloRetorno.ts e a rota de API, que agora aceita esse
-      // cargo só pra GET).
-      { href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet },
-      // "Contra Propostas" também liberado pro ALLIED (pedido explícito,
-      // migration 0060) — é onde a versão final das Contra Propostas
-      // (depois de decidida pela equipe) fica disponível pra eles; eles
-      // não veem o detalhe peça a peça em Ag. Contra Proposta (ver
-      // aviso em PainelContraProposta.tsx), só esse resultado.
-      { href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight },
+      // Ordem do menu (pedido explícito, 23/09/2026): Painel, Backlog,
+      // Orçamentos Enviados, Validação de Orçamento (Allied), Contra
+      // Propostas, Modelo de Retorno.
+      //
       // "Orçamentos Enviados" e "Validação de Orçamento (Allied)"
-      // também liberados pro ALLIED (pedido explícito) — o primeiro é o
-      // mesmo arquivo que a Allied já recebe pra aprovar (sem
-      // custo/BID); o segundo é só o resumo (quantidade/percentual por
-      // resultado) do arquivo que a própria Allied manda de volta.
+      // liberados pro ALLIED (pedido explícito) — o primeiro é o mesmo
+      // arquivo que a Allied já recebe pra aprovar (sem custo/BID); o
+      // segundo é só o resumo (quantidade/percentual por resultado) do
+      // arquivo que a própria Allied manda de volta.
       { href: "/operacional/orcamentos-enviados", label: "Orçamentos Enviados", icone: History },
       {
         href: "/operacional/validacao-orcamento-allied",
         label: "Validação de Orçamento (Allied)",
         icone: ShieldCheck,
       },
+      // "Contra Propostas" também liberado pro ALLIED (pedido explícito,
+      // migration 0060) — é onde a versão final das Contra Propostas
+      // (depois de decidida pela equipe) fica disponível pra eles; eles
+      // não veem o detalhe peça a peça em Ag. Contra Proposta (ver
+      // aviso em PainelContraProposta.tsx), só esse resultado.
+      { href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight },
+      // "Modelo de Retorno" liberado pro ALLIED (pedido explícito) — a
+      // planilha só tem venda de peça/mão de obra, nunca custo/BID (ver
+      // lib/modeloRetorno.ts e a rota de API, que agora aceita esse
+      // cargo só pra GET).
+      { href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet },
     ],
   },
   {
@@ -356,14 +360,12 @@ export default function AppShell({
             g.id === "operacional"
               ? {
                   ...g,
+                  // Ordem do menu (pedido explícito, 23/09/2026): Painel,
+                  // Backlog, Reconhecimento Lote (fixos acima, ver
+                  // g.itens), Orçamentos Enviados, Validação de Orçamento
+                  // (Allied), Contra Propostas, Modelo de Retorno.
                   itens: [
                     ...g.itens,
-                    ...(podeVerModeloRetorno
-                      ? [{ href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet }]
-                      : []),
-                    ...(podeVerContraPropostas
-                      ? [{ href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight }]
-                      : []),
                     ...(podeVerOrcamentosEnviados
                       ? [{ href: "/operacional/orcamentos-enviados", label: "Orçamentos Enviados", icone: History }]
                       : []),
@@ -375,6 +377,12 @@ export default function AppShell({
                             icone: ShieldCheck,
                           },
                         ]
+                      : []),
+                    ...(podeVerContraPropostas
+                      ? [{ href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight }]
+                      : []),
+                    ...(podeVerModeloRetorno
+                      ? [{ href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet }]
                       : []),
                   ],
                 }
