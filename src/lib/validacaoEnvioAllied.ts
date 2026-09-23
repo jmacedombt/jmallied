@@ -32,6 +32,7 @@ const COLUNAS_PECAS =
 const CAMPOS_DESCRICAO_DEFEITO = Array.from({ length: 10 }, (_, i) => `descricao_defeito_${i + 1}`);
 const CAMPOS_PECA_DEFEITO = Array.from({ length: 10 }, (_, i) => `peca_defeito_${i + 1}`);
 const COLUNAS_ESTATICAS = [
+  "ordem_planilha",
   "reparador_terceiro",
   "os_reparadora",
   "imei_reparadora",
@@ -52,6 +53,7 @@ const COLUNAS_ESTATICAS = [
 const TAMANHO_LOTE_CODIGOS = 400;
 
 type CamposEstaticosOrcamento = {
+  ordem_planilha: number | null;
   reparador_terceiro: string | null;
   os_reparadora: string | null;
   imei_reparadora: string | null;
@@ -101,11 +103,33 @@ export type ItemConfirmavel = {
   id: string;
   detalhe: DetalheValidacaoOrcamento;
   linha: LinhaPlanilhaOrcamento;
+  ordemPlanilha: number | null;
 };
+
+/** Uma linha do arquivo + a posição dela na planilha original — usado só
+ * pra intercalar (ver montarLinhasNaOrdemOriginal) antes de virar o
+ * arquivo final; nunca aparece no Excel. */
+export type LinhaComOrdem = { linha: LinhaPlanilhaOrcamento; ordemPlanilha: number | null };
 
 export type ResultadoPreparoEnvio =
   | { ok: false; status: number; erro: string; pecasDesatualizadas?: string[] }
-  | { ok: true; itensConfirmaveis: ItemConfirmavel[]; linhasReprovados: LinhaPlanilhaOrcamento[] };
+  | { ok: true; itensConfirmaveis: ItemConfirmavel[]; linhasReprovados: LinhaComOrdem[] };
+
+/**
+ * Junta confirmados + reprovados do mesmo lote na ordem ORIGINAL da
+ * planilha de Base de Orçamentos (pedido explícito) — sem separar em
+ * blocos por status, fica tudo intercalado, igual apareceria na
+ * planilha que a Allied mandou. Quem não tem ordem_planilha (aparelho
+ * importado antes dessa coluna existir) vai pro final, na ordem
+ * relativa que já tinha (sort estável).
+ */
+export function montarLinhasNaOrdemOriginal(...grupos: LinhaComOrdem[][]): LinhaPlanilhaOrcamento[] {
+  const SEM_ORDEM = Number.MAX_SAFE_INTEGER;
+  return grupos
+    .flat()
+    .sort((a, b) => (a.ordemPlanilha ?? SEM_ORDEM) - (b.ordemPlanilha ?? SEM_ORDEM))
+    .map((item) => item.linha);
+}
 
 /**
  * Busca os aparelhos de um lote (NF Remessa), revalida as travas de
@@ -359,7 +383,7 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
       motivoReprova: null,
       obs: a.observacao_tecnica_reparadora,
     };
-    return { id: a.id, detalhe, linha };
+    return { id: a.id, detalhe, linha, ordemPlanilha: a.ordem_planilha };
   });
 
   // aparelhos já reprovados antes, do mesmo lote — a peça e o valor só
@@ -374,10 +398,10 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
   // Só recalcula ao vivo (calcularDetalheValidacao) quando não existe
   // snapshot nenhum — aparelho que tem peça lançada mas nunca passou
   // pela precificação de Validação de Orçamentos.
-  const linhasReprovados: LinhaPlanilhaOrcamento[] = reprovados.map((a) => {
+  const linhasReprovados: LinhaComOrdem[] = reprovados.map((a) => {
     const detalhe = a.validacao_snapshot ?? calcularDetalheValidacao(a, custosPorCodigo, icmsPercentual, configMaoDeObra, faixasMarkup);
     const { peca, custoPeca } = montarPosicoesPeca(a, detalhe);
-    return {
+    const linha: LinhaPlanilhaOrcamento = {
       reparadorTerceiro: a.reparador_terceiro,
       nfRemessaAllied: nfRemessa,
       dataRespostaOrcamento: dataEnvioFormatada,
@@ -405,6 +429,7 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
       motivoReprova: a.motivo_reprova,
       obs: a.observacao_tecnica_reparadora,
     };
+    return { linha, ordemPlanilha: a.ordem_planilha };
   });
 
   return { ok: true, itensConfirmaveis, linhasReprovados };

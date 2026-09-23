@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
 import { montarPlanilhaOrcamentos } from "@/lib/email";
-import { prepararEnvioLote } from "@/lib/validacaoEnvioAllied";
+import { montarLinhasNaOrdemOriginal, prepararEnvioLote } from "@/lib/validacaoEnvioAllied";
 
 export const maxDuration = 60;
 
@@ -43,7 +43,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: preparo.erro, pecasDesatualizadas: preparo.pecasDesatualizadas }, { status: preparo.status });
   }
 
-  const linhasPlanilha = [...preparo.itensConfirmaveis.map((i) => i.linha), ...preparo.linhasReprovados];
+  // (pedido explícito) mesma ordem final que a rota de confirmar gera —
+  // ver montarLinhasNaOrdemOriginal.
+  const linhasPlanilha = montarLinhasNaOrdemOriginal(
+    preparo.itensConfirmaveis.map((i) => ({ linha: i.linha, ordemPlanilha: i.ordemPlanilha })),
+    preparo.linhasReprovados
+  );
   const planilha = montarPlanilhaOrcamentos(linhasPlanilha);
 
   return new NextResponse(new Uint8Array(planilha), {

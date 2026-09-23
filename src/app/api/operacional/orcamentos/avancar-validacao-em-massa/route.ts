@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { podeConfirmarAnaliseEmLote, STATUS_OPERACIONAL, STATUS_VALIDACAO_ORCAMENTOS } from "@/lib/orcamentos";
-import { type LinhaPlanilhaOrcamento } from "@/lib/email";
-import { prepararEnvioLote } from "@/lib/validacaoEnvioAllied";
+import { type LinhaComOrdem, montarLinhasNaOrdemOriginal, prepararEnvioLote } from "@/lib/validacaoEnvioAllied";
 import { persistirEEnviarLote } from "@/lib/orcamentoEnvio";
 
 export const maxDuration = 60;
@@ -58,17 +57,13 @@ export async function POST(request: Request) {
   // pra mudanças futuras na Base Peças/markup/ICMS não alterarem
   // retroativamente o valor que já foi informado ao cliente. Roda em
   // paralelo, em grupos pequenos, pra não estourar o tempo de execução.
-  // (pedido explícito) a planilha final tem que sair na mesma ordem da
-  // planilha original — preparo.itensConfirmaveis já vem nessa ordem
-  // (ordem_planilha, ver prepararEnvioLote), mas empurrar pra
-  // linhasConfirmadas de DENTRO do callback assíncrono (como era antes)
-  // reordena pela ordem em que cada update TERMINA, não pela ordem do
-  // array — embaralha de novo. Por isso cada grupo devolve o resultado
-  // na mesma posição do item (Promise.all preserva a ordem do array de
-  // entrada, mesmo que as promises terminem fora de ordem) e só DEPOIS
-  // filtra, em ordem, pra dentro de linhasConfirmadas.
+  // Guarda ordemPlanilha junto com cada linha (não só o resultado ok/erro)
+  // porque cada grupo devolve o resultado na MESMA posição do item
+  // (Promise.all preserva a ordem do array de entrada, mesmo que as
+  // promises terminem fora de ordem) — precisa disso pra depois montar
+  // o arquivo final na ordem certa (ver montarLinhasNaOrdemOriginal).
   let quantidade = 0;
-  const linhasConfirmadas: LinhaPlanilhaOrcamento[] = [];
+  const linhasConfirmadas: LinhaComOrdem[] = [];
   for (let i = 0; i < preparo.itensConfirmaveis.length; i += TAMANHO_LOTE_UPDATE_PARALELO) {
     const grupo = preparo.itensConfirmaveis.slice(i, i + TAMANHO_LOTE_UPDATE_PARALELO);
     const resultados = await Promise.all(
@@ -86,16 +81,19 @@ export async function POST(request: Request) {
           })
           .eq("id", item.id)
           .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS);
-        return { ok: !error, linha: item.linha };
+        return { ok: !error, linha: item.linha, ordemPlanilha: item.ordemPlanilha };
       })
     );
     for (const r of resultados) {
-      if (r.ok) linhasConfirmadas.push(r.linha);
+      if (r.ok) linhasConfirmadas.push({ linha: r.linha, ordemPlanilha: r.ordemPlanilha });
     }
     quantidade += resultados.filter((r) => r.ok).length;
   }
 
-  const linhasPlanilha = [...linhasConfirmadas, ...preparo.linhasReprovados];
+  // (pedido explícito) o arquivo final sai TODO na ordem original da
+  // planilha, aprovado e reprovado intercalados — sem separar em blocos
+  // por status.
+  const linhasPlanilha = montarLinhasNaOrdemOriginal(linhasConfirmadas, preparo.linhasReprovados);
 
   // persiste o Excel (bucket envios-orcamentos, pro botão Histórico) e
   // manda por e-mail — uma falha em qualquer uma dessas duas partes
