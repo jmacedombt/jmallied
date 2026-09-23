@@ -55,6 +55,8 @@ import { type LinhaComOrdem, montarLinhasNaOrdemOriginal } from "@/lib/validacao
  * (ordem_planilha), intercalado, independente de aprovado/reprovado/já
  * reprovado — ver montarLinhasNaOrdemOriginal (compartilhado com
  * validacaoEnvioAllied.ts).
+ *
+ * Ajuste conferido e publicado em 23/09/2026.
  */
 
 type AdminClient = ReturnType<typeof createAdminClient>;

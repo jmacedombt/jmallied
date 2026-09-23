@@ -22,6 +22,8 @@ import { createAdminClient } from "@/lib/supabase/server";
  *
  * Rodado uma vez (manual, botão em Sistema > Manutenção do Banco) —
  * idempotente: rodar de novo não muda nada que já esteja corrigido.
+ *
+ * Ajuste conferido e publicado em 23/09/2026.
  */
 
 type AdminClient = ReturnType<typeof createAdminClient>;
