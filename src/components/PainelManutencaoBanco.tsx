@@ -364,6 +364,16 @@ export default function PainelManutencaoBanco() {
                 {resultadoOrdem.geracoesMotivoCorrigido} linha(s) de Contra Proposta recusada tiveram o motivo atualizado pra frase padrão.
               </p>
             )}
+            {resultadoOrdem.geracoesObsAprovadoCorrigido > 0 && (
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                {resultadoOrdem.geracoesObsAprovadoCorrigido} linha(s) de aprovado inicialmente tiveram o OBS atualizado pra &quot;Allied Aprovou em: ...&quot;.
+              </p>
+            )}
+            {resultadoOrdem.geracoesObsContraPropostaAceitaCorrigido > 0 && (
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                {resultadoOrdem.geracoesObsContraPropostaAceitaCorrigido} linha(s) de Contra Proposta aceita tiveram o OBS e o destaque da peça atualizados.
+              </p>
+            )}
             {(resultadoOrdem.enviosComFalha.length > 0 || resultadoOrdem.geracoesComFalha.length > 0) && (
               <div className="pt-1.5 mt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
                 <p className="text-xs font-medium mb-1" style={{ color: "#ef4444" }}>

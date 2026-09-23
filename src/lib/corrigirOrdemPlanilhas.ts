@@ -3,7 +3,8 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { montarLinhasJaReprovadas } from "@/lib/contraPropostaDecisao";
 import { montarLinhasNaOrdemOriginal, type LinhaComOrdem } from "@/lib/validacaoEnvioAllied";
 import { type LinhaPlanilhaOrcamento } from "@/lib/email";
-import { MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA } from "@/lib/orcamentos";
+import { MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import { formatarDataBrasilia } from "@/lib/tempo";
 
 /**
  * Corrige a ORDEM das linhas em planilhas que já foram geradas ANTES da
@@ -31,6 +32,19 @@ import { MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA } from "@/lib/orcamentos";
  * Contra Proposta já tinha sido gerada (ex: a Allied demorou pra
  * responder). Sem isso, esses aparelhos nunca apareceriam em planilha
  * nenhuma. Ver montarLinhasJaReprovadas em contraPropostaDecisao.ts.
+ *
+ * Exceção — Contra Proposta, extensão de 23/09/2026 (pedido explícito):
+ * geração que já existia ANTES das mudanças de "Contra Proposta"
+ * (frase padrão na recusa, OBS "Contra Proposta Aceita" + peça alterada
+ * em destaque, OBS "Allied Aprovou em: DD/MM/AAAA") nunca tinha esses
+ * campos calculados no snapshot já salvo — o download só reaplica o
+ * gerador (cor por status), mas não recalcula OBS/motivo/destaque, que
+ * só nascem no momento de "Enviar Contra Proposta". Essa correção
+ * reescreve o snapshot já salvo pra refletir os 3 (motivo padrão,
+ * "Allied Aprovou em:" pra aprovado inicialmente, "Contra Proposta
+ * Aceita" + pecaAlterada pra Contra Proposta aceita), buscando o estado
+ * ATUAL de cada aparelho na tabela orcamentos por trade_allied. Não mexe
+ * em valor/peça nenhuma, só nesses 3 campos de exibição.
  *
  * Rodado uma vez (manual, botão em Sistema > Manutenção do Banco) —
  * idempotente: rodar de novo não duplica nada que já tenha sido
@@ -77,6 +91,15 @@ export type ResultadoCorrecaoOrdem = {
   // frase padrão (pedido explícito, migration 0066 faz o mesmo na
   // tabela orcamentos — aqui é só o snapshot já gerado).
   geracoesMotivoCorrigido: number;
+  // linhas de "aprovados inicialmente" (nunca passaram por Contra
+  // Proposta) cujo OBS foi reescrito pra "Allied Aprovou em: DD/MM/AAAA"
+  // num snapshot já gerado (pedido explícito, extensão de 23/09/2026).
+  geracoesObsAprovadoCorrigido: number;
+  // linhas de Contra Proposta aceita cujo OBS foi reescrito pra "Contra
+  // Proposta Aceita" e a(s) peça(s) que realmente mudou(aram) de valor
+  // foram marcadas (pecaAlterada) num snapshot já gerado (pedido
+  // explícito, extensão de 23/09/2026).
+  geracoesObsContraPropostaAceitaCorrigido: number;
   geracoesComFalha: { id: string; nf_remessa_allied: string; erro: string }[];
 };
 
@@ -89,6 +112,8 @@ export async function corrigirOrdemPlanilhasJaGeradas(admin: AdminClient): Promi
     geracoesCorrigidas: 0,
     geracoesAparelhosAdicionados: 0,
     geracoesMotivoCorrigido: 0,
+    geracoesObsAprovadoCorrigido: 0,
+    geracoesObsContraPropostaAceitaCorrigido: 0,
     geracoesComFalha: [],
   };
 
@@ -212,6 +237,50 @@ async function corrigirContraPropostaGeracoes(admin: AdminClient, resultado: Res
         ((reprovadosContraProposta ?? []) as { trade_allied: string }[]).map((r) => r.trade_allied)
       );
 
+      // (pedido explícito, extensão de 23/09/2026) "Allied Aprovou em:
+      // DD/MM/AAAA" pra quem foi aprovado inicialmente (resultado_
+      // aprovacao_allied = "Aprovado", nunca passou por Contra Proposta)
+      // — mesmo cálculo de linhasAprovadosIniciais em
+      // contraPropostaDecisao.ts, só que aqui reescrevendo o OBS de um
+      // snapshot JÁ salvo (planilha gerada antes dessa coluna existir).
+      const { data: aprovadosIniciaisBrutos } = await admin
+        .from("orcamentos")
+        .select("trade_allied, resultado_aprovacao_definido_em, observacao_tecnica_reparadora")
+        .eq("nf_remessa_allied", geracao.nf_remessa_allied)
+        .eq("resultado_aprovacao_allied", "Aprovado");
+      const obsAprovadoPorTrade = new Map<string, string | null>();
+      for (const a of (aprovadosIniciaisBrutos ?? []) as {
+        trade_allied: string;
+        resultado_aprovacao_definido_em: string | null;
+        observacao_tecnica_reparadora: string | null;
+      }[]) {
+        const obs = a.resultado_aprovacao_definido_em
+          ? `Allied Aprovou em: ${formatarDataBrasilia(a.resultado_aprovacao_definido_em)}`
+          : a.observacao_tecnica_reparadora;
+        obsAprovadoPorTrade.set(a.trade_allied, obs ?? null);
+      }
+
+      // (pedido explícito, extensão de 23/09/2026) "Contra Proposta
+      // Aceita" + destaque (vermelho/negrito, aplicado no gerador da
+      // planilha a partir de pecaAlterada) na(s) posição(ões) de peça
+      // cujo valor realmente mudou — mesmo cálculo do branch "Aprovado"
+      // de linhasContraProposta em contraPropostaDecisao.ts: compara o
+      // valor JÁ ACEITO (congelado no próprio snapshot, em
+      // linha.custoPeca) com o valor ORIGINAL (validacao_snapshot),
+      // posição a posição.
+      const { data: contraPropostaAceitaBrutos } = await admin
+        .from("orcamentos")
+        .select("trade_allied, validacao_snapshot")
+        .eq("nf_remessa_allied", geracao.nf_remessa_allied)
+        .eq("contra_proposta_decisao", "Aprovado");
+      const snapshotOriginalPorTrade = new Map<string, DetalheValidacaoOrcamento | null>();
+      for (const a of (contraPropostaAceitaBrutos ?? []) as {
+        trade_allied: string;
+        validacao_snapshot: DetalheValidacaoOrcamento | null;
+      }[]) {
+        snapshotOriginalPorTrade.set(a.trade_allied, a.validacao_snapshot);
+      }
+
       // (pedido explícito) além de reordenar, descobre quem já está HOJE
       // em "8 - Orçamento Reprovado" desse lote mas ainda não tinha
       // entrado nesse snapshot — só foi reprovado DEPOIS dessa geração —
@@ -225,13 +294,49 @@ async function corrigirContraPropostaGeracoes(admin: AdminClient, resultado: Res
         : [];
 
       let motivoCorrigidoNestaGeracao = 0;
+      let obsAprovadoCorrigidoNestaGeracao = 0;
+      let obsContraPropostaAceitaCorrigidoNestaGeracao = 0;
       const grupoExistente: LinhaComOrdem[] = linhasExistentes.map((l) => {
         const trade = String(l.tradeAllied ?? "");
         const linha = { ...l } as unknown as LinhaPlanilhaOrcamento;
+
         if (tradesMotivoPadrao.has(trade) && linha.motivoReprova !== MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA) {
           linha.motivoReprova = MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA;
           motivoCorrigidoNestaGeracao++;
         }
+
+        if (obsAprovadoPorTrade.has(trade)) {
+          const obsCorreta = obsAprovadoPorTrade.get(trade) ?? null;
+          if (linha.obs !== obsCorreta) {
+            linha.obs = obsCorreta;
+            obsAprovadoCorrigidoNestaGeracao++;
+          }
+        } else if (snapshotOriginalPorTrade.has(trade)) {
+          const original = snapshotOriginalPorTrade.get(trade) ?? null;
+          const valorOriginalPorPosicao = new Map<number, number>();
+          for (const p of original?.pecas ?? []) {
+            const indice = Number(p.posicao) - 1;
+            if (Number.isInteger(indice) && indice >= 0 && indice < 10 && p.vendaPeca != null) {
+              valorOriginalPorPosicao.set(indice, p.vendaPeca);
+            }
+          }
+          const custoPeca = linha.custoPeca ?? [];
+          const pecaAlterada = Array.from({ length: 10 }, (_, indice) => {
+            const valorAtual = custoPeca[indice];
+            if (valorAtual == null) return false;
+            const valorOriginal = valorOriginalPorPosicao.get(indice);
+            return valorOriginal === undefined || Math.abs(valorOriginal - valorAtual) > 0.001;
+          });
+          const jaCorreto =
+            linha.obs === "Contra Proposta Aceita" &&
+            JSON.stringify(linha.pecaAlterada ?? []) === JSON.stringify(pecaAlterada);
+          if (!jaCorreto) {
+            linha.obs = "Contra Proposta Aceita";
+            linha.pecaAlterada = pecaAlterada;
+            obsContraPropostaAceitaCorrigidoNestaGeracao++;
+          }
+        }
+
         return { linha, ordemPlanilha: mapaOrdem.get(trade) ?? null };
       });
 
@@ -252,6 +357,8 @@ async function corrigirContraPropostaGeracoes(admin: AdminClient, resultado: Res
       resultado.geracoesCorrigidas++;
       resultado.geracoesAparelhosAdicionados += faltando.length;
       resultado.geracoesMotivoCorrigido += motivoCorrigidoNestaGeracao;
+      resultado.geracoesObsAprovadoCorrigido += obsAprovadoCorrigidoNestaGeracao;
+      resultado.geracoesObsContraPropostaAceitaCorrigido += obsContraPropostaAceitaCorrigidoNestaGeracao;
     } catch (erro) {
       resultado.geracoesComFalha.push({
         id: geracao.id,
