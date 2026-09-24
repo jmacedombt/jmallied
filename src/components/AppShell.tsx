@@ -43,6 +43,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import BotaoTema from "@/components/BotaoTema";
+import ChatWidget from "@/components/ChatWidget";
 import ColorPickerSistema from "@/components/ColorPickerSistema";
 import InactivityGuard from "@/components/InactivityGuard";
 import IndicadorUsuariosOnline from "@/components/IndicadorUsuariosOnline";
@@ -594,6 +595,10 @@ export default function AppShell({
 
           {!allied && <SininhoNotificacoes />}
 
+          {/* Chat interno (pedido explícito, 23/09/2026) — visível pra
+              QUALQUER login, inclusive ALLIED, sem exceção. */}
+          <ChatWidget />
+
           <h1 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
             {titulo}
             {tituloInfo && (
@@ -624,8 +629,9 @@ export default function AppShell({
             {/* "Usuários Online" (pedido explícito) — bullet verde com
                 brilho/pulso de "ligado" ao lado do nome, em vez de item
                 de menu. Clicar abre o pop-up com a lista (ver
-                IndicadorUsuariosOnline.tsx). Some pro login ALLIED. */}
-            {!allied && <IndicadorUsuariosOnline />}
+                IndicadorUsuariosOnline.tsx). Visível pra todo login,
+                inclusive ALLIED desde 23/09/2026 (migration 0068). */}
+            <IndicadorUsuariosOnline />
           </div>
 
           <ColorPickerSistema />

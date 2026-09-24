@@ -1,15 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * "Usuários Online" (pedido explícito) + base do logout automático por
- * inatividade — ver migration 0058_usuarios_online_e_atividade.sql.
+ * "Usuários Online" (pedido explícito) + status manual (Disponível/
+ * Ausente/Ocupado, pedido explícito do chat interno — migration 0069) +
+ * base do logout automático por inatividade — ver
+ * migration 0058_usuarios_online_e_atividade.sql e
+ * migration 0069_chat_interno.sql.
  *
- * As 3 funções abaixo só chamam RPCs (security definer): as duas de
- * escrita (marcarLogin/marcarAtividade) sempre mexem só na PRÓPRIA
- * linha de quem está chamando (auth.uid(), resolvido dentro da função
- * no banco — não dá pra marcar atividade de outra pessoa por aqui); a
- * de leitura (buscarUsuariosOnline) já devolve lista vazia sozinha pra
- * quem chama com cargo ALLIED, sem depender de nenhuma checagem daqui.
+ * As funções abaixo só chamam RPCs (security definer): as de escrita
+ * (marcarLogin/marcarAtividade/definirStatus) sempre mexem só na
+ * PRÓPRIA linha de quem está chamando (auth.uid(), resolvido dentro da
+ * função no banco); a de leitura (buscarUsuariosOnline) é visível pra
+ * QUALQUER login, inclusive ALLIED, desde a migration 0068.
  */
 
 export async function marcarLogin(supabase: SupabaseClient): Promise<void> {
@@ -22,6 +24,16 @@ export async function marcarAtividade(supabase: SupabaseClient): Promise<void> {
   if (error) throw error;
 }
 
+export type StatusPresenca = "Disponivel" | "Ausente" | "Ocupado";
+
+/** Status manual do chat interno (pedido explícito) — só vale enquanto
+ * a pessoa está online; offline sempre aparece como "Ausente" (decidido
+ * no front-end, ver statusExibido em ChatWidget.tsx). */
+export async function definirStatus(supabase: SupabaseClient, status: StatusPresenca): Promise<void> {
+  const { error } = await supabase.rpc("usuarios_definir_status", { p_status: status });
+  if (error) throw error;
+}
+
 export type UsuarioOnline = {
   id: string;
   nome: string;
@@ -29,10 +41,11 @@ export type UsuarioOnline = {
   cargo: string;
   ultimoLoginEm: string | null;
   ultimaAtividadeEm: string | null;
+  statusManual: StatusPresenca;
 };
 
 /** Quem está "online agora" (heartbeat nos últimos 5 minutos, ver a
- * própria RPC) — pra cargo ALLIED, a RPC sempre devolve lista vazia. */
+ * própria RPC) — visível pra todo login, inclusive ALLIED. */
 export async function buscarUsuariosOnline(supabase: SupabaseClient): Promise<UsuarioOnline[]> {
   const { data, error } = await supabase.rpc("usuarios_online_listar");
   if (error) throw error;
@@ -44,6 +57,7 @@ export async function buscarUsuariosOnline(supabase: SupabaseClient): Promise<Us
       cargo: string;
       ultimo_login_em: string | null;
       ultima_atividade_em: string | null;
+      status_manual: string;
     }[]
   ).map((l) => ({
     id: l.id,
@@ -52,5 +66,6 @@ export async function buscarUsuariosOnline(supabase: SupabaseClient): Promise<Us
     cargo: l.cargo,
     ultimoLoginEm: l.ultimo_login_em,
     ultimaAtividadeEm: l.ultima_atividade_em,
+    statusManual: (["Disponivel", "Ausente", "Ocupado"].includes(l.status_manual) ? l.status_manual : "Disponivel") as StatusPresenca,
   }));
 }

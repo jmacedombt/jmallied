@@ -20,10 +20,9 @@ const INTERVALO_ATUALIZACAO_MS = 30 * 1000;
  * bullet verde com brilho e "pulso" de ligado, ao lado do nome do
  * usuário no cabeçalho. Clicar abre um pop-up com a lista de quem está
  * com o sistema aberto agora, cargo e data/hora do login — mesma fonte
- * de dado de antes (/api/usuarios/online, que já devolve lista vazia
- * pro cargo ALLIED — ver migration 0058_usuarios_online_e_atividade.sql
- * e lib/presenca.ts). AppShell.tsx só renderiza esse componente pra
- * quem não é ALLIED.
+ * de dado de sempre (/api/usuarios/online, lib/presenca.ts). Visível
+ * pra todo login, inclusive ALLIED desde 23/09/2026 (migration 0068 —
+ * antes esse cargo via lista vazia, ver migration 0058).
  */
 export default function IndicadorUsuariosOnline() {
   const [aberto, setAberto] = useState(false);

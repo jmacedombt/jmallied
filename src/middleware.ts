@@ -48,12 +48,26 @@ const SLUGS_OPERACIONAL_ALLIED = STATUS_OPERACIONAL.map((s) => s.slug);
 // arquivo original de um upload específico (GET) — só o resumo
 // (quantidade/percentual por resultado), sem custo/BID (pedido
 // explícito, também visível pro cargo ALLIED).
+// "/api/usuarios/online" (GET) — "Usuários Online" também liberado pro
+// ALLIED desde 23/09/2026 (migration 0068, pedido explícito; antes esse
+// cargo tinha essa lista escondida, ver migration 0058).
+// "/api/usuarios/status" (POST) e "/api/chat/*" — Chat interno (pedido
+// explícito, migration 0069): mensagem direta + "chamar atenção",
+// liberado pra QUALQUER login, inclusive ALLIED, sem exceção (ver
+// ChatWidget.tsx).
 const APIS_PERMITIDAS_ALLIED = [
   "/api/operacional/backlog/exportar-allied",
   "/api/operacional/modelo-retorno",
   "/api/operacional/contra-propostas",
   "/api/operacional/orcamentos/historico-envios",
   "/api/operacional/orcamentos/aprovacoes-uploads",
+  "/api/usuarios/online",
+  "/api/usuarios/status",
+  "/api/chat/conversas",
+  "/api/chat/usuarios",
+  "/api/chat/mensagens",
+  "/api/chat/chamar-atencao",
+  "/api/chat/atualizacoes",
   "/api/auth/marcar-login",
   "/api/auth/heartbeat",
 ];
@@ -92,6 +106,10 @@ function rotaPermitidaParaAllied(path: string): boolean {
   if (path === "/operacional/orcamentos-enviados" || path.startsWith("/operacional/orcamentos-enviados/")) return true;
   if (path === "/operacional/validacao-orcamento-allied" || path.startsWith("/operacional/validacao-orcamento-allied/"))
     return true;
+  // "Usuários Online" (pedido explícito, migration 0068) — item avulso
+  // no menu, fora de "/operacional" mas liberado pro ALLIED igual às
+  // rotas acima.
+  if (path === "/usuarios-online" || path.startsWith("/usuarios-online/")) return true;
   if (ROTAS_METRICAS_ALLIED.some((rota) => path === rota || path.startsWith(`${rota}/`))) return true;
   if (path === ROTA_BID_ALLIED || path.startsWith(`${ROTA_BID_ALLIED}/`)) return true;
   return SLUGS_OPERACIONAL_ALLIED.some(
