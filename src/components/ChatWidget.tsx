@@ -441,7 +441,7 @@ export default function ChatWidget() {
 
         {painelAberto && (
           <div
-            className="absolute right-0 top-full mt-2 w-96 max-h-[32rem] flex flex-col rounded-xl border shadow-2xl z-40"
+            className="absolute left-0 top-full mt-2 w-96 max-h-[32rem] flex flex-col rounded-xl border shadow-2xl z-40"
             style={{ background: "var(--surface)", borderColor: "var(--line)" }}
           >
             {/* cabeçalho: título + status + nova conversa */}
