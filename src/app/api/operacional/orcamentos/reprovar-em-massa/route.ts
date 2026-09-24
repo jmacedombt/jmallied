@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { podeConfirmarAnaliseEmLote, STATUS_AG_ANALISE, STATUS_ORCAMENTO_REPROVADO } from "@/lib/orcamentos";
+import { podeUsarLoteNaTelaAgAnalise, STATUS_AG_ANALISE, STATUS_ORCAMENTO_REPROVADO } from "@/lib/orcamentos";
 
 const TAMANHO_LOTE = 400;
 
 // Recusa vários orçamentos de uma vez (seleção múltipla em 2 - Ag.
 // Análise) — mesma permissão de "Confirmar Análise realizada em lote"
-// (podeConfirmarAnaliseEmLote). Só mexe nos que ainda estiverem em
-// "2 - Ag. Análise" (evita reprocessar um orçamento que alguém já mexeu
+// (podeUsarLoteNaTelaAgAnalise, que inclui Técnico só nessa tela — pedido
+// explícito, 24/09/2026). Só mexe nos que ainda estiverem em "2 - Ag.
+// Análise" (evita reprocessar um orçamento que alguém já mexeu
 // individualmente entre a seleção e o clique) e grava a MESMA
 // justificativa em todos.
 export async function POST(request: Request) {
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const { data: perfil } = await admin.from("usuarios").select("cargo, is_master").eq("id", user.id).single();
 
-  if (!podeConfirmarAnaliseEmLote(perfil)) {
+  if (!podeUsarLoteNaTelaAgAnalise(perfil)) {
     return NextResponse.json({ error: "Seu cargo não tem permissão pra recusar orçamentos em lote." }, { status: 403 });
   }
 

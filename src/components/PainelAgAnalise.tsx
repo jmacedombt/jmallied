@@ -7,7 +7,7 @@ import PopupConfirmar from "@/components/PopupConfirmar";
 import PopupPecasOrcamento, { type AparelhoComPecas } from "@/components/PopupPecasOrcamento";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupReprovarOrcamentoLote from "@/components/PopupReprovarOrcamentoLote";
-import { podeConfirmarAnaliseEmLote } from "@/lib/orcamentos";
+import { podeUsarLoteNaTelaAgAnalise } from "@/lib/orcamentos";
 import { podeImportarBid, type FaixaMarkup, type InfoBidPeca } from "@/lib/bid";
 import { operacionalRestrito } from "@/lib/usuarios";
 
@@ -114,7 +114,10 @@ export default function PainelAgAnalise({
     iniciarRecalculo(() => router.refresh());
   }
 
-  const podeLote = podeConfirmarAnaliseEmLote(perfil);
+  // pedido explícito (24/09/2026): além de Supervisor/Gerente/Admin, o
+  // cargo Técnico também usa o modo de seleção múltipla aqui — só nessa
+  // tela (ver podeUsarLoteNaTelaAgAnalise em lib/orcamentos.ts).
+  const podeLote = podeUsarLoteNaTelaAgAnalise(perfil);
   const podeCadastrarBid = podeImportarBid(perfil);
   // Operacional (sem is_master) só tem função em Ag. Abertura — aqui é
   // só consulta, mesmo pra ação individual (que nenhum outro cargo tem

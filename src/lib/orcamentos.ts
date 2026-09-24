@@ -251,6 +251,23 @@ export function podeConfirmarAnaliseEmLote(perfil: { cargo: string; is_master: b
   return (CARGOS_AG_ANALISE_LOTE as readonly string[]).includes(perfil.cargo);
 }
 
+// pedido explícito (24/09/2026): cargo "Técnico" também pode usar o modo
+// de seleção múltipla em "2 - Ag. Análise" (confirmar OU recusar em
+// lote) — só NESSA tela. podeConfirmarAnaliseEmLote é reaproveitada em
+// várias outras telas/menus (Ag. Peças, Ag. Reparo, Emitir NF, Métricas,
+// Financeiro etc. — ver os aliases logo abaixo), então acrescentar
+// "Técnico" ali daria acesso a tudo isso de uma vez. Por isso é uma
+// função própria (mesmo padrão de podeConfirmarOqcEmLote), usada só em
+// PainelAgAnalise.tsx e nas rotas confirmar-analise-em-massa /
+// reprovar-em-massa.
+const CARGOS_AG_ANALISE_LOTE_TECNICO = ["Técnico"] as const;
+
+export function podeUsarLoteNaTelaAgAnalise(perfil: { cargo: string; is_master: boolean } | null): boolean {
+  if (podeConfirmarAnaliseEmLote(perfil)) return true;
+  if (!perfil) return false;
+  return (CARGOS_AG_ANALISE_LOTE_TECNICO as readonly string[]).includes(perfil.cargo);
+}
+
 /** Valida o formato da OS Reparadora: só números, 10 caracteres (ex: 4123456789). */
 export function osReparadoraValida(valor: string): boolean {
   return /^[0-9]{10}$/.test(valor.trim());

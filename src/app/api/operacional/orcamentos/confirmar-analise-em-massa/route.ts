@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { podeConfirmarAnaliseEmLote, STATUS_AG_ANALISE, STATUS_VALIDACAO_ORCAMENTOS } from "@/lib/orcamentos";
+import { podeUsarLoteNaTelaAgAnalise, STATUS_AG_ANALISE, STATUS_VALIDACAO_ORCAMENTOS } from "@/lib/orcamentos";
 
 const TAMANHO_LOTE = 400;
 
 // Confirma "Análise realizada" em lote pra vários aparelhos de uma vez
-// (seleção múltipla em Ag. Análise) — só visível/liberado pra
-// Supervisor, Gerente ou Administrador (ver podeConfirmarAnaliseEmLote).
-// Só mexe nos que ainda estiverem em "2 - Ag. Análise" (o filtro
-// .eq("status_operacional", ...) evita reprocessar um aparelho que
-// alguém já confirmou individualmente entre a seleção e o clique).
+// (seleção múltipla em Ag. Análise) — liberado pra Supervisor, Gerente,
+// Técnico (pedido explícito, 24/09/2026, só nessa tela) ou Administrador
+// (ver podeUsarLoteNaTelaAgAnalise). Só mexe nos que ainda estiverem em
+// "2 - Ag. Análise" (o filtro .eq("status_operacional", ...) evita
+// reprocessar um aparelho que alguém já confirmou individualmente entre
+// a seleção e o clique).
 export async function POST(request: Request) {
   const supabase = createClient();
   const {
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const { data: perfil } = await admin.from("usuarios").select("cargo, is_master").eq("id", user.id).single();
 
-  if (!podeConfirmarAnaliseEmLote(perfil)) {
+  if (!podeUsarLoteNaTelaAgAnalise(perfil)) {
     return NextResponse.json(
       { error: "Seu cargo não tem permissão pra confirmar análises em lote." },
       { status: 403 }
