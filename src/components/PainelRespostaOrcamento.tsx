@@ -2,15 +2,33 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, CheckCircle2, Clock, FileQuestion, Gauge, Loader2, PackageCheck, UploadCloud, XCircle } from "lucide-react";
-import { CORES_RESULTADO_APROVACAO, podeConfirmarAprovacaoOrcamento, type ResultadoAprovacaoAllied } from "@/lib/orcamentos";
+import {
+  Ban,
+  CheckCircle2,
+  Clock,
+  FileQuestion,
+  Gauge,
+  Loader2,
+  PackageCheck,
+  Undo2,
+  UploadCloud,
+  XCircle,
+} from "lucide-react";
+import {
+  CORES_RESULTADO_APROVACAO,
+  podeConfirmarAprovacaoOrcamento,
+  podeVoltarLoteAgRespostaOrcamento,
+  type ResultadoAprovacaoAllied,
+} from "@/lib/orcamentos";
 import PopupUploadAprovacao from "@/components/PopupUploadAprovacao";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupConfirmar from "@/components/PopupConfirmar";
+import PopupVoltarLoteRespostaOrcamento from "@/components/PopupVoltarLoteRespostaOrcamento";
 import { operacionalRestrito } from "@/lib/usuarios";
 
 export type AparelhoRespostaOrcamento = {
   id: string;
+  nf_remessa_allied: string;
   os_reparadora: string | null;
   trade_allied: string;
   os_care_allied: string | null;
@@ -71,9 +89,21 @@ export default function PainelRespostaOrcamento({
   // assim que a pessoa clica nele (abre o pop-up de confirmação).
   const [destacarConfirmar, setDestacarConfirmar] = useState(false);
 
+  // "Voltar pro Status Anterior" em lote (pedido explícito, 25/09/2026) —
+  // só Administrador (is_master, ver podeVoltarLoteAgRespostaOrcamento).
+  // Sempre um lote (NF Remessa) por vez — mesma regra de "nunca mistura
+  // lotes" já usada em Validação de Orçamentos (Confirmar Envio) — e só
+  // aparelhos ainda "Aguardando" resposta da Allied podem ser
+  // selecionados (reverter um já resolvido desfaria uma resposta já
+  // registrada, fora do escopo pedido).
+  const [loteSelecionado, setLoteSelecionado] = useState("");
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [mostrarVoltarLote, setMostrarVoltarLote] = useState(false);
+
   const podeConfirmar = podeConfirmarAprovacaoOrcamento(perfil);
   // Operacional (sem is_master) só tem função em Ag. Abertura.
   const apenasVisualizacao = operacionalRestrito(perfil);
+  const podeVoltarLote = podeVoltarLoteAgRespostaOrcamento(perfil);
 
   const contagens = useMemo(() => {
     const total = aparelhos.length;
@@ -83,6 +113,50 @@ export default function PainelRespostaOrcamento({
   }, [aparelhos]);
 
   const quantidadeResolvidos = contagens.total - contagens.porResultado.Aguardando;
+
+  // lotes (NF Remessa) elegíveis pro seletor — só os que têm pelo menos 1
+  // aparelho "Aguardando" (os únicos que podem voltar de etapa por aqui).
+  const lotesElegiveis = useMemo(() => {
+    const mapa = new Map<string, number>();
+    for (const a of aparelhos) {
+      if (a.resultado_aprovacao_allied !== "Aguardando") continue;
+      mapa.set(a.nf_remessa_allied, (mapa.get(a.nf_remessa_allied) ?? 0) + 1);
+    }
+    return Array.from(mapa.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
+      .map(([nf, quantidade]) => ({ nf, quantidade }));
+  }, [aparelhos]);
+
+  // com um lote escolhido, a tabela só mostra os aparelhos daquele lote —
+  // mesmo padrão do seletor de lote em Validação de Orçamentos.
+  const aparelhosExibidos = useMemo(() => {
+    if (!loteSelecionado) return aparelhos;
+    return aparelhos.filter((a) => a.nf_remessa_allied === loteSelecionado);
+  }, [aparelhos, loteSelecionado]);
+
+  const elegiveisDoLote = useMemo(
+    () => aparelhos.filter((a) => a.nf_remessa_allied === loteSelecionado && a.resultado_aprovacao_allied === "Aguardando"),
+    [aparelhos, loteSelecionado]
+  );
+  const todosDoLoteSelecionados = elegiveisDoLote.length > 0 && elegiveisDoLote.every((a) => selecionados.has(a.id));
+
+  function selecionarLote(nf: string) {
+    setLoteSelecionado(nf);
+    setSelecionados(new Set());
+  }
+
+  function alternarSelecionado(id: string) {
+    setSelecionados((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+  }
+
+  function alternarSelecionarTodosDoLote() {
+    setSelecionados(todosDoLoteSelecionados ? new Set() : new Set(elegiveisDoLote.map((a) => a.id)));
+  }
 
   function percentual(qtd: number): string {
     if (contagens.total === 0) return "0%";
@@ -195,10 +269,62 @@ export default function PainelRespostaOrcamento({
         </button>
       </div>
 
+      {podeVoltarLote && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+          <span className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+            Voltar pro status anterior — lote (NF Remessa):
+          </span>
+          <select
+            value={loteSelecionado}
+            onChange={(e) => selecionarLote(e.target.value)}
+            className="rounded-lg border px-2.5 py-1.5 text-xs"
+            style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
+          >
+            <option value="">Selecione um lote...</option>
+            {lotesElegiveis.map((l) => (
+              <option key={l.nf} value={l.nf}>
+                {l.nf} ({l.quantidade} aguardando)
+              </option>
+            ))}
+          </select>
+          {loteSelecionado && (
+            <>
+              <label className="inline-flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: "var(--ink)" }}>
+                <input type="checkbox" checked={todosDoLoteSelecionados} onChange={alternarSelecionarTodosDoLote} />
+                Selecionar todos
+              </label>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                <strong>{selecionados.size}</strong> selecionado(s)
+              </span>
+              <button
+                type="button"
+                onClick={() => setMostrarVoltarLote(true)}
+                disabled={selecionados.size === 0}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: "var(--accent)" }}
+              >
+                <Undo2 size={13} />
+                Voltar pro Status Anterior
+              </button>
+              <button
+                type="button"
+                onClick={() => selecionarLote("")}
+                className="text-xs underline"
+                style={{ color: "var(--muted)" }}
+              >
+                Limpar
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
+              {!!loteSelecionado && <th className="px-4 py-2.5 font-medium w-8" />}
+              <th className="px-4 py-2.5 font-medium">NF Remessa</th>
               <th className="px-4 py-2.5 font-medium">OS Reparadora</th>
               <th className="px-4 py-2.5 font-medium">Trade Allied</th>
               <th className="px-4 py-2.5 font-medium">OS Care Allied</th>
@@ -210,9 +336,10 @@ export default function PainelRespostaOrcamento({
             </tr>
           </thead>
           <tbody>
-            {aparelhos.map((a) => {
+            {aparelhosExibidos.map((a) => {
               const cores = CORES_RESULTADO_APROVACAO[a.resultado_aprovacao_allied];
               const resolvido = a.resultado_aprovacao_allied !== "Aguardando";
+              const selecionavel = !!loteSelecionado && !resolvido;
               return (
                 <tr
                   key={a.id}
@@ -222,6 +349,21 @@ export default function PainelRespostaOrcamento({
                     background: resolvido ? cores.fundo : "var(--surface)",
                   }}
                 >
+                  {!!loteSelecionado && (
+                    <td className="px-4 py-2.5">
+                      {selecionavel && (
+                        <input
+                          type="checkbox"
+                          checked={selecionados.has(a.id)}
+                          onChange={() => alternarSelecionado(a.id)}
+                          aria-label={`Selecionar ${a.trade_allied}`}
+                        />
+                      )}
+                    </td>
+                  )}
+                  <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
+                    {a.nf_remessa_allied}
+                  </td>
                   <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
                     {a.os_reparadora || "—"}
                   </td>
@@ -259,9 +401,13 @@ export default function PainelRespostaOrcamento({
                 </tr>
               );
             })}
-            {aparelhos.length === 0 && (
+            {aparelhosExibidos.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
+                <td
+                  colSpan={loteSelecionado ? 10 : 9}
+                  className="px-4 py-8 text-center"
+                  style={{ color: "var(--muted)", background: "var(--surface)" }}
+                >
                   {mensagemVazia}
                 </td>
               </tr>
@@ -307,6 +453,21 @@ export default function PainelRespostaOrcamento({
           erro={erroConfirmar}
           onConfirmar={confirmar}
           onFechar={() => !confirmandoDeVerdade && setConfirmando(false)}
+        />
+      )}
+
+      {mostrarVoltarLote && loteSelecionado && (
+        <PopupVoltarLoteRespostaOrcamento
+          quantidade={selecionados.size}
+          nfRemessa={loteSelecionado}
+          ids={Array.from(selecionados)}
+          onFechar={() => setMostrarVoltarLote(false)}
+          onVoltado={() => {
+            setMostrarVoltarLote(false);
+            setSelecionados(new Set());
+            setLoteSelecionado("");
+            router.refresh();
+          }}
         />
       )}
     </div>

@@ -674,6 +674,18 @@ export function podeVoltarEtapaAgEmissaoNf(perfil: { cargo: string; is_master: b
   return (CARGOS_VOLTAR_ETAPA_NF as readonly string[]).includes(perfil.cargo);
 }
 
+// "Voltar pro Status Anterior" em lote, em "3 - Ag. Resposta de
+// Orçamento" (pedido explícito, 25/09/2026) — volta os aparelhos
+// selecionados (só os ainda "Aguardando" resposta da Allied, de um único
+// lote/NF Remessa) pra Validação de Orçamentos, com a opção de excluir
+// também o registro em "Orçamentos Enviados" daquele lote. Só
+// Administrador (is_master) — nem Gerente, diferente de
+// podeVoltarEtapaAgEmissaoNf acima (pedido explícito: "vale apenas para
+// o ADMINISTRADOR do sistema").
+export function podeVoltarLoteAgRespostaOrcamento(perfil: { is_master: boolean } | null): boolean {
+  return !!perfil?.is_master;
+}
+
 // ---- NF Mão de Obra / NF Peças / NF Retorno (Ag. Emissão de Nota
 // Fiscal → Produto Entregue, ver migration 0048) ----
 
