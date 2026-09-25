@@ -68,6 +68,13 @@ type GrupoModelo = {
   vendaTotalHoje: number;
   impostoTotalHoje: number;
   semCusto: number;
+  /** quantidade de APARELHOS (não de peças) desse modelo na tela atual —
+   * inclusive os que não têm peça nenhuma lançada, por isso vem de uma
+   * lista à parte (ver prop `aparelhos`), não das peças acima. */
+  quantidadeAparelhos: number;
+  /** soma do Valor Total Reparo (Venda de Peças + Mão de Obra) de cada
+   * aparelho desse modelo — base do Ticket Médio. */
+  valorTotalReparoSoma: number;
 };
 
 /**
@@ -95,6 +102,7 @@ type GrupoModelo = {
  */
 export default function PopupResumoPecasModelo({
   pecas,
+  aparelhos,
   faixas,
   icmsPercentual,
   overridesModeloPeca,
@@ -105,6 +113,11 @@ export default function PopupResumoPecasModelo({
   onFechar,
 }: {
   pecas: PecaComModelo[];
+  /** 1 entrada por APARELHO (não por peça) na tela agora, com o Valor
+   * Total Reparo dele (Venda de Peças + Mão de Obra) — usado só pra
+   * contar Quantidade de Aparelhos e apurar o Ticket Médio de cada
+   * modelo, já que isso inclui até aparelho sem peça nenhuma lançada. */
+  aparelhos: { modelo: string | null; valorTotalReparo: number }[];
   /** faixas efetivas (mesmo valor passado pro Resumo por Faixa: override
    * do lote selecionado, ou a faixa global) — usadas só pra mostrar em
    * que faixa cada peça cai hoje quando ela não tem override próprio. */
@@ -120,9 +133,30 @@ export default function PopupResumoPecasModelo({
   onMargemAplicada?: () => void;
   onFechar: () => void;
 }) {
+  // Quantidade de Aparelhos + soma do Valor Total Reparo por modelo —
+  // vem de `aparelhos` (1 por aparelho), não de `pecas`, pra não deixar
+  // de contar quem ainda não tem peça lançada.
+  const resumoAparelhosPorModelo = useMemo(() => {
+    const mapa = new Map<string | null, { quantidadeAparelhos: number; valorTotalReparoSoma: number }>();
+    for (const a of aparelhos) {
+      const modelo = a.modelo?.trim() ? a.modelo.trim() : null;
+      const atual = mapa.get(modelo) ?? { quantidadeAparelhos: 0, valorTotalReparoSoma: 0 };
+      atual.quantidadeAparelhos += 1;
+      atual.valorTotalReparoSoma += a.valorTotalReparo;
+      mapa.set(modelo, atual);
+    }
+    return mapa;
+  }, [aparelhos]);
+
   const grupos = useMemo<GrupoModelo[]>(() => {
     const porModelo = new Map<string | null, Map<string, LinhaPecaModelo>>();
     const semCustoPorModelo = new Map<string | null, number>();
+
+    // garante que todo modelo com aparelho na tela apareça como linha,
+    // mesmo que nenhum deles tenha peça lançada ainda.
+    for (const modelo of resumoAparelhosPorModelo.keys()) {
+      if (!porModelo.has(modelo)) porModelo.set(modelo, new Map());
+    }
 
     for (const p of pecas) {
       const modelo = p.modelo?.trim() ? p.modelo.trim() : null;
@@ -161,6 +195,7 @@ export default function PopupResumoPecasModelo({
     return Array.from(porModelo.entries())
       .map(([modelo, porCodigo]) => {
         const linhas = Array.from(porCodigo.values()).sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"));
+        const resumoAparelhos = resumoAparelhosPorModelo.get(modelo) ?? { quantidadeAparelhos: 0, valorTotalReparoSoma: 0 };
         return {
           modelo,
           rotulo: modelo ?? "(sem modelo)",
@@ -170,10 +205,12 @@ export default function PopupResumoPecasModelo({
           vendaTotalHoje: linhas.reduce((s, l) => s + l.vendaTotalHoje, 0),
           impostoTotalHoje: linhas.reduce((s, l) => s + l.impostoTotalHoje, 0),
           semCusto: semCustoPorModelo.get(modelo) ?? 0,
+          quantidadeAparelhos: resumoAparelhos.quantidadeAparelhos,
+          valorTotalReparoSoma: resumoAparelhos.valorTotalReparoSoma,
         };
       })
       .sort((a, b) => a.rotulo.localeCompare(b.rotulo, "pt-BR"));
-  }, [pecas, faixas, overridesModeloPeca]);
+  }, [pecas, faixas, overridesModeloPeca, resumoAparelhosPorModelo]);
 
   // multiplicador simulado por (modelo, código) — estado local, nunca
   // salvo sozinho (só via "Aplicar"). Reinicia pro "hoje" de cada peça
@@ -286,12 +323,22 @@ export default function PopupResumoPecasModelo({
           custoTotal: acc.custoTotal + g.custoTotal,
           vendaTotalHoje: acc.vendaTotalHoje + g.vendaTotalHoje,
           impostoTotalHoje: acc.impostoTotalHoje + g.impostoTotalHoje,
+          quantidadeAparelhos: acc.quantidadeAparelhos + g.quantidadeAparelhos,
+          valorTotalReparoSoma: acc.valorTotalReparoSoma + g.valorTotalReparoSoma,
         }),
-        { quantidade: 0, custoTotal: 0, vendaTotalHoje: 0, impostoTotalHoje: 0 }
+        { quantidade: 0, custoTotal: 0, vendaTotalHoje: 0, impostoTotalHoje: 0, quantidadeAparelhos: 0, valorTotalReparoSoma: 0 }
       ),
     [grupos]
   );
   const semCustoTotal = grupos.reduce((s, g) => s + g.semCusto, 0);
+
+  // Ticket Médio = Valor Total Reparo (Venda de Peças + Mão de Obra) médio
+  // por aparelho — não muda com a simulação de multiplicador (a Mão de
+  // Obra não depende de faixa de Markup, e o "hoje" já reflete o que está
+  // congelado/calculado pra cada aparelho).
+  function ticketMedio(quantidadeAparelhos: number, valorTotalReparoSoma: number): number {
+    return quantidadeAparelhos > 0 ? valorTotalReparoSoma / quantidadeAparelhos : 0;
+  }
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }} onClick={onFechar}>
@@ -317,9 +364,11 @@ export default function PopupResumoPecasModelo({
         </div>
 
         <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
-          Consulta — não altera nada até clicar em "Aplicar" dentro de um modelo. Agrupa as {pecas.length} peça(s) que
-          estão nessa tela agora por Modelo Comercial. Clique num modelo pra ver cada código de peça, a faixa de custo
-          em que ele cai hoje e simular um multiplicador diferente — peça a peça ou pra todas do modelo de uma vez.
+          Consulta — não altera nada até clicar em "Aplicar" dentro de um modelo. Agrupa as {pecas.length} peça(s) e{" "}
+          {aparelhos.length} aparelho(s) que estão nessa tela agora por Modelo Comercial. Ticket Médio = Venda de Peças
+          + Mão de Obra, na média por aparelho desse modelo (não muda com a simulação). Clique num modelo pra ver cada
+          código de peça, a faixa de custo em que ele cai hoje e simular um multiplicador diferente — peça a peça ou
+          pra todas do modelo de uma vez.
         </p>
 
         <div className="rounded-xl border overflow-x-auto" style={{ borderColor: "var(--line)" }}>
@@ -327,9 +376,11 @@ export default function PopupResumoPecasModelo({
             <thead>
               <tr className="text-left" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
                 <th className="px-3 py-2 font-medium">Modelo</th>
+                <th className="px-3 py-2 font-medium text-right">Aparelhos</th>
                 <th className="px-3 py-2 font-medium text-right">Peças</th>
                 <th className="px-3 py-2 font-medium text-right">Custo Total</th>
                 <th className="px-3 py-2 font-medium text-right">Venda Total</th>
+                <th className="px-3 py-2 font-medium text-right">Ticket Médio</th>
                 <th className="px-3 py-2 font-medium text-right">Margem</th>
                 <th className="px-3 py-2 font-medium text-right">Margem (simulada c/ mult. abaixo)</th>
               </tr>
@@ -355,6 +406,9 @@ export default function PopupResumoPecasModelo({
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right" style={{ color: "var(--ink)" }}>
+                        {g.quantidadeAparelhos}
+                      </td>
+                      <td className="px-3 py-2 text-right" style={{ color: "var(--ink)" }}>
                         {g.quantidade}
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap" style={{ color: "var(--ink)" }}>
@@ -362,6 +416,9 @@ export default function PopupResumoPecasModelo({
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap font-medium" style={{ color: "var(--ink)" }}>
                         {formatarReal(g.vendaTotalHoje)}
+                      </td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap" style={{ color: "var(--ink)" }}>
+                        {g.quantidadeAparelhos > 0 ? formatarReal(ticketMedio(g.quantidadeAparelhos, g.valorTotalReparoSoma)) : "—"}
                       </td>
                       <td className="px-3 py-2 text-right">
                         {g.quantidade > 0 ? <Selo percentual={margemHoje} /> : <span style={{ color: "var(--muted)" }}>—</span>}
@@ -383,7 +440,7 @@ export default function PopupResumoPecasModelo({
                     </tr>
                     {aberto && (
                       <tr className="border-t" style={{ borderColor: "var(--line)" }}>
-                        <td colSpan={6} className="px-3 py-3" style={{ background: "var(--surface2)" }}>
+                        <td colSpan={8} className="px-3 py-3" style={{ background: "var(--surface2)" }}>
                           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                             <div className="flex items-center gap-2">
                               <label className="text-[11px]" style={{ color: "var(--muted)" }}>
@@ -506,6 +563,11 @@ export default function PopupResumoPecasModelo({
                             </table>
                           </div>
 
+                          {g.linhas.length === 0 && (
+                            <p className="text-[11px] mt-2" style={{ color: "var(--muted)" }}>
+                              Nenhuma peça lançada ainda nos {g.quantidadeAparelhos} aparelho(s) desse modelo.
+                            </p>
+                          )}
                           {g.semCusto > 0 && (
                             <p className="text-[11px] mt-2" style={{ color: "var(--muted)" }}>
                               {g.semCusto} peça(s) desse modelo sem custo cadastrado na Base Peças (fora dessa análise).
@@ -525,8 +587,8 @@ export default function PopupResumoPecasModelo({
               })}
               {grupos.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center" style={{ color: "var(--muted)" }}>
-                    Nenhuma peça nessa tela agora.
+                  <td colSpan={8} className="px-3 py-6 text-center" style={{ color: "var(--muted)" }}>
+                    Nenhum aparelho nessa tela agora.
                   </td>
                 </tr>
               )}
@@ -538,6 +600,9 @@ export default function PopupResumoPecasModelo({
                     Total
                   </td>
                   <td className="px-3 py-2 text-right" style={{ color: "var(--ink)" }}>
+                    {totaisGerais.quantidadeAparelhos}
+                  </td>
+                  <td className="px-3 py-2 text-right" style={{ color: "var(--ink)" }}>
                     {totaisGerais.quantidade}
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap" style={{ color: "var(--ink)" }}>
@@ -545,6 +610,11 @@ export default function PopupResumoPecasModelo({
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap" style={{ color: "var(--ink)" }}>
                     {formatarReal(totaisGerais.vendaTotalHoje)}
+                  </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap" style={{ color: "var(--ink)" }}>
+                    {totaisGerais.quantidadeAparelhos > 0
+                      ? formatarReal(ticketMedio(totaisGerais.quantidadeAparelhos, totaisGerais.valorTotalReparoSoma))
+                      : "—"}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <Selo percentual={margemPercentual(totaisGerais.vendaTotalHoje, totaisGerais.custoTotal, totaisGerais.impostoTotalHoje)} />
