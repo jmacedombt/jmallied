@@ -72,9 +72,12 @@ type GrupoModelo = {
    * inclusive os que não têm peça nenhuma lançada, por isso vem de uma
    * lista à parte (ver prop `aparelhos`), não das peças acima. */
   quantidadeAparelhos: number;
-  /** soma do Valor Total Reparo (Venda de Peças + Mão de Obra) de cada
-   * aparelho desse modelo — base do Ticket Médio. */
-  valorTotalReparoSoma: number;
+  /** soma de Venda de Peças de cada aparelho desse modelo — base do
+   * Ticket Médio (junto com maoDeObraSoma abaixo), guardada separada pra
+   * poder detalhar o cálculo no tooltip. */
+  vendaPecasSoma: number;
+  /** soma de Mão de Obra de cada aparelho desse modelo. */
+  maoDeObraSoma: number;
 };
 
 /**
@@ -113,11 +116,12 @@ export default function PopupResumoPecasModelo({
   onFechar,
 }: {
   pecas: PecaComModelo[];
-  /** 1 entrada por APARELHO (não por peça) na tela agora, com o Valor
-   * Total Reparo dele (Venda de Peças + Mão de Obra) — usado só pra
-   * contar Quantidade de Aparelhos e apurar o Ticket Médio de cada
-   * modelo, já que isso inclui até aparelho sem peça nenhuma lançada. */
-  aparelhos: { modelo: string | null; valorTotalReparo: number }[];
+  /** 1 entrada por APARELHO (não por peça) na tela agora, com Venda de
+   * Peças e Mão de Obra separadas — usado só pra contar Quantidade de
+   * Aparelhos e apurar o Ticket Médio de cada modelo (e o cálculo
+   * detalhado mostrado ao passar o mouse em cima do valor), já que isso
+   * inclui até aparelho sem peça nenhuma lançada. */
+  aparelhos: { modelo: string | null; vendaPecas: number; maoDeObra: number }[];
   /** faixas efetivas (mesmo valor passado pro Resumo por Faixa: override
    * do lote selecionado, ou a faixa global) — usadas só pra mostrar em
    * que faixa cada peça cai hoje quando ela não tem override próprio. */
@@ -133,16 +137,19 @@ export default function PopupResumoPecasModelo({
   onMargemAplicada?: () => void;
   onFechar: () => void;
 }) {
-  // Quantidade de Aparelhos + soma do Valor Total Reparo por modelo —
-  // vem de `aparelhos` (1 por aparelho), não de `pecas`, pra não deixar
-  // de contar quem ainda não tem peça lançada.
+  // Quantidade de Aparelhos + soma de Venda de Peças / Mão de Obra por
+  // modelo — vem de `aparelhos` (1 por aparelho), não de `pecas`, pra não
+  // deixar de contar quem ainda não tem peça lançada. Guardar as duas
+  // somas separadas (em vez de já somar) é o que permite detalhar o
+  // cálculo do Ticket Médio no tooltip.
   const resumoAparelhosPorModelo = useMemo(() => {
-    const mapa = new Map<string | null, { quantidadeAparelhos: number; valorTotalReparoSoma: number }>();
+    const mapa = new Map<string | null, { quantidadeAparelhos: number; vendaPecasSoma: number; maoDeObraSoma: number }>();
     for (const a of aparelhos) {
       const modelo = a.modelo?.trim() ? a.modelo.trim() : null;
-      const atual = mapa.get(modelo) ?? { quantidadeAparelhos: 0, valorTotalReparoSoma: 0 };
+      const atual = mapa.get(modelo) ?? { quantidadeAparelhos: 0, vendaPecasSoma: 0, maoDeObraSoma: 0 };
       atual.quantidadeAparelhos += 1;
-      atual.valorTotalReparoSoma += a.valorTotalReparo;
+      atual.vendaPecasSoma += a.vendaPecas;
+      atual.maoDeObraSoma += a.maoDeObra;
       mapa.set(modelo, atual);
     }
     return mapa;
@@ -195,7 +202,7 @@ export default function PopupResumoPecasModelo({
     return Array.from(porModelo.entries())
       .map(([modelo, porCodigo]) => {
         const linhas = Array.from(porCodigo.values()).sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"));
-        const resumoAparelhos = resumoAparelhosPorModelo.get(modelo) ?? { quantidadeAparelhos: 0, valorTotalReparoSoma: 0 };
+        const resumoAparelhos = resumoAparelhosPorModelo.get(modelo) ?? { quantidadeAparelhos: 0, vendaPecasSoma: 0, maoDeObraSoma: 0 };
         return {
           modelo,
           rotulo: modelo ?? "(sem modelo)",
@@ -206,7 +213,8 @@ export default function PopupResumoPecasModelo({
           impostoTotalHoje: linhas.reduce((s, l) => s + l.impostoTotalHoje, 0),
           semCusto: semCustoPorModelo.get(modelo) ?? 0,
           quantidadeAparelhos: resumoAparelhos.quantidadeAparelhos,
-          valorTotalReparoSoma: resumoAparelhos.valorTotalReparoSoma,
+          vendaPecasSoma: resumoAparelhos.vendaPecasSoma,
+          maoDeObraSoma: resumoAparelhos.maoDeObraSoma,
         };
       })
       .sort((a, b) => a.rotulo.localeCompare(b.rotulo, "pt-BR"));
@@ -324,20 +332,50 @@ export default function PopupResumoPecasModelo({
           vendaTotalHoje: acc.vendaTotalHoje + g.vendaTotalHoje,
           impostoTotalHoje: acc.impostoTotalHoje + g.impostoTotalHoje,
           quantidadeAparelhos: acc.quantidadeAparelhos + g.quantidadeAparelhos,
-          valorTotalReparoSoma: acc.valorTotalReparoSoma + g.valorTotalReparoSoma,
+          vendaPecasSoma: acc.vendaPecasSoma + g.vendaPecasSoma,
+          maoDeObraSoma: acc.maoDeObraSoma + g.maoDeObraSoma,
         }),
-        { quantidade: 0, custoTotal: 0, vendaTotalHoje: 0, impostoTotalHoje: 0, quantidadeAparelhos: 0, valorTotalReparoSoma: 0 }
+        { quantidade: 0, custoTotal: 0, vendaTotalHoje: 0, impostoTotalHoje: 0, quantidadeAparelhos: 0, vendaPecasSoma: 0, maoDeObraSoma: 0 }
       ),
     [grupos]
   );
   const semCustoTotal = grupos.reduce((s, g) => s + g.semCusto, 0);
 
-  // Ticket Médio = Valor Total Reparo (Venda de Peças + Mão de Obra) médio
-  // por aparelho — não muda com a simulação de multiplicador (a Mão de
-  // Obra não depende de faixa de Markup, e o "hoje" já reflete o que está
+  // Ticket Médio = (Venda de Peças + Mão de Obra) médio por aparelho —
+  // não muda com a simulação de multiplicador (a Mão de Obra não depende
+  // de faixa de Markup, e o "hoje" já reflete o que está
   // congelado/calculado pra cada aparelho).
-  function ticketMedio(quantidadeAparelhos: number, valorTotalReparoSoma: number): number {
-    return quantidadeAparelhos > 0 ? valorTotalReparoSoma / quantidadeAparelhos : 0;
+  function ticketMedio(quantidadeAparelhos: number, vendaPecasSoma: number, maoDeObraSoma: number): number {
+    return quantidadeAparelhos > 0 ? (vendaPecasSoma + maoDeObraSoma) / quantidadeAparelhos : 0;
+  }
+
+  // tooltip com o cálculo detalhado do Ticket Médio, ao passar o mouse em
+  // cima do valor — mesmo padrão de TooltipCalculoBid.tsx (estado com
+  // posição calculada a partir do elemento, div fixed renderizada no fim).
+  const [tooltipTicket, setTooltipTicket] = useState<{
+    x: number;
+    y: number;
+    rotulo: string;
+    quantidadeAparelhos: number;
+    vendaPecasSoma: number;
+    maoDeObraSoma: number;
+  } | null>(null);
+
+  function mostrarTooltipTicket(
+    e: React.MouseEvent,
+    rotulo: string,
+    quantidadeAparelhos: number,
+    vendaPecasSoma: number,
+    maoDeObraSoma: number
+  ) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const largura = 260;
+    const x = Math.min(rect.left, Math.max(8, window.innerWidth - largura - 8));
+    setTooltipTicket({ x, y: rect.bottom + 8, rotulo, quantidadeAparelhos, vendaPecasSoma, maoDeObraSoma });
+  }
+
+  function ocultarTooltipTicket() {
+    setTooltipTicket(null);
   }
 
   return (
@@ -417,8 +455,16 @@ export default function PopupResumoPecasModelo({
                       <td className="px-3 py-2 text-right whitespace-nowrap font-medium" style={{ color: "var(--ink)" }}>
                         {formatarReal(g.vendaTotalHoje)}
                       </td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap" style={{ color: "var(--ink)" }}>
-                        {g.quantidadeAparelhos > 0 ? formatarReal(ticketMedio(g.quantidadeAparelhos, g.valorTotalReparoSoma)) : "—"}
+                      <td
+                        className="px-3 py-2 text-right whitespace-nowrap"
+                        style={{ color: "var(--ink)", cursor: g.quantidadeAparelhos > 0 ? "help" : undefined }}
+                        onMouseEnter={(e) =>
+                          g.quantidadeAparelhos > 0 &&
+                          mostrarTooltipTicket(e, g.rotulo, g.quantidadeAparelhos, g.vendaPecasSoma, g.maoDeObraSoma)
+                        }
+                        onMouseLeave={ocultarTooltipTicket}
+                      >
+                        {g.quantidadeAparelhos > 0 ? formatarReal(ticketMedio(g.quantidadeAparelhos, g.vendaPecasSoma, g.maoDeObraSoma)) : "—"}
                       </td>
                       <td className="px-3 py-2 text-right">
                         {g.quantidade > 0 ? <Selo percentual={margemHoje} /> : <span style={{ color: "var(--muted)" }}>—</span>}
@@ -611,9 +657,23 @@ export default function PopupResumoPecasModelo({
                   <td className="px-3 py-2 text-right whitespace-nowrap" style={{ color: "var(--ink)" }}>
                     {formatarReal(totaisGerais.vendaTotalHoje)}
                   </td>
-                  <td className="px-3 py-2 text-right whitespace-nowrap" style={{ color: "var(--ink)" }}>
+                  <td
+                    className="px-3 py-2 text-right whitespace-nowrap"
+                    style={{ color: "var(--ink)", cursor: totaisGerais.quantidadeAparelhos > 0 ? "help" : undefined }}
+                    onMouseEnter={(e) =>
+                      totaisGerais.quantidadeAparelhos > 0 &&
+                      mostrarTooltipTicket(
+                        e,
+                        "Total",
+                        totaisGerais.quantidadeAparelhos,
+                        totaisGerais.vendaPecasSoma,
+                        totaisGerais.maoDeObraSoma
+                      )
+                    }
+                    onMouseLeave={ocultarTooltipTicket}
+                  >
                     {totaisGerais.quantidadeAparelhos > 0
-                      ? formatarReal(ticketMedio(totaisGerais.quantidadeAparelhos, totaisGerais.valorTotalReparoSoma))
+                      ? formatarReal(ticketMedio(totaisGerais.quantidadeAparelhos, totaisGerais.vendaPecasSoma, totaisGerais.maoDeObraSoma))
                       : "—"}
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -632,6 +692,47 @@ export default function PopupResumoPecasModelo({
           </p>
         )}
       </div>
+
+      {tooltipTicket && (
+        <div
+          className="fixed z-[85] rounded-lg border shadow-2xl p-3"
+          style={{ background: "var(--surface2)", borderColor: "var(--line)", left: tooltipTicket.x, top: tooltipTicket.y }}
+        >
+          <div className="text-xs space-y-1.5 min-w-[220px]">
+            <p className="font-medium" style={{ color: "var(--ink)" }}>
+              Ticket Médio — {tooltipTicket.rotulo}
+            </p>
+            <p className="flex justify-between gap-4">
+              <span style={{ color: "var(--muted)" }}>Venda de Peças (soma)</span>
+              <strong>{formatarReal(tooltipTicket.vendaPecasSoma)}</strong>
+            </p>
+            <p className="flex justify-between gap-4">
+              <span style={{ color: "var(--muted)" }}>Mão de Obra (soma)</span>
+              <strong>+ {formatarReal(tooltipTicket.maoDeObraSoma)}</strong>
+            </p>
+            <div className="border-t pt-1.5 mt-1.5" style={{ borderColor: "var(--line)" }}>
+              <p className="flex justify-between gap-4">
+                <span style={{ color: "var(--muted)" }}>= Valor Total Reparo (soma)</span>
+                <strong>{formatarReal(tooltipTicket.vendaPecasSoma + tooltipTicket.maoDeObraSoma)}</strong>
+              </p>
+              <p className="flex justify-between gap-4">
+                <span style={{ color: "var(--muted)" }}>÷ Quantidade de Aparelhos</span>
+                <strong>{tooltipTicket.quantidadeAparelhos}</strong>
+              </p>
+            </div>
+            <div className="border-t pt-1.5 mt-1.5" style={{ borderColor: "var(--line)" }}>
+              <p className="flex justify-between gap-4">
+                <span style={{ color: "var(--muted)" }}>= Ticket Médio</span>
+                <strong style={{ color: "var(--accent2)" }}>
+                  {formatarReal(
+                    ticketMedio(tooltipTicket.quantidadeAparelhos, tooltipTicket.vendaPecasSoma, tooltipTicket.maoDeObraSoma)
+                  )}
+                </strong>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmando && (
         <div

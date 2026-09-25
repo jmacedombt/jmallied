@@ -309,15 +309,16 @@ export default function PainelValidacaoOrcamentos({
     [filtrados]
   );
 
-  // 1 linha por APARELHO (não por peça) filtrado agora, com o valor total
-  // do reparo dele (Venda de Peças + Mão de Obra — mesmo "Valor Total
+  // 1 linha por APARELHO (não por peça) filtrado agora, com Venda de
+  // Peças e Mão de Obra separadas (a soma dos dois é o "Valor Total
   // Reparo" usado no envio pro Excel) — usado só pelo "Resumo de Peças
   // por Modelo" (ver PopupResumoPecasModelo) pra contar Quantidade de
-  // Aparelhos e apurar o Ticket Médio por modelo, já que isso depende de
-  // TODO aparelho daquele modelo (inclusive os sem peça nenhuma), não só
-  // de quem tem peça lançada.
+  // Aparelhos e apurar o Ticket Médio por modelo — inclusive o cálculo
+  // detalhado mostrado ao passar o mouse em cima do valor — já que isso
+  // depende de TODO aparelho daquele modelo (inclusive os sem peça
+  // nenhuma), não só de quem tem peça lançada.
   const aparelhosParaResumoModelo = useMemo(
-    () => filtrados.map((a) => ({ modelo: a.modelo_comercial, valorTotalReparo: a.vendaTotalPecas + a.maoDeObra })),
+    () => filtrados.map((a) => ({ modelo: a.modelo_comercial, vendaPecas: a.vendaTotalPecas, maoDeObra: a.maoDeObra })),
     [filtrados]
   );
 
