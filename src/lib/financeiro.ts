@@ -76,6 +76,82 @@ export function somarValorPorMes(linhas: { data: string; valor: number }[]): Rec
   return mapa;
 }
 
+// ---- Previsão de Resultados (por lote / NF Remessa) ----
+// (pedido explícito, 25/09/2026 — ver migration 0071 e
+// financeiro_previsao_resultados_por_lote). Usado tanto no menu
+// Financeiro > Previsão de Resultados quanto no pop-up de resumo em
+// Métricas > Orçamentos > Por lote (NF Remessa) — mesma fonte de dados,
+// pra nunca mostrar dois números diferentes pro mesmo lote.
+
+export type LinhaPrevisaoResultadoLote = {
+  nfRemessaAllied: string;
+  quantidadeAprovados: number;
+  quantidadeReprovados: number;
+  maoDeObra: number;
+  custoPecas: number;
+  impostoPecas: number;
+  vendaPecas: number;
+};
+
+/** Métricas derivadas dos valores brutos de um lote (ou da soma de vários
+ * lotes selecionados) — mesma fórmula de "lucro líquido da peça"/"lucro
+ * total" já usada em Validação de Orçamentos (ver ResumoValidacao em
+ * PopupRevisaoValidacao.tsx), mais "Valor Líquido" (Venda de Peças + Mão
+ * de Obra — o total que vai ser cobrado da Allied, sem descontar custo/
+ * imposto; distinto de Margem Total, que é o lucro). */
+export type MetricasPrevisaoResultado = {
+  quantidadeAprovados: number;
+  quantidadeReprovados: number;
+  maoDeObra: number;
+  custoPecas: number;
+  impostoPecas: number;
+  vendaPecas: number;
+  margemPecas: number;
+  margemTotal: number;
+  valorLiquido: number;
+};
+
+export function calcularMetricasPrevisaoResultado(
+  linhas: Pick<
+    LinhaPrevisaoResultadoLote,
+    "quantidadeAprovados" | "quantidadeReprovados" | "maoDeObra" | "custoPecas" | "impostoPecas" | "vendaPecas"
+  >[]
+): MetricasPrevisaoResultado {
+  const base = linhas.reduce(
+    (acc, l) => ({
+      quantidadeAprovados: acc.quantidadeAprovados + l.quantidadeAprovados,
+      quantidadeReprovados: acc.quantidadeReprovados + l.quantidadeReprovados,
+      maoDeObra: acc.maoDeObra + l.maoDeObra,
+      custoPecas: acc.custoPecas + l.custoPecas,
+      impostoPecas: acc.impostoPecas + l.impostoPecas,
+      vendaPecas: acc.vendaPecas + l.vendaPecas,
+    }),
+    { quantidadeAprovados: 0, quantidadeReprovados: 0, maoDeObra: 0, custoPecas: 0, impostoPecas: 0, vendaPecas: 0 }
+  );
+  const margemPecas = base.vendaPecas - base.custoPecas - base.impostoPecas;
+  return {
+    ...base,
+    margemPecas,
+    margemTotal: margemPecas + base.maoDeObra,
+    valorLiquido: base.vendaPecas + base.maoDeObra,
+  };
+}
+
+export async function buscarPrevisaoResultadosPorLote(supabase: SupabaseClient): Promise<LinhaPrevisaoResultadoLote[]> {
+  const { data, error } = await supabase.rpc("financeiro_previsao_resultados_por_lote");
+  if (error) throw error;
+
+  return ((data ?? []) as Record<string, unknown>[]).map((l) => ({
+    nfRemessaAllied: l.nf_remessa_allied as string,
+    quantidadeAprovados: Number(l.quantidade_aprovados ?? 0),
+    quantidadeReprovados: Number(l.quantidade_reprovados ?? 0),
+    maoDeObra: Number(l.mao_de_obra ?? 0),
+    custoPecas: Number(l.custo_pecas ?? 0),
+    impostoPecas: Number(l.imposto_pecas ?? 0),
+    vendaPecas: Number(l.venda_pecas ?? 0),
+  }));
+}
+
 export async function buscarNotasFiscaisFinanceiro(supabase: SupabaseClient): Promise<LinhaFinanceiro[]> {
   const { data, error } = await supabase
     .from("financeiro_notas_fiscais")

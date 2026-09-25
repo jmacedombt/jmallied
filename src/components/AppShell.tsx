@@ -111,7 +111,14 @@ const GRUPO_FINANCEIRO: GrupoMenu = {
   label: "Financeiro",
   icone: Landmark,
   hrefGrupo: "/financeiro",
-  itens: [{ href: "/financeiro", label: "Notas Fiscais", icone: Landmark }],
+  itens: [
+    { href: "/financeiro", label: "Notas Fiscais", icone: Landmark },
+    // "Previsão de Resultados" (pedido explícito, 25/09/2026) — resumo
+    // financeiro por lote (NF Remessa): quantidade, mão de obra, custo,
+    // venda, margem e valor líquido dos aparelhos já aprovados pela
+    // Allied — ver PainelPrevisaoResultados.tsx.
+    { href: "/financeiro/previsao-resultados", label: "Previsão de Resultados", icone: TrendingUp },
+  ],
 };
 
 const GRUPOS_MENU_BASE: GrupoMenu[] = [

@@ -17,6 +17,8 @@ import {
   type ResultadoOrcamento,
 } from "@/lib/metricas";
 import GraficoBarrasCategorias from "@/components/GraficoBarrasCategorias";
+import PopupResumoFinanceiroLote from "@/components/PopupResumoFinanceiroLote";
+import type { LinhaPrevisaoResultadoLote } from "@/lib/financeiro";
 
 type Aba = "resumo" | "lote" | "modelo" | "peca";
 
@@ -46,14 +48,26 @@ function contagemReprovados(porResultado: Record<ResultadoOrcamento, number>): n
 export default function PainelMetricasOrcamentos({
   linhas,
   linhasPeca,
+  resumoFinanceiroPorLote,
 }: {
   linhas: LinhaResultadoOrcamento[];
   linhasPeca: LinhaResultadoPeca[];
+  /** resumo financeiro (Custo/Venda/Margem/Valor Líquido) por NF Remessa
+   * — pedido explícito, 25/09/2026. Opcional só por segurança de tipo;
+   * a página sempre passa (mesmo que vazio, se a busca falhar). */
+  resumoFinanceiroPorLote?: LinhaPrevisaoResultadoLote[];
 }) {
   const [aba, setAba] = useState<Aba>("resumo");
   const [buscaLote, setBuscaLote] = useState("");
   const [ordemModelo, setOrdemModelo] = useState<OrdemRanking>("reprovacao");
   const [ordemPeca, setOrdemPeca] = useState<OrdemRanking>("reprovacao");
+  const [loteAberto, setLoteAberto] = useState<string | null>(null);
+
+  const resumoPorNf = useMemo(() => {
+    const mapa = new Map<string, LinhaPrevisaoResultadoLote>();
+    for (const r of resumoFinanceiroPorLote ?? []) mapa.set(r.nfRemessaAllied, r);
+    return mapa;
+  }, [resumoFinanceiroPorLote]);
 
   const resumo = useMemo(() => resumirResultados(linhas), [linhas]);
   const porLote = useMemo(() => agruparResultadoPorLote(linhas), [linhas]);
@@ -217,8 +231,10 @@ export default function PainelMetricasOrcamentos({
                 {lotesFiltrados.map((l) => (
                   <tr
                     key={l.nfRemessaAllied}
-                    className="border-t"
+                    onClick={() => setLoteAberto(l.nfRemessaAllied)}
+                    className="border-t cursor-pointer transition hover:bg-[var(--surface2)]"
                     style={{ borderColor: "var(--line)", background: "var(--surface)" }}
+                    title="Ver resumo financeiro desse lote"
                   >
                     <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
                       {l.nfRemessaAllied}
@@ -317,6 +333,14 @@ export default function PainelMetricasOrcamentos({
             mensagemVazia="Nenhuma peça com ocorrência suficiente no período selecionado."
           />
         </div>
+      )}
+
+      {loteAberto && (
+        <PopupResumoFinanceiroLote
+          nfRemessaAllied={loteAberto}
+          dados={resumoPorNf.get(loteAberto)}
+          onFechar={() => setLoteAberto(null)}
+        />
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import { podeVerVolumetriaOuOrcamentos } from "@/lib/usuarios";
 import { dataIsoValida, intervaloPadraoDias, type LinhaResultadoOrcamento, type LinhaResultadoPeca } from "@/lib/metricas";
+import { buscarPrevisaoResultadosPorLote } from "@/lib/financeiro";
 import FiltroPeriodoSimples from "@/components/FiltroPeriodoSimples";
 import PainelMetricasOrcamentos from "@/components/PainelMetricasOrcamentos";
 
@@ -96,6 +97,22 @@ export default async function MetricasOrcamentosPage({
 
   const erro = erroResultado?.message ?? erroPecas?.message ?? null;
 
+  // resumo financeiro por lote (Custo/Venda/Margem/Valor Líquido) —
+  // pedido explícito, 25/09/2026: clicar numa NF Remessa em "Por lote"
+  // abre um pop-up com esses valores. Mesma fonte que Financeiro >
+  // Previsão de Resultados (ver lib/financeiro.ts) — atenção: essa lista
+  // NÃO é filtrada pelo período acima nem usa o mesmo critério de
+  // "fechado" da tabela (só considera quem já foi aprovado pela Allied,
+  // sem filtro de data), então a quantidade do pop-up pode não bater com
+  // a coluna "Total" da linha — de propósito, ver tituloInfo do pop-up.
+  let resumoFinanceiroPorLote: Awaited<ReturnType<typeof buscarPrevisaoResultadosPorLote>> = [];
+  try {
+    resumoFinanceiroPorLote = await buscarPrevisaoResultadosPorLote(supabase);
+  } catch {
+    // best-effort: se falhar, o pop-up simplesmente mostra "sem dados"
+    // pra qualquer NF — não impede o resto da tela de funcionar.
+  }
+
   return (
     <AppShell
       titulo="Orçamentos"
@@ -109,7 +126,7 @@ export default async function MetricasOrcamentosPage({
           Não foi possível carregar as métricas: {erro}
         </p>
       ) : (
-        <PainelMetricasOrcamentos linhas={linhas} linhasPeca={linhasPeca} />
+        <PainelMetricasOrcamentos linhas={linhas} linhasPeca={linhasPeca} resumoFinanceiroPorLote={resumoFinanceiroPorLote} />
       )}
     </AppShell>
   );
