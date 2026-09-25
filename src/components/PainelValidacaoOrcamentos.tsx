@@ -13,6 +13,7 @@ import {
   Gauge,
   History,
   LayoutList,
+  Layers,
   PackageCheck,
   PiggyBank,
   Receipt,
@@ -28,6 +29,7 @@ import PopupPecasValidacao, { type AparelhoValidacaoDetalhe } from "@/components
 import PopupRevisaoValidacao, { type ResumoValidacao } from "@/components/PopupRevisaoValidacao";
 import PopupHistoricoEnvios from "@/components/PopupHistoricoEnvios";
 import PopupResumoPecasMarkup from "@/components/PopupResumoPecasMarkup";
+import PopupResumoPecasModelo, { type PecaComModelo } from "@/components/PopupResumoPecasModelo";
 import CelulaLucroPercentual, { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 import PopupDetalheCard, { type BaseCalculoResumo, type LinhaDetalheCard } from "@/components/PopupDetalheCard";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
@@ -176,6 +178,7 @@ export default function PainelValidacaoOrcamentos({
   perfil,
   faixas,
   overridesPorLote = {},
+  overridesModeloPeca = {},
   ultimaImportacaoGspn = null,
   icmsPercentual,
   pendentesLabel,
@@ -197,6 +200,12 @@ export default function PainelValidacaoOrcamentos({
    * 0050). Quando o lote selecionado tem entrada aqui, ela substitui
    * `faixas` como "hoje" pra esse lote. */
   overridesPorLote?: Record<string, FaixaMarkup[]>;
+  /** override de multiplicador por Modelo Comercial + código de peça —
+   * botão "Aplicar" dentro do pop-up "Resumo de Peças por Modelo" (ver
+   * PopupResumoPecasModelo.tsx e migration 0072). Mapa
+   * `${modelo}::${codigo}` -> multiplicador, mais específico que
+   * `overridesPorLote` acima. */
+  overridesModeloPeca?: Record<string, number>;
   /** data/hora (ISO) da última importação da base GSPN — mostrado real
    * no checklist de confirmação de "Utilizar nova margem". */
   ultimaImportacaoGspn?: string | null;
@@ -227,6 +236,7 @@ export default function PainelValidacaoOrcamentos({
   const [avisoEmail, setAvisoEmail] = useState<string | null>(null);
   const [mostrarHistorico, setMostrarHistorico] = useState(false);
   const [mostrarResumoPecas, setMostrarResumoPecas] = useState(false);
+  const [mostrarResumoModelo, setMostrarResumoModelo] = useState(false);
 
   // "Recalcular": busca de novo os custos da Base Peças pra essa mesma
   // lista — pega na hora qualquer código cadastrado manualmente (nesse
@@ -290,6 +300,15 @@ export default function PainelValidacaoOrcamentos({
   // que quebra essas mesmas peças por faixa de Markup.
   const pecasParaResumo = useMemo(() => filtrados.flatMap((a) => a.pecas), [filtrados]);
 
+  // mesmo escopo de pecasParaResumo acima, só que mantendo o Modelo
+  // Comercial de cada aparelho junto de cada peça — usado só pelo
+  // "Resumo de Peças por Modelo" (ver PopupResumoPecasModelo), que
+  // agrupa essas mesmas peças por modelo em vez de por faixa de Markup.
+  const pecasComModeloParaResumo: PecaComModelo[] = useMemo(
+    () => filtrados.flatMap((a) => a.pecas.map((p) => ({ ...p, modelo: a.modelo_comercial }))),
+    [filtrados]
+  );
+
   // a mesma conta, mas quebrada por lote — usada só pro "resumo
   // relacionado ao card" quando o usuário clica num card pra entender
   // como o total ali se formou.
@@ -305,12 +324,12 @@ export default function PainelValidacaoOrcamentos({
   const loteTemPendenteConfirmacao = filtrados.some((a) => a.quantidadePecas === 0 && !a.validacaoConfirmadoSemPeca);
   const podeConfirmarEnvio = !!loteSelecionado && !loteTemPecaSemCusto && !loteTemPendenteConfirmacao && podeConfirmarLote;
 
-  // quantos aparelhos do lote selecionado ainda estão sem peça e sem
-  // confirmação — mostrado real no checklist de "Utilizar nova margem"
-  // (ver PopupResumoPecasMarkup), em vez de um checkbox cego.
-  const qtdSemPecaPendenteNoLote = loteSelecionado
-    ? filtrados.filter((a) => a.quantidadePecas === 0 && !a.validacaoConfirmadoSemPeca).length
-    : 0;
+  // quantos aparelhos da tela atual (respeita o filtro de lote, quando
+  // tiver um selecionado) ainda estão sem peça e sem confirmação —
+  // mostrado real no checklist de "Utilizar nova margem" (ver
+  // PopupResumoPecasMarkup) e de "Aplicar margem desse modelo" (ver
+  // PopupResumoPecasModelo), em vez de um checkbox cego.
+  const qtdSemPecaPendenteNoLote = filtrados.filter((a) => a.quantidadePecas === 0 && !a.validacaoConfirmadoSemPeca).length;
 
   // faixas EFETIVAS de um lote: o override gravado pra ele (ver migration
   // 0050), ou a faixa global quando não tem override — mesma regra usada
@@ -560,6 +579,16 @@ export default function PainelValidacaoOrcamentos({
           </button>
           <button
             type="button"
+            onClick={() => setMostrarResumoModelo(true)}
+            title="Quantidade e valor de peças por Modelo Comercial, com simulação de multiplicador por peça"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)]"
+            style={{ color: "var(--ink)", border: "1px solid var(--line)" }}
+          >
+            <Layers size={13} style={{ color: "var(--accent2)" }} />
+            Resumo por Modelo
+          </button>
+          <button
+            type="button"
             onClick={() => setMostrarHistorico(true)}
             title="Ver o histórico de envios já confirmados, com opção de baixar o Excel de novo"
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-[var(--surface2)]"
@@ -793,6 +822,20 @@ export default function PainelValidacaoOrcamentos({
           qtdSemPecaPendenteNoLote={qtdSemPecaPendenteNoLote}
           onMargemAplicada={() => router.refresh()}
           onFechar={() => setMostrarResumoPecas(false)}
+        />
+      )}
+
+      {mostrarResumoModelo && (
+        <PopupResumoPecasModelo
+          pecas={pecasComModeloParaResumo}
+          faixas={faixasEfetivas(loteSelecionado || undefined)}
+          icmsPercentual={icmsPercentual}
+          overridesModeloPeca={overridesModeloPeca}
+          podePersonalizarMargem={podeConfirmarLote}
+          ultimaImportacaoGspn={ultimaImportacaoGspn}
+          qtdSemPecaPendenteNoLote={qtdSemPecaPendenteNoLote}
+          onMargemAplicada={() => router.refresh()}
+          onFechar={() => setMostrarResumoModelo(false)}
         />
       )}
 

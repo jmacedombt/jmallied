@@ -10,7 +10,7 @@ export { CARGOS_IMPORTACAO_BASE_PECAS as CARGOS_IMPORTACAO_ORCAMENTOS, podeImpor
 // (ICMS) e a Venda de Peça sobre o valor JÁ com margem, com exatamente
 // as mesmas regras de arredondamento do BID (não sobre o custo cru da
 // Base Peças, e sempre arredondado, nunca "quebrado").
-import { calcularCustoPecaAllied, type FaixaMarkup } from "@/lib/bid";
+import { calcularCustoPecaAllied, chaveOverrideModeloPeca, type FaixaMarkup } from "@/lib/bid";
 
 // colunas da planilha original (0-indexed)
 export const COL_REPARADOR_TERCEIRO = 0; // A
@@ -499,13 +499,22 @@ export function calcularVendaPecasVigente(o: CamposValorVigente): number {
  * imposto, inteiro) — nunca ICMS% direto sobre o custo cru, e nunca sem
  * arredondar (evita a soma dos valores "quebrados" bater diferente do
  * total exibido).
+ *
+ * `modeloComercial` + `overridesModeloPeca`, quando informados, aplicam
+ * o override de Markup por Modelo + Peça (botão "Aplicar" no pop-up
+ * Resumo de Peças por Modelo — ver buscarOverridesModeloPeca em
+ * lib/bid.ts e migration 0072): existindo override pra essa combinação
+ * de modelo + código, ele substitui a Faixa de Markup (global ou por
+ * lote) SÓ pra essa peça, por ser mais específico.
  */
 export function calcularDetalheValidacao(
   campos: CamposPecasOrcamento,
   custosPorCodigo: Map<string, number>,
   icmsPercentual: number,
   configMaoDeObra: Pick<ConfiguracaoMaoDeObra, "valor_uma_peca" | "valor_mais_de_uma_peca">,
-  faixasMarkup: FaixaMarkup[]
+  faixasMarkup: FaixaMarkup[],
+  modeloComercial?: string | null,
+  overridesModeloPeca?: Record<string, number>
 ): DetalheValidacaoOrcamento {
   const posicoes = [
     ...Array.from({ length: 10 }, (_, i) => ({
@@ -523,7 +532,9 @@ export function calcularDetalheValidacao(
     .map((p) => {
       const codigo = p.codigo!.trim();
       const custo = custosPorCodigo.get(codigo) ?? null;
-      const resultado = custo != null ? calcularCustoPecaAllied(custo, faixasMarkup, icmsPercentual) : null;
+      const multiplicadorOverride = overridesModeloPeca?.[chaveOverrideModeloPeca(modeloComercial, codigo)];
+      const resultado =
+        custo != null ? calcularCustoPecaAllied(custo, faixasMarkup, icmsPercentual, multiplicadorOverride) : null;
       return {
         posicao: p.posicao,
         codigo,

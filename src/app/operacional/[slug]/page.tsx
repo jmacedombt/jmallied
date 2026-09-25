@@ -35,7 +35,13 @@ import { type AparelhoEtapaSimples } from "@/components/PainelEtapaSimples";
 import PainelProdutoEntregue, { type LinhaProdutoEntregueLote } from "@/components/PainelProdutoEntregue";
 import PainelOperacionalAllied from "@/components/PainelOperacionalAllied";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
-import { buscarPrecosBidPorPartNumber, buscarSolucoesPorPartNumber, buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
+import {
+  buscarPrecosBidPorPartNumber,
+  buscarSolucoesPorPartNumber,
+  buscarOverridesMarkupPorLote,
+  buscarOverridesModeloPeca,
+  type FaixaMarkup,
+} from "@/lib/bid";
 import { pecasVigentes } from "@/lib/exportN3";
 import { isAllied } from "@/lib/usuarios";
 import { buscarAparelhosAllied, buscarProdutoEntreguePorLote } from "@/lib/allied";
@@ -408,6 +414,11 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     // global SÓ pros orçamentos daquele lote — os demais lotes continuam
     // na faixa global normalmente.
     const overridesPorLote = await buscarOverridesMarkupPorLote(supabase, nfsDistintas);
+    // override de margem por Modelo + Peça (botão "Aplicar" — ver
+    // PopupResumoPecasModelo.tsx e migration 0072): mais específico que
+    // o override por lote acima, tem prioridade quando os dois existirem
+    // pra mesma peça (ver calcularDetalheValidacao).
+    const overridesModeloPeca = await buscarOverridesModeloPeca(supabase, []);
     const ultimaImportacaoGspn: string | null = ultimaImportacaoGspnBruta?.importado_em ?? null;
 
     // "Peça Solução" (BID) de cada código nessa etapa (pedido explícito
@@ -421,7 +432,9 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         custosPorCodigo,
         icmsPercentual,
         configMaoDeObra,
-        faixasDoLote
+        faixasDoLote,
+        a.modelo_comercial,
+        overridesModeloPeca
       );
       // se alguém já ajustou manualmente esse orçamento (lápis no
       // pop-up), os 4 totais do resumo vêm congelados do banco em vez de
@@ -459,6 +472,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
           perfil={perfil}
           faixas={faixasMarkup}
           overridesPorLote={overridesPorLote}
+          overridesModeloPeca={overridesModeloPeca}
           ultimaImportacaoGspn={ultimaImportacaoGspn}
           icmsPercentual={icmsPercentual}
           nfsComPendenciaEtapaAnterior={nfsComPendenciaEtapaAnterior}

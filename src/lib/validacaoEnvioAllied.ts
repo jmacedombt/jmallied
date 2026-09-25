@@ -8,7 +8,7 @@ import {
   type ConfiguracaoMaoDeObra,
   type DetalheValidacaoOrcamento,
 } from "@/lib/orcamentos";
-import { buscarPrecosBidPorPartNumber, buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
+import { buscarPrecosBidPorPartNumber, buscarOverridesMarkupPorLote, buscarOverridesModeloPeca, type FaixaMarkup } from "@/lib/bid";
 import { formatarDataBrasilia } from "@/lib/tempo";
 import { type LinhaPlanilhaOrcamento } from "@/lib/email";
 
@@ -318,6 +318,12 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
   const overridesDoLote = await buscarOverridesMarkupPorLote(admin, [nfRemessa]);
   const faixasMarkup: FaixaMarkup[] = overridesDoLote[nfRemessa] ?? faixasMarkupGlobal;
 
+  // override de margem por Modelo + Peça (botão "Aplicar" — ver
+  // PopupResumoPecasModelo.tsx e migration 0072): mais específico que o
+  // override por lote acima, tem prioridade quando os dois existirem pra
+  // mesma peça — inclusive no cálculo congelado (validacao_snapshot).
+  const overridesModeloPeca = await buscarOverridesModeloPeca(admin, []);
+
   // data do envio (Confirmar Envio) — mesmo valor em toda linha do
   // arquivo, seja no preview ou na confirmação de verdade logo em
   // seguida (ambos rodam a poucos segundos de diferença).
@@ -353,7 +359,15 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
   }
 
   const itensConfirmaveis: ItemConfirmavel[] = lista.map((a) => {
-    const detalhe = calcularDetalheValidacao(a, custosPorCodigo, icmsPercentual, configMaoDeObra, faixasMarkup);
+    const detalhe = calcularDetalheValidacao(
+      a,
+      custosPorCodigo,
+      icmsPercentual,
+      configMaoDeObra,
+      faixasMarkup,
+      a.modelo_comercial,
+      overridesModeloPeca
+    );
     const { peca, custoPeca } = montarPosicoesPeca(a, detalhe);
     const linha: LinhaPlanilhaOrcamento = {
       reparadorTerceiro: a.reparador_terceiro,
@@ -399,7 +413,17 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
   // snapshot nenhum — aparelho que tem peça lançada mas nunca passou
   // pela precificação de Validação de Orçamentos.
   const linhasReprovados: LinhaComOrdem[] = reprovados.map((a) => {
-    const detalhe = a.validacao_snapshot ?? calcularDetalheValidacao(a, custosPorCodigo, icmsPercentual, configMaoDeObra, faixasMarkup);
+    const detalhe =
+      a.validacao_snapshot ??
+      calcularDetalheValidacao(
+        a,
+        custosPorCodigo,
+        icmsPercentual,
+        configMaoDeObra,
+        faixasMarkup,
+        a.modelo_comercial,
+        overridesModeloPeca
+      );
     const { peca, custoPeca } = montarPosicoesPeca(a, detalhe);
     const linha: LinhaPlanilhaOrcamento = {
       reparadorTerceiro: a.reparador_terceiro,

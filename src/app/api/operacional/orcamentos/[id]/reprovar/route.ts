@@ -8,7 +8,7 @@ import {
   type CamposPecasOrcamento,
   type ConfiguracaoMaoDeObra,
 } from "@/lib/orcamentos";
-import { buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
+import { buscarOverridesMarkupPorLote, buscarOverridesModeloPeca, type FaixaMarkup } from "@/lib/bid";
 
 const COLUNAS_PECAS =
   "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5";
@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const { data: atual, error: erroAtual } = await admin
     .from("orcamentos")
-    .select(`status_operacional, nf_remessa_allied, ${COLUNAS_PECAS}`)
+    .select(`status_operacional, nf_remessa_allied, modelo_comercial, ${COLUNAS_PECAS}`)
     .eq("id", params.id)
     .single();
 
@@ -115,13 +115,16 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // "Utilizar nova margem" — ver migration 0050), se existir.
     const overridesDoLote = await buscarOverridesMarkupPorLote(admin, [atual.nf_remessa_allied]);
     const faixasMarkup: FaixaMarkup[] = overridesDoLote[atual.nf_remessa_allied] ?? faixasMarkupGlobal;
+    const overridesModeloPeca = await buscarOverridesModeloPeca(admin, []);
 
     const detalhe = calcularDetalheValidacao(
       atual as CamposPecasOrcamento,
       custosPorCodigo,
       icmsPercentual,
       configMaoDeObra,
-      faixasMarkup
+      faixasMarkup,
+      (atual as unknown as { modelo_comercial: string | null }).modelo_comercial,
+      overridesModeloPeca
     );
 
     atualizacao.validacao_snapshot = detalhe;

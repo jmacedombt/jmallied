@@ -57,11 +57,21 @@ export function faixaMarkupPara(custo: number, faixas: FaixaMarkup[]): FaixaMark
 
 /** Valor com margem = teto(custo da Base Peças x multiplicador da
  * faixa, 2 casas decimais) — é o valor ANTES do imposto. Retorna null
- * se nenhuma faixa cobrir o valor (configuração incompleta). */
-export function calcularValorComMargem(custoSamsung: number, faixas: FaixaMarkup[]): number | null {
-  const faixa = faixaMarkupPara(custoSamsung, faixas);
-  if (!faixa) return null;
-  return arredondarParaCima(custoSamsung * faixa.multiplicador, 2);
+ * se nenhuma faixa cobrir o valor (configuração incompleta).
+ *
+ * `multiplicadorOverride`, quando informado, substitui a busca por
+ * faixa e usa esse multiplicador direto — usado pelo override de Markup
+ * por Modelo + Peça (ver buscarOverridesModeloPeca / migration 0072),
+ * que é mais específico que qualquer Faixa de Markup (global ou por
+ * lote) e por isso tem prioridade. */
+export function calcularValorComMargem(
+  custoSamsung: number,
+  faixas: FaixaMarkup[],
+  multiplicadorOverride?: number | null
+): number | null {
+  const multiplicador = multiplicadorOverride ?? faixaMarkupPara(custoSamsung, faixas)?.multiplicador ?? null;
+  if (multiplicador == null) return null;
+  return arredondarParaCima(custoSamsung * multiplicador, 2);
 }
 
 export type ResultadoCalculoBid = {
@@ -77,13 +87,15 @@ export type ResultadoCalculoBid = {
 /** Custo Peça (Allied) = teto(valor com margem + imposto ICMS sobre o
  * valor com margem, arredondado pro número inteiro — nunca fica
  * "quebrado", ex: 43,35 vira 44,00). Retorna null se nenhuma faixa
- * cobrir o custo informado (configuração incompleta). */
+ * cobrir o custo informado (configuração incompleta). Ver
+ * `calcularValorComMargem` pro significado de `multiplicadorOverride`. */
 export function calcularCustoPecaAllied(
   custoSamsung: number,
   faixas: FaixaMarkup[],
-  icmsPercentual: number
+  icmsPercentual: number,
+  multiplicadorOverride?: number | null
 ): ResultadoCalculoBid | null {
-  const valorComMargem = calcularValorComMargem(custoSamsung, faixas);
+  const valorComMargem = calcularValorComMargem(custoSamsung, faixas, multiplicadorOverride);
   if (valorComMargem == null) return null;
   const valorImposto = arredondarParaCima(valorComMargem * (icmsPercentual / 100), 2);
   const custoPecaAllied = arredondarParaCima(valorComMargem + valorImposto, 0);
@@ -267,6 +279,37 @@ export async function buscarOverridesMarkupPorLote(
   const mapa: Record<string, FaixaMarkup[]> = {};
   for (const linha of (data ?? []) as { nf_remessa_allied: string; faixas: FaixaMarkup[] }[]) {
     mapa[linha.nf_remessa_allied] = linha.faixas;
+  }
+  return mapa;
+}
+
+// ---- Override de Markup por Modelo + Peça (ver migration 0072) ----
+
+/** Chave usada no mapa de overridesModeloPeca — `${modelo}::${codigo}`.
+ * Modelo null/undefined vira string vazia, pra nunca colidir com um
+ * código "solto" sem modelo. */
+export function chaveOverrideModeloPeca(modeloComercial: string | null | undefined, codigo: string): string {
+  return `${modeloComercial ?? ""}::${codigo}`;
+}
+
+/** Busca o override de multiplicador por Modelo Comercial + código de
+ * peça — botão "Aplicar" no pop-up "Resumo de Peças por Modelo" em
+ * Validação de Orçamentos (ver PopupResumoPecasModelo.tsx e migration
+ * 0072). Devolve um mapa `${modelo}::${codigo}` -> multiplicador só com
+ * quem TEM override; quem não tem cai pra Faixa de Markup (do lote ou
+ * global) normalmente — e quem tem tem PRIORIDADE sobre qualquer Faixa.
+ * Passar lista vazia busca todos os overrides existentes. */
+export async function buscarOverridesModeloPeca(
+  supabase: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  modelos: string[]
+): Promise<Record<string, number>> {
+  let query = supabase.from("orcamentos_modelo_peca_markup_override").select("modelo_comercial, codigo, multiplicador");
+  if (modelos.length > 0) query = query.in("modelo_comercial", modelos);
+  const { data } = await query;
+
+  const mapa: Record<string, number> = {};
+  for (const linha of (data ?? []) as { modelo_comercial: string; codigo: string; multiplicador: number }[]) {
+    mapa[chaveOverrideModeloPeca(linha.modelo_comercial, linha.codigo)] = Number(linha.multiplicador);
   }
   return mapa;
 }

@@ -9,7 +9,7 @@ import {
   type CamposPecasOrcamento,
   type ConfiguracaoMaoDeObra,
 } from "@/lib/orcamentos";
-import { buscarPrecosBidPorPartNumber, buscarOverridesMarkupPorLote, type FaixaMarkup } from "@/lib/bid";
+import { buscarPrecosBidPorPartNumber, buscarOverridesMarkupPorLote, buscarOverridesModeloPeca, type FaixaMarkup } from "@/lib/bid";
 import { formatarDataBrasilia } from "@/lib/tempo";
 import { type LinhaPlanilhaOrcamento } from "@/lib/email";
 import { type LinhaComOrdem, montarLinhasNaOrdemOriginal } from "@/lib/validacaoEnvioAllied";
@@ -252,9 +252,18 @@ export async function montarLinhasJaReprovadas(
     }));
     const overridesDoLote = await buscarOverridesMarkupPorLote(admin, [nfRemessa]);
     const faixasMarkup: FaixaMarkup[] = overridesDoLote[nfRemessa] ?? faixasMarkupGlobal;
+    const overridesModeloPeca = await buscarOverridesModeloPeca(admin, []);
 
     for (const a of semSnapshot) {
-      const detalhe = calcularDetalheValidacao(a as CamposPecasOrcamento, custosPorCodigo, icmsPercentual, configMaoDeObra, faixasMarkup);
+      const detalhe = calcularDetalheValidacao(
+        a as CamposPecasOrcamento,
+        custosPorCodigo,
+        icmsPercentual,
+        configMaoDeObra,
+        faixasMarkup,
+        a.modelo_comercial,
+        overridesModeloPeca
+      );
       detalhePorId.set(a.id, detalhe);
     }
   }
@@ -453,9 +462,18 @@ export async function prepararGeracaoContraProposta(
     }));
     const overridesDoLote = await buscarOverridesMarkupPorLote(admin, [nfRemessa]);
     const faixasMarkup: FaixaMarkup[] = overridesDoLote[nfRemessa] ?? faixasMarkupGlobal;
+    const overridesModeloPeca = await buscarOverridesModeloPeca(admin, []);
 
     for (const a of semSnapshot) {
-      const detalhe = calcularDetalheValidacao(a as CamposPecasOrcamento, custosPorCodigo, icmsPercentual, configMaoDeObra, faixasMarkup);
+      const detalhe = calcularDetalheValidacao(
+        a as CamposPecasOrcamento,
+        custosPorCodigo,
+        icmsPercentual,
+        configMaoDeObra,
+        faixasMarkup,
+        a.modelo_comercial,
+        overridesModeloPeca
+      );
       detalheJaReprovadoPorId.set(a.id, detalhe);
     }
   }
