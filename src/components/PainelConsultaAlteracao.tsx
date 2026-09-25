@@ -154,6 +154,17 @@ export default function PainelConsultaAlteracao({
     setBuscando(false);
   }
 
+  function limparConsulta() {
+    setTermo("");
+    setErroBusca(null);
+    setResultados(null);
+    setFicha(null);
+    setErroFicha(null);
+    setEditando(false);
+    setErroCampo(null);
+    setSucesso(null);
+  }
+
   function iniciarEdicao() {
     if (!ficha) return;
     setNovaOsReparadora(ficha.os_reparadora ?? "");
@@ -228,6 +239,17 @@ export default function PainelConsultaAlteracao({
           {buscando ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
           Buscar
         </button>
+        {(termo || resultados || ficha) && (
+          <button
+            type="button"
+            onClick={limparConsulta}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition hover:bg-[var(--surface2)]"
+            style={{ color: "var(--muted)" }}
+          >
+            <X size={14} />
+            Limpar
+          </button>
+        )}
       </form>
 
       {erroBusca && (
