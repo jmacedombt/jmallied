@@ -122,6 +122,13 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
     hrefGrupo: "/operacional",
     itens: [
       { href: "/operacional", label: "Painel", icone: LayoutGrid },
+      // "Consulta/Alteração" (pedido explícito, 25/09/2026) — logo abaixo
+      // de Painel, visível pra qualquer cargo que já tem acesso normal ao
+      // Operacional (inclusive ALLIED, ver mais abaixo — GRUPOS_MENU_ALLIED
+      // tem o mesmo item na mesma posição). A ALTERAÇÃO em si (só o campo
+      // OS Reparadora) é restrita dentro da própria tela — ver
+      // podeConfirmarAnaliseEmLote em lib/orcamentos.ts.
+      { href: "/operacional/consulta-alteracao", label: "Consulta/Alteração", icone: Search },
       { href: "/operacional/backlog", label: "Backlog", icone: ClipboardList },
       { href: "/operacional/reconhecimento-lote", label: "Reconhecimento Lote", icone: CalendarCheck2 },
     ],
@@ -188,6 +195,11 @@ const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
     icone: LayoutGrid,
     itens: [
       { href: "/operacional", label: "Painel", icone: LayoutGrid },
+      // "Consulta/Alteração" (pedido explícito, 25/09/2026) — também
+      // liberado pro ALLIED (só consulta; a alteração de OS Reparadora
+      // continua travada pra Supervisor/Gerente/Administrador dentro da
+      // própria tela, ver PainelConsultaAlteracao.tsx).
+      { href: "/operacional/consulta-alteracao", label: "Consulta/Alteração", icone: Search },
       { href: "/operacional/backlog", label: "Backlog", icone: ClipboardList },
       // Ordem do menu (pedido explícito, 23/09/2026): Painel, Backlog,
       // Orçamentos Enviados, Validação de Orçamento (Allied), Contra
@@ -357,38 +369,47 @@ export default function AppShell({
       ? GRUPOS_MENU_OPERACIONAL
       : restritoFinanceiro
         ? GRUPOS_MENU_FINANCEIRO
-        : GRUPOS_MENU_BASE.map((g) =>
-            g.id === "operacional"
-              ? {
-                  ...g,
-                  // Ordem do menu (pedido explícito, 23/09/2026): Painel,
-                  // Backlog, Reconhecimento Lote (fixos acima, ver
-                  // g.itens), Orçamentos Enviados, Validação de Orçamento
-                  // (Allied), Contra Propostas, Modelo de Retorno.
-                  itens: [
-                    ...g.itens,
-                    ...(podeVerOrcamentosEnviados
-                      ? [{ href: "/operacional/orcamentos-enviados", label: "Orçamentos Enviados", icone: History }]
-                      : []),
-                    ...(podeVerValidacaoOrcamentoAllied
-                      ? [
-                          {
-                            href: "/operacional/validacao-orcamento-allied",
-                            label: "Validação de Orçamento (Allied)",
-                            icone: ShieldCheck,
-                          },
-                        ]
-                      : []),
-                    ...(podeVerContraPropostas
-                      ? [{ href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight }]
-                      : []),
-                    ...(podeVerModeloRetorno
-                      ? [{ href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet }]
-                      : []),
-                  ],
-                }
-              : g
-          ).flatMap((g) =>
+        : GRUPOS_MENU_BASE.map((g) => {
+            if (g.id === "operacional") {
+              return {
+                ...g,
+                // Ordem do menu (pedido explícito, 23/09/2026): Painel,
+                // Backlog, Reconhecimento Lote (fixos acima, ver
+                // g.itens), Orçamentos Enviados, Validação de Orçamento
+                // (Allied), Contra Propostas, Modelo de Retorno.
+                itens: [
+                  ...g.itens,
+                  ...(podeVerOrcamentosEnviados
+                    ? [{ href: "/operacional/orcamentos-enviados", label: "Orçamentos Enviados", icone: History }]
+                    : []),
+                  ...(podeVerValidacaoOrcamentoAllied
+                    ? [
+                        {
+                          href: "/operacional/validacao-orcamento-allied",
+                          label: "Validação de Orçamento (Allied)",
+                          icone: ShieldCheck,
+                        },
+                      ]
+                    : []),
+                  ...(podeVerContraPropostas
+                    ? [{ href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight }]
+                    : []),
+                  ...(podeVerModeloRetorno
+                    ? [{ href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet }]
+                    : []),
+                ],
+              };
+            }
+            // "Auditoria" (pedido explícito, 25/09/2026 — histórico das
+            // alterações feitas em Consulta/Alteração) só aparece pro
+            // Administrador (is_master) — nem Supervisor/Gerente, que já
+            // podem fazer a alteração em si, veem esse item (mais
+            // restrito de propósito).
+            if (g.id === "sistema" && perfil?.is_master) {
+              return { ...g, itens: [...g.itens, { href: "/sistema/auditoria", label: "Auditoria", icone: History }] };
+            }
+            return g;
+          }).flatMap((g) =>
             g.id === "impressao"
               ? [g, ...(podeVerFinanceiro ? [GRUPO_FINANCEIRO] : []), ...(podeVerMetricas ? [GRUPO_METRICAS] : [])]
               : [g]

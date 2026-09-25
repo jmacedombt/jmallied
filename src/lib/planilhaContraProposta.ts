@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { CABECALHO_PLANILHA_ORCAMENTOS, type LinhaPlanilhaOrcamento } from "@/lib/email";
+import { PREENCHIMENTO_APROVADO, PREENCHIMENTO_RECUSADO, FONTE_APROVADO, FONTE_RECUSADO } from "@/lib/coresPlanilhaExcel";
 
 /**
  * Monta a planilha de "Enviar Contra Proposta" — MESMO layout/ordem de
@@ -23,18 +24,11 @@ const IDX_VALOR_TOTAL_PECA = CABECALHO_PLANILHA_ORCAMENTOS.indexOf("VALOR TOTAL 
 const IDX_MAO_DE_OBRA = CABECALHO_PLANILHA_ORCAMENTOS.indexOf("MÃO DE OBRA");
 const IDX_VALOR_TOTAL_REPARO = CABECALHO_PLANILHA_ORCAMENTOS.indexOf("VALOR TOTAL DE REPARO");
 
-const PREENCHIMENTO_APROVADO: ExcelJS.Fill = {
-  type: "pattern",
-  pattern: "solid",
-  fgColor: { argb: "FFDCFCE7" }, // verde claro
-};
-const PREENCHIMENTO_RECUSADO: ExcelJS.Fill = {
-  type: "pattern",
-  pattern: "solid",
-  fgColor: { argb: "FFFEE2E2" }, // vermelho claro
-};
-const FONTE_APROVADO: Partial<ExcelJS.Font> = { color: { argb: "FF16A34A" }, bold: true };
-const FONTE_RECUSADO: Partial<ExcelJS.Font> = { color: { argb: "FFDC2626" }, bold: true };
+// PREENCHIMENTO_APROVADO/RECUSADO e FONTE_APROVADO/RECUSADO agora vêm de
+// lib/coresPlanilhaExcel.ts (pedido explícito, 25/09/2026: a planilha
+// "Modelo de Retorno" reaproveita essas MESMAS cores pra colorir sua
+// coluna "Tipo de Retorno" igual à "STATUS ORÇAMENTO" daqui — ver esse
+// arquivo pra saber por que isso não podia continuar aqui dentro).
 const FONTE_PECA_ALTERADA: Partial<ExcelJS.Font> = { color: { argb: "FFDC2626" }, bold: true };
 
 function vazioOuTexto(v: string | null): string {

@@ -55,12 +55,19 @@ const SLUGS_OPERACIONAL_ALLIED = STATUS_OPERACIONAL.map((s) => s.slug);
 // explícito, migration 0069): mensagem direta + "chamar atenção",
 // liberado pra QUALQUER login, inclusive ALLIED, sem exceção (ver
 // ChatWidget.tsx).
+// "/api/operacional/consulta-orcamento" (pedido explícito, migration
+// 0070, GET listagem/detalhe) — "Consulta/Alteração" também liberada
+// pro ALLIED, só a CONSULTA (ver podeConsultarOrcamento em
+// lib/usuarios.ts); a rota de alteração (.../os-reparadora, POST) NÃO
+// entra aqui — ela mesma barra ALLIED de novo no servidor, e nem consta
+// no menu dele.
 const APIS_PERMITIDAS_ALLIED = [
   "/api/operacional/backlog/exportar-allied",
   "/api/operacional/modelo-retorno",
   "/api/operacional/contra-propostas",
   "/api/operacional/orcamentos/historico-envios",
   "/api/operacional/orcamentos/aprovacoes-uploads",
+  "/api/operacional/consulta-orcamento",
   "/api/usuarios/online",
   "/api/usuarios/status",
   "/api/chat/conversas",
@@ -76,6 +83,11 @@ const REGEX_API_DOWNLOAD_MODELO_RETORNO_ALLIED = /^\/api\/operacional\/modelo-re
 const REGEX_API_DOWNLOAD_CONTRA_PROPOSTAS_ALLIED = /^\/api\/operacional\/contra-propostas\/[^/]+\/download$/;
 const REGEX_API_DOWNLOAD_HISTORICO_ENVIOS_ALLIED = /^\/api\/operacional\/orcamentos\/historico-envios\/[^/]+\/download$/;
 const REGEX_API_DOWNLOAD_APROVACOES_UPLOADS_ALLIED = /^\/api\/operacional\/orcamentos\/aprovacoes-uploads\/[^/]+\/download$/;
+// detalhe de UM orçamento em "Consulta/Alteração" (GET, /[id]) — só
+// isso; "/[id]/os-reparadora" (a alteração) não bate nesse regex porque
+// tem mais um pedaço no caminho, então continua fora do alcance do
+// ALLIED.
+const REGEX_API_DETALHE_CONSULTA_ORCAMENTO_ALLIED = /^\/api\/operacional\/consulta-orcamento\/[^/]+$/;
 
 function apiPermitidaParaAllied(path: string): boolean {
   return (
@@ -84,7 +96,8 @@ function apiPermitidaParaAllied(path: string): boolean {
     REGEX_API_DOWNLOAD_MODELO_RETORNO_ALLIED.test(path) ||
     REGEX_API_DOWNLOAD_CONTRA_PROPOSTAS_ALLIED.test(path) ||
     REGEX_API_DOWNLOAD_HISTORICO_ENVIOS_ALLIED.test(path) ||
-    REGEX_API_DOWNLOAD_APROVACOES_UPLOADS_ALLIED.test(path)
+    REGEX_API_DOWNLOAD_APROVACOES_UPLOADS_ALLIED.test(path) ||
+    REGEX_API_DETALHE_CONSULTA_ORCAMENTO_ALLIED.test(path)
   );
 }
 
@@ -100,6 +113,11 @@ const ROTA_BID_ALLIED = "/bases/bid/versoes-enviadas";
 
 function rotaPermitidaParaAllied(path: string): boolean {
   if (path === "/operacional") return true;
+  // "Consulta/Alteração" (pedido explícito, migration 0070) — só a
+  // CONSULTA (a tela em si já não mostra o botão de alterar pro ALLIED,
+  // ver PainelConsultaAlteracao.tsx, e a API de alteração barra de novo
+  // no servidor mesmo assim).
+  if (path === "/operacional/consulta-alteracao" || path.startsWith("/operacional/consulta-alteracao/")) return true;
   if (path === "/operacional/backlog" || path.startsWith("/operacional/backlog/")) return true;
   if (path === "/operacional/modelo-retorno" || path.startsWith("/operacional/modelo-retorno/")) return true;
   if (path === "/operacional/contra-propostas" || path.startsWith("/operacional/contra-propostas/")) return true;

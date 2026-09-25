@@ -105,6 +105,11 @@ export function temFuncaoCompletaNaEtapa(
 export const PREFIXOS_BLOQUEADOS_OPERACIONAL = [
   "/operacional/backlog",
   "/operacional/reconhecimento-lote",
+  // "Consulta/Alteração" (pedido explícito, 25/09/2026) fica de fora
+  // desses 2 cargos — mesmo critério de Backlog/Reconhecimento Lote (ver
+  // podeConsultarOrcamento logo abaixo, que também barra Financeiro
+  // sem is_master).
+  "/operacional/consulta-alteracao",
   "/bases",
   "/configuracoes",
   "/usuarios",
@@ -142,4 +147,21 @@ export const PREFIXOS_BLOQUEADOS_FINANCEIRO = [
 
 export function rotaBloqueadaParaFinanceiro(path: string): boolean {
   return PREFIXOS_BLOQUEADOS_FINANCEIRO.some((prefixo) => path === prefixo || path.startsWith(`${prefixo}/`));
+}
+
+/**
+ * Quem pode abrir "Consulta/Alteração" (pedido explícito, 25/09/2026,
+ * ver PainelConsultaAlteracao.tsx) — qualquer login com acesso "normal"
+ * ao Operacional, incluindo ALLIED (nenhum dos dois é operacionalRestrito
+ * nem financeiroRestrito, então já caem aqui sozinhos, sem precisar
+ * listar cargo por cargo). Fica de fora só quem tem menu bem reduzido:
+ * Operacional/Triagem-OQC sem is_master (só Painel) e Financeiro sem
+ * is_master (só Financeiro + Impressão). A ALTERAÇÃO em si (só o campo
+ * OS Reparadora) é mais restrita — ver podeConfirmarAnaliseEmLote em
+ * lib/orcamentos.ts (Supervisor/Gerente/Administrador), que ALLIED nunca
+ * atende.
+ */
+export function podeConsultarOrcamento(perfil: { cargo: string; is_master: boolean } | null): boolean {
+  if (!perfil) return false;
+  return !operacionalRestrito(perfil) && !financeiroRestrito(perfil);
 }

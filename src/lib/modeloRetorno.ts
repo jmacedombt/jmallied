@@ -2,9 +2,26 @@
  * Planilha "Modelo de Retorno" de "Ag. Emissão de Nota Fiscal" — mesmo
  * formato/colunas do arquivo-modelo enviado pelo Rafael (aba com o
  * nome da data, DDMMAAAA), sempre Aprovados primeiro e Recusados
- * depois (pedido explícito). Gerada no navegador (mesmo padrão de
- * lib/exportN3.ts e lib/preOrdemExport.ts, import dinâmico do "xlsx" +
- * XLSX.writeFile) — não muda nada no banco, só baixa o arquivo.
+ * depois (pedido explícito). Montada com ExcelJS (pedido explícito,
+ * 25/09/2026 — mesma biblioteca/padrão de lib/planilhaContraProposta.ts;
+ * a "xlsx" antiga não grava estilo nenhum, só valores, e essa planilha
+ * agora também precisa de cor). Gerada no navegador (monta o buffer e
+ * baixa via Blob — mesma técnica já usada em PainelModeloRetorno.tsx pra
+ * baixar de novo um registro do histórico) — não muda nada no banco, só
+ * baixa o arquivo.
+ *
+ * Destaques (pedido explícito, 25/09/2026 — mesma linguagem visual da
+ * Contra Proposta, reaproveitando as MESMAS cores — ver
+ * lib/coresPlanilhaExcel.ts):
+ *  - Coluna "Tipo de Retorno": funciona igual a "STATUS ORÇAMENTO" da
+ *    Contra Proposta (coluna BQ) — fundo + texto verde em Aprovado,
+ *    fundo + texto vermelho em Reprovado.
+ *  - Colunas "Valor Peça 1".."Valor Peça 10"/"Valor Peça Add 1".."Add 5":
+ *    vermelho (mesma cor/negrito da coluna "STATUS ORÇAMENTO" recusado)
+ *    nas linhas Reprovado.
+ *  - Coluna "Motivo Reprova": mesma regra da Contra Proposta pra
+ *    preencher "MOTIVO REPROVA" (coluna BR) — só texto, sem cor, só
+ *    preenchida quando Reprovado, vindo do mesmo campo motivo_reprova.
  *
  * A montagem da planilha em si (montarPlanilha/montarWorkbook) é
  * compartilhada com a regeração no servidor — ver
@@ -13,8 +30,15 @@
  * baixar de novo, dias depois, exatamente a mesma planilha, a partir só
  * do snapshot de dados que foi salvo na hora da emissão.
  */
+import type ExcelJS from "exceljs";
 import { type CamposValorVigente, calcularMaoDeObraVigente } from "@/lib/orcamentos";
 import { pecasVigentes, type PecaPosicionada } from "@/lib/exportN3";
+import {
+  PREENCHIMENTO_APROVADO,
+  PREENCHIMENTO_RECUSADO,
+  FONTE_APROVADO,
+  FONTE_RECUSADO,
+} from "@/lib/coresPlanilhaExcel";
 
 export type ItemModeloRetorno = CamposValorVigente & {
   nf_remessa_allied: string;
@@ -79,6 +103,15 @@ const COLUNAS_MOEDA = CABECALHO.reduce<number[]>((colunas, rotulo, indice) => {
   if (rotulo === "MO" || rotulo.startsWith("Valor")) colunas.push(indice);
   return colunas;
 }, []);
+
+// índices (0-based) usados na hora de colorir — pedido explícito,
+// 25/09/2026 (ver destaques no comentário do topo do arquivo).
+const IDX_TIPO_RETORNO = CABECALHO.indexOf("Tipo de Retorno");
+// as 15 colunas "Valor Peça 1".."Valor Peça 10" + "Valor Peça Add 1".."5"
+// são contíguas no CABECALHO — só as de PEÇA (não MO, nem os totais de
+// NF no final, que também começam com "Valor").
+const IDX_VALOR_PECA_1 = CABECALHO.indexOf("Valor Peça 1");
+const QTD_COLUNAS_VALOR_PECA = 15;
 
 /** "Part Number - Peça Solução" (pedido explícito) — cai pro código
  * sozinho quando a peça não tem solução cadastrada no BID. */
@@ -154,54 +187,63 @@ function dataArquivoBrasilia(): string {
   return `${valor("day")}${valor("month")}${valor("year")}`;
 }
 
-// A biblioteca "xlsx" (SheetJS) funciona igual no navegador e no Node —
-// por isso o mesmo import dinâmico e a mesma montagem servem tanto pro
-// download direto no cliente (gerarExcelModeloRetorno) quanto pra
-// remontagem no servidor (gerarBufferModeloRetorno, chamada pela rota
-// de download do histórico).
-type LibXLSX = typeof import("xlsx");
-
-function montarPlanilha(
-  XLSX: LibXLSX,
-  aprovados: ItemModeloRetorno[],
-  recusados: ItemModeloRetorno[],
-  solucoesPorPartNumber: Record<string, string>
-) {
-  const corpo = [
-    ...aprovados.map((item) => linhaItem(item, "Aprovado", solucoesPorPartNumber)),
-    ...recusados.map((item) => linhaItem(item, "Reprovado", solucoesPorPartNumber)),
-  ];
-
-  const planilha = XLSX.utils.aoa_to_sheet([CABECALHO, ...corpo]);
-  planilha["!cols"] = CABECALHO.map(() => ({ wch: 16 }));
-
-  // Aplica o formato de moeda (R$) em toda célula numérica das colunas
-  // monetárias — pula célula vazia (peça/valor não preenchido nessa
-  // posição) e linha do cabeçalho (r: 0).
-  for (let linha = 0; linha < corpo.length; linha++) {
-    for (const coluna of COLUNAS_MOEDA) {
-      const endereco = XLSX.utils.encode_cell({ r: linha + 1, c: coluna });
-      const celula = planilha[endereco];
-      if (celula && typeof celula.v === "number") {
-        celula.z = FORMATO_MOEDA;
-      }
-    }
-  }
-
-  return planilha;
-}
-
+// ExcelJS funciona igual no navegador e no Node — por isso a mesma
+// montagem serve tanto pro download direto no cliente
+// (gerarExcelModeloRetorno) quanto pra remontagem no servidor
+// (gerarBufferModeloRetorno, chamada pela rota de download do
+// histórico). Mesmo padrão de lib/planilhaContraProposta.ts.
 async function montarWorkbook(
   aprovados: ItemModeloRetorno[],
   recusados: ItemModeloRetorno[],
   solucoesPorPartNumber: Record<string, string>,
   dataReferencia: string
-) {
-  const XLSX = await import("xlsx");
-  const planilha = montarPlanilha(XLSX, aprovados, recusados, solucoesPorPartNumber);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, planilha, dataReferencia);
-  return { XLSX, workbook };
+): Promise<ExcelJS.Workbook> {
+  // import dinâmico (pedido explícito de manter o code-splitting que a
+  // "xlsx" antiga já tinha aqui) — o ExcelJS só entra no bundle do
+  // navegador na hora que "Emitir planilha de retorno" é clicado, não
+  // toda vez que a tela de Ag. Emissão de Nota Fiscal carrega.
+  const { default: ExcelJSRuntime } = await import("exceljs");
+  const workbook = new ExcelJSRuntime.Workbook();
+  const planilha = workbook.addWorksheet(dataReferencia);
+
+  planilha.columns = CABECALHO.map((titulo) => ({ header: titulo, width: 16 }));
+
+  // Aplica o formato de moeda (R$) na coluna inteira (não afeta o texto
+  // do cabeçalho, só a exibição de célula numérica) — mesmo princípio de
+  // antes, só que agora é 1 linha por coluna em vez de célula a célula.
+  for (const coluna of COLUNAS_MOEDA) {
+    planilha.getColumn(coluna + 1).numFmt = FORMATO_MOEDA;
+  }
+
+  function preencherLinha(item: ItemModeloRetorno, tipo: "Aprovado" | "Reprovado") {
+    const valores = linhaItem(item, tipo, solucoesPorPartNumber);
+    const linhaExcel = planilha.addRow(valores);
+
+    // "Tipo de Retorno" funciona igual a "STATUS ORÇAMENTO" da Contra
+    // Proposta (pedido explícito) — mesmas cores de lá.
+    const celulaTipo = linhaExcel.getCell(IDX_TIPO_RETORNO + 1);
+    if (tipo === "Aprovado") {
+      celulaTipo.fill = PREENCHIMENTO_APROVADO;
+      celulaTipo.font = FONTE_APROVADO;
+    } else {
+      celulaTipo.fill = PREENCHIMENTO_RECUSADO;
+      celulaTipo.font = FONTE_RECUSADO;
+
+      // reprovado: valor das peças em vermelho (pedido explícito) — só
+      // nas posições que realmente têm valor lançado.
+      for (let i = 0; i < QTD_COLUNAS_VALOR_PECA; i++) {
+        const celulaValor = linhaExcel.getCell(IDX_VALOR_PECA_1 + 1 + i);
+        if (celulaValor.value !== null && celulaValor.value !== undefined && celulaValor.value !== "") {
+          celulaValor.font = FONTE_RECUSADO;
+        }
+      }
+    }
+  }
+
+  for (const item of aprovados) preencherLinha(item, "Aprovado");
+  for (const item of recusados) preencherLinha(item, "Reprovado");
+
+  return workbook;
 }
 
 /** Gera e baixa a planilha "Modelo de Retorno" — Aprovados sempre
@@ -209,16 +251,34 @@ async function montarWorkbook(
  * banco nem muda status — só o Excel (o registro no histórico, se
  * quiser, é feito à parte, ver PainelAgEmissaoNf.tsx). Devolve o nome
  * do arquivo e a data de referência usados, pra quem chamar registrar
- * essa emissão com o MESMO nome/data (ver /api/operacional/modelo-retorno). */
+ * essa emissão com o MESMO nome/data (ver /api/operacional/modelo-retorno).
+ *
+ * O download em si sai via Blob + link temporário (mesma técnica já
+ * usada em PainelModeloRetorno.tsx pra baixar de novo um registro do
+ * histórico) — a antiga "xlsx" tinha um XLSX.writeFile() pronto pra
+ * isso, o ExcelJS não, por isso o passo a mais aqui. */
 export async function gerarExcelModeloRetorno(
   aprovados: ItemModeloRetorno[],
   recusados: ItemModeloRetorno[],
   solucoesPorPartNumber: Record<string, string>
 ): Promise<{ nomeArquivo: string; dataReferencia: string }> {
   const dataReferencia = dataArquivoBrasilia();
-  const { XLSX, workbook } = await montarWorkbook(aprovados, recusados, solucoesPorPartNumber, dataReferencia);
+  const workbook = await montarWorkbook(aprovados, recusados, solucoesPorPartNumber, dataReferencia);
   const nomeArquivo = `Modelo_de_Retorno_${dataReferencia}.xlsx`;
-  XLSX.writeFile(workbook, nomeArquivo);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nomeArquivo;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+
   return { nomeArquivo, dataReferencia };
 }
 
@@ -233,6 +293,7 @@ export async function gerarBufferModeloRetorno(
   solucoesPorPartNumber: Record<string, string>,
   dataReferencia: string
 ): Promise<Buffer> {
-  const { XLSX, workbook } = await montarWorkbook(aprovados, recusados, solucoesPorPartNumber, dataReferencia);
-  return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  const workbook = await montarWorkbook(aprovados, recusados, solucoesPorPartNumber, dataReferencia);
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
