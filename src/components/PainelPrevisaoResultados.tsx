@@ -17,10 +17,16 @@ function formatarPercentual(valor: number): string {
 }
 
 // % Lucro de Peças = Margem de Peças / Venda de Peças; % Lucro Total =
-// Margem Total / Valor Líquido — mesma fórmula já usada em Validação de
+// Vlr. Líquido / Vlr. Bruto — mesma fórmula já usada em Validação de
 // Orçamentos / Contra Proposta (ver calcularResumoValidacao em
 // lib/orcamentos.ts), só que aqui em cima dos totais do(s) lote(s)
-// selecionado(s) (pedido explícito, 29/09/2026).
+// selecionado(s) (pedido explícito, 29/09/2026). Os nomes internos
+// (margemTotal/valorLiquido, vindos de lib/financeiro.ts) continuam os
+// mesmos — só o RÓTULO na tela mudou pra "Vlr. Líquido" (a coluna que
+// era "Margem Total": lucro depois de custo/imposto) e "Vlr. Bruto" (a
+// que era "Valor Líquido": total cobrado da Allied, sem descontar nada
+// — pedido explícito, 29/09/2026, pra não confundir com o Líquido de
+// verdade, que é o lucro).
 function percLucroPecas(m: MetricasPrevisaoResultado): number {
   return m.vendaPecas > 0 ? (m.margemPecas / m.vendaPecas) * 100 : 0;
 }
@@ -63,11 +69,11 @@ const EXPLICACAO_CABECALHO: Record<
     linhas: ["Venda de Peças menos Custo de Peças menos Imposto (ICMS) — o lucro só das peças, sem contar a mão de obra."],
   },
   margemTotal: {
-    titulo: "Margem Total",
-    linhas: ["Margem de Peças mais Mão de Obra — o lucro total do lote."],
+    titulo: "Vlr. Líquido",
+    linhas: ["Margem de Peças mais Mão de Obra — o lucro (líquido) total do lote, depois de descontar custo e imposto."],
   },
   valorLiquido: {
-    titulo: "Valor Líquido",
+    titulo: "Vlr. Bruto",
     linhas: ["Venda de Peças mais Mão de Obra — o total cobrado da Allied, sem descontar custo nem imposto (não é lucro)."],
   },
 };
@@ -109,21 +115,21 @@ function explicacaoValorMargemPecas(m: MetricasPrevisaoResultado): InfoTooltip {
 }
 function explicacaoValorMargemTotal(m: MetricasPrevisaoResultado): InfoTooltip {
   return {
-    titulo: "Margem Total",
+    titulo: "Vlr. Líquido",
     linhas: [
       `Margem de Peças ${formatarReal(m.margemPecas)}`,
       `+ Mão de Obra ${formatarReal(m.maoDeObra)}`,
-      `= Margem Total ${formatarReal(m.margemTotal)}`,
+      `= Vlr. Líquido ${formatarReal(m.margemTotal)}`,
     ],
   };
 }
 function explicacaoValorLiquido(m: MetricasPrevisaoResultado): InfoTooltip {
   return {
-    titulo: "Valor Líquido",
+    titulo: "Vlr. Bruto",
     linhas: [
       `Venda de Peças ${formatarReal(m.vendaPecas)}`,
       `+ Mão de Obra ${formatarReal(m.maoDeObra)}`,
-      `= Valor Líquido ${formatarReal(m.valorLiquido)}`,
+      `= Vlr. Bruto ${formatarReal(m.valorLiquido)}`,
     ],
   };
 }
@@ -265,7 +271,7 @@ export default function PainelPrevisaoResultados({ linhas }: { linhas: LinhaPrev
             Venda: <strong style={{ color: "var(--ink)" }}>{formatarReal(totalSelecionado.vendaPecas)}</strong>
           </span>
           <span className="text-xs" style={{ color: "var(--muted)" }}>
-            Margem Total: <strong style={{ color: "var(--ink)" }}>{formatarReal(totalSelecionado.margemTotal)}</strong>
+            Vlr. Líquido: <strong style={{ color: "var(--ink)" }}>{formatarReal(totalSelecionado.margemTotal)}</strong>
           </span>
           <span className="text-xs" style={{ color: "var(--muted)" }}>
             % Lucro de Peças:{" "}
@@ -280,7 +286,7 @@ export default function PainelPrevisaoResultados({ linhas }: { linhas: LinhaPrev
             </strong>
           </span>
           <span className="text-xs" style={{ color: "var(--accent2)" }}>
-            Valor Líquido: <strong>{formatarReal(totalSelecionado.valorLiquido)}</strong>
+            Vlr. Bruto: <strong>{formatarReal(totalSelecionado.valorLiquido)}</strong>
           </span>
           <button type="button" onClick={() => setSelecionados(new Set())} className="text-xs underline ml-auto" style={{ color: "var(--muted)" }}>
             Limpar seleção
@@ -312,8 +318,8 @@ export default function PainelPrevisaoResultados({ linhas }: { linhas: LinhaPrev
                 onMostrar={mostrarTooltip}
                 onOcultar={ocultarTooltip}
               />
-              <CabecalhoColuna texto="Margem Total" info={EXPLICACAO_CABECALHO.margemTotal} onMostrar={mostrarTooltip} onOcultar={ocultarTooltip} />
-              <CabecalhoColuna texto="Valor Líquido" info={EXPLICACAO_CABECALHO.valorLiquido} onMostrar={mostrarTooltip} onOcultar={ocultarTooltip} />
+              <CabecalhoColuna texto="Vlr. Líquido" info={EXPLICACAO_CABECALHO.margemTotal} onMostrar={mostrarTooltip} onOcultar={ocultarTooltip} />
+              <CabecalhoColuna texto="Vlr. Bruto" info={EXPLICACAO_CABECALHO.valorLiquido} onMostrar={mostrarTooltip} onOcultar={ocultarTooltip} />
             </tr>
           </thead>
           <tbody>
