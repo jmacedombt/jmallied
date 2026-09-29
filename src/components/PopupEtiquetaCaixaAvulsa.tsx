@@ -1,0 +1,202 @@
+"use client";
+
+import { useState } from "react";
+import { Loader2, Printer, Tag, X } from "lucide-react";
+import { imprimirCaixaViaAgente, ErroImpressaoAgente } from "@/lib/etiquetas";
+
+/**
+ * Pop-up "Etiqueta Avulsa" (Ag. Emissão de Nota Fiscal) — imprime UMA
+ * etiqueta de caixa com todos os campos em aberto pra preenchimento
+ * manual (pedido explícito: "para imprimir etiquetas avulsas deixando
+ * os campos em aberto para preenchimento"). Usa o mesmo layout/rota do
+ * botão "Etiqueta de Caixa" de cada linha (ver
+ * imprimirCaixaViaAgente em lib/etiquetas.ts), só que aqui quem digita
+ * os valores é o operador, não o sistema.
+ */
+export default function PopupEtiquetaCaixaAvulsa({ onFechar }: { onFechar: () => void }) {
+  const [lote, setLote] = useState("1");
+  const [volumeAtual, setVolumeAtual] = useState("1");
+  const [volumeTotal, setVolumeTotal] = useState("1");
+  const [nfRetorno, setNfRetorno] = useState("");
+  const [observacao, setObservacao] = useState<"APROVADO" | "REPROVADO">("APROVADO");
+  const [nfEntrada, setNfEntrada] = useState("");
+  const [imprimindo, setImprimindo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState(false);
+
+  async function imprimir() {
+    setErro(null);
+    setSucesso(false);
+    setImprimindo(true);
+    try {
+      await imprimirCaixaViaAgente({
+        lote: lote.trim() || "—",
+        volumeAtual: volumeAtual.trim() || "—",
+        volumeTotal: volumeTotal.trim() || "—",
+        nfRetorno: nfRetorno.trim(),
+        observacao,
+        nfEntrada: nfEntrada.trim(),
+      });
+      setSucesso(true);
+    } catch (e) {
+      setErro(e instanceof ErroImpressaoAgente ? e.message : "Não foi possível imprimir essa etiqueta.");
+    }
+    setImprimindo(false);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.55)" }}
+      onClick={() => !imprimindo && onFechar()}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border shadow-2xl p-5"
+        style={{ background: "var(--surface)", borderColor: "var(--line)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-base font-semibold flex items-center gap-2" style={{ color: "var(--ink)" }}>
+            <Tag size={18} style={{ color: "var(--accent2)" }} />
+            Etiqueta Avulsa
+          </h2>
+          <button
+            type="button"
+            onClick={onFechar}
+            disabled={imprimindo}
+            aria-label="Fechar"
+            className="w-7 h-7 flex items-center justify-center rounded-md transition hover:bg-[var(--surface2)] disabled:opacity-50"
+            style={{ color: "var(--muted)" }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+          Preencha os campos e imprima uma etiqueta de caixa (mesma etiqueta 60x40mm da Zebra) sem vincular a
+          nenhum lote do sistema.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
+              Lote
+            </label>
+            <input
+              value={lote}
+              onChange={(e) => setLote(e.target.value)}
+              disabled={imprimindo}
+              className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition"
+              style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--ink)" }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
+              Volume (atual / total)
+            </label>
+            <div className="flex items-center gap-1.5">
+              <input
+                value={volumeAtual}
+                onChange={(e) => setVolumeAtual(e.target.value)}
+                disabled={imprimindo}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition"
+                style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--ink)" }}
+              />
+              <span style={{ color: "var(--muted)" }}>/</span>
+              <input
+                value={volumeTotal}
+                onChange={(e) => setVolumeTotal(e.target.value)}
+                disabled={imprimindo}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition"
+                style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--ink)" }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
+          NF de Retorno
+        </label>
+        <input
+          value={nfRetorno}
+          onChange={(e) => setNfRetorno(e.target.value)}
+          disabled={imprimindo}
+          placeholder="Ex.: 123456"
+          className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition mb-3"
+          style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--ink)" }}
+        />
+
+        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
+          Observação
+        </label>
+        <div className="flex items-center gap-2 mb-3">
+          {(["APROVADO", "REPROVADO"] as const).map((opcao) => (
+            <button
+              key={opcao}
+              type="button"
+              onClick={() => setObservacao(opcao)}
+              disabled={imprimindo}
+              className="flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition disabled:opacity-60"
+              style={{
+                borderColor: observacao === opcao ? "var(--accent2)" : "var(--line)",
+                color: observacao === opcao ? "var(--accent2)" : "var(--ink)",
+                background: observacao === opcao ? "rgba(59,130,246,0.08)" : "var(--surface2)",
+              }}
+            >
+              {opcao}
+            </button>
+          ))}
+        </div>
+
+        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
+          NF de Entrada (NF Remessa)
+        </label>
+        <input
+          value={nfEntrada}
+          onChange={(e) => setNfEntrada(e.target.value)}
+          disabled={imprimindo}
+          placeholder="Ex.: 654321"
+          className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition mb-1"
+          style={{ background: "var(--surface2)", borderColor: "var(--line)", color: "var(--ink)" }}
+        />
+
+        {erro && (
+          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-1 mt-2">
+            {erro}
+          </p>
+        )}
+
+        {sucesso && !erro && (
+          <p
+            className="text-sm rounded-lg px-3 py-2 mb-1 mt-2"
+            style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.35)", color: "#22c55e" }}
+          >
+            Etiqueta enviada pra impressão.
+          </p>
+        )}
+
+        <div className="flex items-center justify-end gap-2 mt-3">
+          <button
+            type="button"
+            onClick={onFechar}
+            disabled={imprimindo}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium transition hover:bg-[var(--surface2)] disabled:opacity-60"
+            style={{ color: "var(--muted)" }}
+          >
+            Fechar
+          </button>
+          <button
+            type="button"
+            onClick={imprimir}
+            disabled={imprimindo}
+            className="inline-flex items-center gap-2 rounded-lg text-white text-sm font-medium px-5 py-2.5 transition disabled:opacity-60"
+            style={{ background: "var(--accent2)" }}
+          >
+            {imprimindo ? <Loader2 size={15} className="animate-spin" /> : <Printer size={15} />}
+            {imprimindo ? "Imprimindo..." : "Imprimir"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

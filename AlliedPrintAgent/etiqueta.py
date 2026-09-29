@@ -61,6 +61,99 @@ def _fonte_ajustada(texto: str, largura_disponivel: int,
     return altura, largura
 
 
+def _campo_negrito(x: int, y: int, altura: int, largura: int, fb_largura: int,
+                    justificacao: str, texto: str) -> str:
+    """Imprime o mesmo campo duas vezes com 1 dot de deslocamento em X —
+    a fonte A0N não tem variante bold de verdade, então o efeito de
+    negrito é simulado assim (mesmo truque usado em etiquetas Zebra em
+    geral quando não dá pra trocar a fonte)."""
+    campo = (
+        f"^FO{x},{y}^A0N,{altura},{largura}^FB{fb_largura},1,0,{justificacao},0^FD{texto}^FS\n"
+    )
+    campo += (
+        f"^FO{x + 1},{y}^A0N,{altura},{largura}^FB{fb_largura},1,0,{justificacao},0^FD{texto}^FS\n"
+    )
+    return campo
+
+
+def gerar_zpl_caixa(lote, volume_atual, volume_total, nf_retorno, observacao, nf_entrada) -> str:
+    """
+    Etiqueta de CAIXA — usada em "Ag. Emissão de Nota Fiscal" pra colar
+    nas caixas de aparelhos que vão devolvidos pra Allied. Mesma etiqueta
+    60x40mm da gerar_zpl() acima (sem timbrado/logo — pedido explícito),
+    com:
+      LOTE            -> número sequencial da caixa (reinicia a cada NF Remessa)
+      VOLUME          -> "X/Y" (caixa atual / total de caixas desse lote,
+                          calculado com base na quantidade de aparelhos —
+                          21 aparelhos por caixa)
+      NF DE RETORNO   -> fonte maior e em negrito (pedido explícito)
+      OBSERVAÇÃO      -> APROVADO ou REPROVADO, em destaque (fundo preto)
+      NF DE ENTRADA   -> a NF Remessa que seguiu o(s) orçamento(s) até aqui
+    Também usada pro "Teste de Impressão" e pra "Etiqueta Avulsa" (campos
+    em aberto) da mesma tela — os dois usam essa mesma função.
+    """
+    largura = mm_para_dots(LARGURA_ETIQUETA_MM)   # 60mm -> 480 dots (203dpi)
+    altura = mm_para_dots(ALTURA_ETIQUETA_MM)      # 40mm -> 320 dots (203dpi)
+
+    lote_str = _sanitizar(lote) or "—"
+    volume_str = f"{_sanitizar(volume_atual) or '—'}/{_sanitizar(volume_total) or '—'}"
+    nf_retorno_str = _sanitizar(nf_retorno) or "—"
+    observacao_str = (_sanitizar(observacao) or "—").upper()
+    nf_entrada_str = _sanitizar(nf_entrada) or "—"
+    data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    margem = 12
+    coluna_direita_x = int(largura * 0.55)
+    largura_coluna_direita = largura - coluna_direita_x - margem
+
+    # ---- Fonte da NF de Retorno ajustada ao espaço, negrito aplicado à parte ----
+    altura_nf, largura_nf = _fonte_ajustada(
+        nf_retorno_str, largura - 2 * margem, largura_max=32, proporcao=1.1, largura_min=16
+    )
+
+    zpl = (
+        "^XA\n"
+        f"^PW{largura}\n"
+        f"^LL{altura}\n"
+        "^CI28\n"
+
+        # ------------------- LOTE (esquerda) / VOLUME (direita) -------------------
+        f"^FO{margem},8^A0N,11,11^FDLOTE^FS\n"
+        f"^FO{margem},22^A0N,24,20^FD{lote_str}^FS\n"
+        f"^FO{coluna_direita_x},8^A0N,11,11^FB{largura_coluna_direita},1,0,R,0^FDVOLUME^FS\n"
+        f"^FO{coluna_direita_x},22^A0N,24,20^FB{largura_coluna_direita},1,0,R,0^FD{volume_str}^FS\n"
+        f"^FO0,54^GB{largura},2,2^FS\n"
+
+        # ------------------- NF DE RETORNO (grande, negrito) -------------------
+        f"^FO0,60^A0N,12,12^FB{largura},1,0,C,0^FDNF DE RETORNO^FS\n"
+    )
+    zpl += _campo_negrito(0, 78, altura_nf, largura_nf, largura, "C", nf_retorno_str)
+
+    y_apos_nf = 78 + altura_nf + 10
+    zpl += f"^FO0,{y_apos_nf}^GB{largura},2,2^FS\n"
+
+    # ------------------- OBSERVAÇÃO (destaque fundo preto / texto branco) -------------------
+    y_obs = y_apos_nf + 6
+    altura_caixa_obs = 46
+    zpl += (
+        f"^FO0,{y_obs}^GB{largura},{altura_caixa_obs},{altura_caixa_obs}^FS\n"
+        f"^FO0,{y_obs + 12}^FR^A0N,22,20^FB{largura},1,0,C,0^FD{observacao_str}^FS\n"
+    )
+
+    y_apos_obs = y_obs + altura_caixa_obs + 8
+    zpl += f"^FO0,{y_apos_obs}^GB{largura},2,2^FS\n"
+
+    # ------------------- NF DE ENTRADA (esquerda) + DATA/HORA (direita) -------------------
+    y_rodape = y_apos_obs + 6
+    zpl += (
+        f"^FO{margem},{y_rodape}^A0N,10,10^FDNF DE ENTRADA^FS\n"
+        f"^FO{margem},{y_rodape + 14}^A0N,16,14^FD{nf_entrada_str}^FS\n"
+        f"^FO0,{y_rodape}^A0N,9,9^FB{largura - margem},1,0,R,0^FD{data_hora}^FS\n"
+        "^XZ\n"
+    )
+    return zpl
+
+
 def gerar_zpl(os_reparadora: str, nf_remessa_allied: str, modelo_comercial: str) -> str:
     largura = mm_para_dots(LARGURA_ETIQUETA_MM)   # 60mm -> 480 dots (203dpi)
     altura = mm_para_dots(ALTURA_ETIQUETA_MM)     # 40mm -> 320 dots (203dpi)

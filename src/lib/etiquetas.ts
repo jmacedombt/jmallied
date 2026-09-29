@@ -70,6 +70,102 @@ export async function imprimirViaAgente(dados: {
   }
 }
 
+/**
+ * Etiqueta de CAIXA (Ag. Emissão de Nota Fiscal) — usada pra colar nas
+ * caixas de aparelhos que voltam pra Allied. Mesma etiqueta 60x40mm e
+ * mesmo Allied Print Agent do `imprimirViaAgente` acima, só que com um
+ * layout de campos diferente (ver AlliedPrintAgent/etiqueta.py,
+ * `gerar_zpl_caixa`): LOTE, VOLUME "X/Y", NF DE RETORNO (fonte maior e
+ * em negrito), OBSERVAÇÃO (APROVADO/REPROVADO) e NF DE ENTRADA.
+ *
+ * Usada em 3 lugares da tela: o botão "Etiqueta de Caixa" de cada linha
+ * (imprime uma etiqueta por caixa, calculado com base na quantidade de
+ * aparelhos daquele lote — 21 por caixa), o "Teste de Impressão" (dados
+ * fixos, só pra checar alinhamento na Zebra) e a "Etiqueta Avulsa"
+ * (campos preenchidos manualmente no pop-up).
+ */
+export type DadosEtiquetaCaixa = {
+  lote: number | string;
+  volumeAtual: number | string;
+  volumeTotal: number | string;
+  nfRetorno: string;
+  observacao: string;
+  nfEntrada: string;
+};
+
+export async function imprimirCaixaViaAgente(dados: DadosEtiquetaCaixa): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`${ENDERECO_PRINT_AGENT}/imprimir-caixa`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lote: dados.lote,
+        volume_atual: dados.volumeAtual,
+        volume_total: dados.volumeTotal,
+        nf_retorno: dados.nfRetorno,
+        observacao: dados.observacao,
+        nf_entrada: dados.nfEntrada,
+      }),
+    });
+  } catch {
+    throw new ErroImpressaoAgente(
+      "Não consegui falar com o Allied Print Agent nesse computador. Confirme se ele está aberto (ícone/console do programa deve estar ativo)."
+    );
+  }
+
+  let corpo: { ok?: boolean; erro?: string } = {};
+  try {
+    corpo = await res.json();
+  } catch {
+    // resposta sem corpo/JSON — segue só com o status HTTP
+  }
+
+  if (!res.ok || !corpo.ok) {
+    throw new ErroImpressaoAgente(corpo.erro || `O Allied Print Agent recusou a impressão (HTTP ${res.status}).`);
+  }
+}
+
+/** Quantas etiquetas de caixa uma NF Remessa gera — 21 aparelhos por
+ * caixa (pedido explícito), sempre pelo menos 1 mesmo com 0 itens. */
+export function quantidadeCaixas(quantidadeAparelhos: number): number {
+  return Math.max(1, Math.ceil(quantidadeAparelhos / 21));
+}
+
+/**
+ * Imprime, em sequência, todas as etiquetas de caixa de um lote (NF
+ * Remessa) — LOTE e VOLUME reiniciam em 1 a cada chamada (pedido
+ * explícito: reinicia a cada NF Remessa). Para no primeiro erro e avisa
+ * quantas já saíram, pra não duplicar impressão ao tentar de novo.
+ */
+export async function imprimirLoteDeCaixas(dados: {
+  nfRetorno: string;
+  observacao: string;
+  nfEntrada: string;
+  quantidadeAparelhos: number;
+}): Promise<void> {
+  const total = quantidadeCaixas(dados.quantidadeAparelhos);
+  for (let atual = 1; atual <= total; atual++) {
+    try {
+      await imprimirCaixaViaAgente({
+        lote: atual,
+        volumeAtual: atual,
+        volumeTotal: total,
+        nfRetorno: dados.nfRetorno,
+        observacao: dados.observacao,
+        nfEntrada: dados.nfEntrada,
+      });
+    } catch (erro) {
+      const mensagem = erro instanceof ErroImpressaoAgente ? erro.message : "Erro inesperado ao imprimir.";
+      throw new ErroImpressaoAgente(
+        atual === 1
+          ? `Falhou ao imprimir a 1ª etiqueta de caixa: ${mensagem}`
+          : `Imprimiu ${atual - 1} de ${total} etiqueta(s) e falhou na próxima: ${mensagem}`
+      );
+    }
+  }
+}
+
 async function confirmarImpressao(logId: string, sucesso: boolean, mensagemErro?: string) {
   try {
     await fetch(`/api/operacional/etiquetas/${logId}/confirmar`, {

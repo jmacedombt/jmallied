@@ -6,6 +6,12 @@ Fica escutando em http://127.0.0.1:<PORTA> (só esse computador consegue
 falar com ele — não é acessível pela rede). A tela do Sistema Allied
 (Ag. Triagem e Impressão Avulsa) manda um POST /imprimir com os dados do
 aparelho; o agente monta o ZPL e envia pra Zebra.
+
+Rota /imprimir-caixa (Ag. Emissão de Nota Fiscal — etiqueta de caixa,
+Teste de Impressão e Etiqueta Avulsa): mesma ideia, mas com os campos
+LOTE / VOLUME / NF DE RETORNO / OBSERVAÇÃO / NF DE ENTRADA (ver
+etiqueta.gerar_zpl_caixa) — usa a mesma etiqueta 60x40mm e a mesma
+função imprimir(), só muda o layout do ZPL gerado.
 """
 
 import json
@@ -14,13 +20,14 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from config import PORTA
-from etiqueta import gerar_zpl
+from etiqueta import gerar_zpl, gerar_zpl_caixa
 from imprimir import imprimir, ErroImpressao
 
 # Salva sempre o ZPL da última etiqueta gerada, pra dar pra comparar
 # exatamente o que foi mandado pra impressora com o que saiu no papel —
 # útil pra depurar diferença entre o layout esperado e o impresso.
 CAMINHO_ULTIMA_ETIQUETA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ultima_etiqueta.zpl")
+CAMINHO_ULTIMA_ETIQUETA_CAIXA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ultima_etiqueta_caixa.zpl")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -44,14 +51,21 @@ class Handler(BaseHTTPRequestHandler):
             self._responder(404, {"erro": "Rota não encontrada."})
 
     def do_POST(self):
-        if self.path != "/imprimir":
+        if self.path == "/imprimir":
+            self._imprimir_padrao()
+        elif self.path == "/imprimir-caixa":
+            self._imprimir_caixa()
+        else:
             self._responder(404, {"erro": "Rota não encontrada."})
-            return
 
+    def _ler_json(self):
+        tamanho = int(self.headers.get("Content-Length", 0) or 0)
+        corpo = self.rfile.read(tamanho) if tamanho else b"{}"
+        return json.loads(corpo or b"{}")
+
+    def _imprimir_padrao(self):
         try:
-            tamanho = int(self.headers.get("Content-Length", 0) or 0)
-            corpo = self.rfile.read(tamanho) if tamanho else b"{}"
-            dados = json.loads(corpo or b"{}")
+            dados = self._ler_json()
         except (ValueError, json.JSONDecodeError):
             self._responder(400, {"erro": "JSON inválido."})
             return
@@ -86,6 +100,51 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._log(f"OK — etiqueta impressa: OS {os_reparadora} | NF {nf_remessa_allied} | {modelo_comercial}")
+        self._responder(200, {"ok": True})
+
+    def _imprimir_caixa(self):
+        try:
+            dados = self._ler_json()
+        except (ValueError, json.JSONDecodeError):
+            self._responder(400, {"erro": "JSON inválido."})
+            return
+
+        lote = dados.get("lote")
+        volume_atual = dados.get("volume_atual")
+        volume_total = dados.get("volume_total")
+        nf_retorno = str(dados.get("nf_retorno") or "").strip()
+        observacao = str(dados.get("observacao") or "").strip()
+        nf_entrada = str(dados.get("nf_entrada") or "").strip()
+
+        if lote is None or volume_atual is None or volume_total is None:
+            self._responder(400, {"erro": "lote, volume_atual e volume_total são obrigatórios."})
+            return
+
+        zpl = gerar_zpl_caixa(lote, volume_atual, volume_total, nf_retorno, observacao, nf_entrada)
+
+        try:
+            with open(CAMINHO_ULTIMA_ETIQUETA_CAIXA, "w", encoding="utf-8") as f:
+                f.write(zpl)
+        except OSError:
+            pass  # log auxiliar — não impede a impressão se falhar ao salvar
+
+        self._log(f"ZPL de caixa gerado (salvo em {CAMINHO_ULTIMA_ETIQUETA_CAIXA}):\n{zpl}")
+
+        try:
+            imprimir(zpl)
+        except ErroImpressao as e:
+            self._log(f"FALHA ao imprimir etiqueta de caixa (lote {lote}): {e}")
+            self._responder(502, {"erro": str(e)})
+            return
+        except Exception as e:
+            self._log(f"ERRO inesperado ao imprimir etiqueta de caixa (lote {lote}): {e}")
+            self._responder(500, {"erro": f"Erro inesperado: {e}"})
+            return
+
+        self._log(
+            f"OK — etiqueta de caixa impressa: LOTE {lote} | VOLUME {volume_atual}/{volume_total} | "
+            f"NF RETORNO {nf_retorno} | {observacao} | NF ENTRADA {nf_entrada}"
+        )
         self._responder(200, {"ok": True})
 
     def _responder(self, status: int, corpo: dict):
