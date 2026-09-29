@@ -146,10 +146,20 @@ export default function PopupPecasContraProposta({
     setSalvando(true);
     setErro(null);
     try {
-      const res = await fetch(`/api/operacional/orcamentos/${aparelho.id}/ajustar-contra-proposta`, {
+      // Quando o valor após a alteração já bate com a Contra Proposta
+      // recebida da Allied, "Confirmar alteração" grava direto como
+      // APROVADO (pedido explícito) — mesma rota usada pelo botão
+      // "Aprovado" do topo, que já leva a informação pra Métricas >
+      // Orçamentos (contra proposta aceita). Não batendo, continua só
+      // ajustando os valores, sem mexer na decisão.
+      const url = bateComContraProposta
+        ? `/api/operacional/orcamentos/${aparelho.id}/decidir-contra-proposta`
+        : `/api/operacional/orcamentos/${aparelho.id}/ajustar-contra-proposta`;
+      const body = bateComContraProposta ? { decisao: "Aprovado", pecas, mao_de_obra: maoDeObra } : { pecas, mao_de_obra: maoDeObra };
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pecas, mao_de_obra: maoDeObra }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -235,19 +245,24 @@ export default function PopupPecasContraProposta({
           </p>
         </div>
 
-        {/* Valor da Contra Proposta em destaque + Aprovado/Reprovado
-            (pedido explícito) — só os botões por enquanto, sem nenhuma
-            função ligada ainda ("crie os botões depois vamos ativar as
-            funções"). */}
+        {/* Orçamento Enviado em destaque + Aprovado/Reprovado (pedido
+            explícito) — o valor aqui é o mesmo "Total após alteração" do
+            Resumo, só que em destaque no topo. O título muda sozinho pra
+            "Contra Proposta Aceita" (e a cor pra verde) assim que esse
+            valor bater com a Contra Proposta recebida da Allied. */}
         <div
           className="flex items-center justify-between gap-3 flex-wrap rounded-xl border px-4 py-3 mb-3"
-          style={{ borderColor: "var(--accent2)", background: "var(--accent-glow)" }}
+          style={
+            bateComContraProposta
+              ? { borderColor: "#16a34a", background: "rgba(34, 197, 94, 0.12)" }
+              : { borderColor: "var(--accent2)", background: "var(--accent-glow)" }
+          }
         >
           <div>
             <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-              Valor da Contra Proposta
+              {bateComContraProposta ? "Contra Proposta Aceita" : "Orçamento Enviado"}
             </p>
-            <p className="text-xl font-bold" style={{ color: "var(--accent2)" }}>
+            <p className="text-xl font-bold" style={{ color: bateComContraProposta ? "#16a34a" : "var(--accent2)" }}>
               {formatarReal(resumo.vendaTotalPecas + maoDeObra)}
             </p>
           </div>
@@ -391,27 +406,40 @@ export default function PopupPecasContraProposta({
                           <span style={{ color: "var(--ink)" }}>{formatarReal(p.vendaNova)}</span>
                         )}
                       </td>
-                      {sugestoesPecas && (
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
-                          <div className="inline-flex items-center gap-1.5">
-                            <span className="inline-flex items-center gap-1 font-semibold" style={{ color: "#16a34a" }}>
-                              <Sparkles size={12} />
-                              {formatarReal(sugestoesPecas[i])}
-                            </span>
-                            {podeEditar && (
-                              <button
-                                type="button"
-                                title="Aplicar sugestão"
-                                onClick={() => aplicarSugestao(i)}
-                                className="inline-flex items-center justify-center w-6 h-6 rounded-md border transition hover:border-[#16a34a]"
-                                style={{ borderColor: "var(--line)", color: "#16a34a" }}
-                              >
-                                <Check size={13} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      )}
+                      {sugestoesPecas &&
+                        (() => {
+                          // check "apagado" (cinza) até o Novo valor bater com a
+                          // sugestão — clicar aplica a sugestão nesse campo, e
+                          // como os dois passam a bater, o check fica verde
+                          // sozinho (some de novo se a pessoa editar o campo na
+                          // mão depois, mesmo sem clicar em nada).
+                          const aplicado = Math.abs(p.vendaNova - sugestoesPecas[i]) < 0.005;
+                          return (
+                            <td className="px-3 py-2 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 font-semibold" style={{ color: "#16a34a" }}>
+                                  <Sparkles size={12} />
+                                  {formatarReal(sugestoesPecas[i])}
+                                </span>
+                                {podeEditar && (
+                                  <button
+                                    type="button"
+                                    title={aplicado ? "Sugestão aplicada" : "Aplicar sugestão"}
+                                    onClick={() => aplicarSugestao(i)}
+                                    className="inline-flex items-center justify-center w-6 h-6 rounded-md border transition hover:border-[#16a34a]"
+                                    style={{
+                                      borderColor: aplicado ? "#16a34a" : "var(--line)",
+                                      color: aplicado ? "#16a34a" : "var(--muted)",
+                                      background: aplicado ? "rgba(34, 197, 94, 0.12)" : undefined,
+                                    }}
+                                  >
+                                    <Check size={13} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })()}
                     </tr>
                   ))}
                 </tbody>
@@ -533,14 +561,22 @@ export default function PopupPecasContraProposta({
 
       {confirmando && (
         <PopupConfirmar
-          titulo="Confirmar alteração da Contra Proposta"
+          titulo={bateComContraProposta ? "Confirmar e aprovar a Contra Proposta" : "Confirmar alteração da Contra Proposta"}
           mensagem={
-            <>
-              Esse aparelho vai passar a usar Venda de Peças {formatarReal(resumo.vendaTotalPecas)} e Mão de obra{" "}
-              {formatarReal(maoDeObra)} (Lucro Total {formatarReal(resumo.lucroTotal)}) na Contra Proposta. Confirma?
-            </>
+            bateComContraProposta ? (
+              <>
+                Esse valor bate com a Contra Proposta recebida da Allied — o aparelho vai ser gravado com Venda de
+                Peças {formatarReal(resumo.vendaTotalPecas)} e Mão de obra {formatarReal(maoDeObra)} (Lucro Total{" "}
+                {formatarReal(resumo.lucroTotal)}) e já marcado como <strong>APROVADO</strong>. Confirma?
+              </>
+            ) : (
+              <>
+                Esse aparelho vai passar a usar Venda de Peças {formatarReal(resumo.vendaTotalPecas)} e Mão de obra{" "}
+                {formatarReal(maoDeObra)} (Lucro Total {formatarReal(resumo.lucroTotal)}) na Contra Proposta. Confirma?
+              </>
+            )
           }
-          rotuloConfirmar="Confirmar alteração"
+          rotuloConfirmar={bateComContraProposta ? "Confirmar e aprovar" : "Confirmar alteração"}
           carregando={salvando}
           erro={erro}
           onConfirmar={salvar}
