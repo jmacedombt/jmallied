@@ -144,7 +144,7 @@ def gerar_zpl_caixa(lote, volume_atual, volume_total, nf_retorno, observacao, nf
 
     # ------------------- NF DE RETORNO (grande, negrito) -------------------
     altura_nf, largura_nf = _fonte_ajustada(
-        nf_retorno_str, largura - 2 * margem, largura_max=48, proporcao=1.1, largura_min=22
+        nf_retorno_str, largura - 2 * margem, largura_max=54, proporcao=1.1, largura_min=26
     )
     y_nf_rotulo = y_apos_topo + 7
     altura_rotulo_nf = 13
@@ -155,7 +155,9 @@ def gerar_zpl_caixa(lote, volume_atual, volume_total, nf_retorno, observacao, nf
     )
     zpl += _campo_negrito(0, y_nf_valor, altura_nf, largura_nf, largura, "C", nf_retorno_str)
 
-    y_apos_nf = y_nf_valor + altura_nf + 10
+    # (gaps das seções abaixo um pouco mais enxutos pra compensar o NF de
+    # Retorno maior e ainda caber tudo dentro dos 320 dots da etiqueta)
+    y_apos_nf = y_nf_valor + altura_nf + 8
     zpl += f"^FO0,{y_apos_nf}^GB{largura},2,2^FS\n"
 
     # ------------------- OBSERVAÇÃO (destaque fundo preto / texto branco) -------------------
@@ -171,11 +173,11 @@ def gerar_zpl_caixa(lote, volume_atual, volume_total, nf_retorno, observacao, nf
         f"^FO0,{y_obs_texto}^FR^A0N,{altura_obs},{largura_obs}^FB{largura},1,0,C,0^FD{observacao_str}^FS\n"
     )
 
-    y_apos_obs = y_obs + altura_caixa_obs + 8
+    y_apos_obs = y_obs + altura_caixa_obs + 6
     zpl += f"^FO0,{y_apos_obs}^GB{largura},2,2^FS\n"
 
     # ------------------- NF DE ENTRADA (esquerda) + DATA/HORA (direita) -------------------
-    y_rodape_rotulo = y_apos_obs + 8
+    y_rodape_rotulo = y_apos_obs + 6
     altura_rotulo_rodape = 13
     y_rodape_valor = y_rodape_rotulo + altura_rotulo_rodape + 4
 
