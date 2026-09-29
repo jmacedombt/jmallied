@@ -431,6 +431,7 @@ export default function PainelContraProposta({
             nf_remessa_allied: editando.nf_remessa_allied,
             os_reparadora: editando.os_reparadora,
             trade_allied: editando.trade_allied,
+            modelo_comercial: editando.modelo_comercial,
             pecasIniciais: pecasEfetivasDe(editando),
             maoDeObraInicial: maoDeObraEfetivaDe(editando),
             jaAjustado: editando.contra_proposta_ajustado,

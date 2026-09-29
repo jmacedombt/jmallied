@@ -28,6 +28,7 @@ export type AparelhoContraProposta = {
   nf_remessa_allied: string;
   os_reparadora: string | null;
   trade_allied: string;
+  modelo_comercial: string | null;
   pecasIniciais: PecaContraProposta[];
   maoDeObraInicial: number;
   jaAjustado: boolean;
@@ -229,7 +230,8 @@ export default function PopupPecasContraProposta({
         </div>
 
         <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
-          {aparelho.trade_allied} · OS Reparadora {aparelho.os_reparadora || "—"} · NF Remessa {aparelho.nf_remessa_allied}
+          {aparelho.trade_allied} · OS Reparadora {aparelho.os_reparadora || "—"} · NF Remessa {aparelho.nf_remessa_allied} ·{" "}
+          <strong style={{ color: "var(--ink)" }}>{aparelho.modelo_comercial || "—"}</strong>
         </p>
 
         {/* Contra Proposta (valor recebido da Allied, coluna BS) — só
