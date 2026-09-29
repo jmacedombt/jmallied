@@ -85,12 +85,19 @@ def gerar_zpl_caixa(lote, volume_atual, volume_total, nf_retorno, observacao, nf
       LOTE            -> número sequencial da caixa (reinicia a cada NF Remessa)
       VOLUME          -> "X/Y" (caixa atual / total de caixas desse lote,
                           calculado com base na quantidade de aparelhos —
-                          21 aparelhos por caixa)
+                          21 aparelhos por caixa) — fonte BEM grande
+                          (pedido explícito: "deixa bem maior")
       NF DE RETORNO   -> fonte maior e em negrito (pedido explícito)
       OBSERVAÇÃO      -> APROVADO ou REPROVADO, em destaque (fundo preto)
       NF DE ENTRADA   -> a NF Remessa que seguiu o(s) orçamento(s) até aqui
     Também usada pro "Teste de Impressão" e pra "Etiqueta Avulsa" (campos
     em aberto) da mesma tela — os dois usam essa mesma função.
+
+    Layout todo recalculado a partir das seções anteriores (cada `y_*`
+    depende da altura de fonte de fato usada na seção de cima) pra
+    ocupar a etiqueta inteira, sem sobrar espaço em branco embaixo — e
+    todas as fontes maiores que a primeira versão (pedido explícito:
+    "aumentar o tamanho da fonte de maneira que tudo fique bem visível").
     """
     largura = mm_para_dots(LARGURA_ETIQUETA_MM)   # 60mm -> 480 dots (203dpi)
     altura = mm_para_dots(ALTURA_ETIQUETA_MM)      # 40mm -> 320 dots (203dpi)
@@ -105,11 +112,20 @@ def gerar_zpl_caixa(lote, volume_atual, volume_total, nf_retorno, observacao, nf
     margem = 12
     coluna_direita_x = int(largura * 0.55)
     largura_coluna_direita = largura - coluna_direita_x - margem
+    largura_coluna_esquerda = coluna_direita_x - margem
 
-    # ---- Fonte da NF de Retorno ajustada ao espaço, negrito aplicado à parte ----
-    altura_nf, largura_nf = _fonte_ajustada(
-        nf_retorno_str, largura - 2 * margem, largura_max=32, proporcao=1.1, largura_min=16
+    # ------------------- LOTE (esquerda) / VOLUME (direita, bem maior) -------------------
+    altura_lote, largura_lote = _fonte_ajustada(
+        lote_str, largura_coluna_esquerda, largura_max=40, proporcao=1.15, largura_min=22
     )
+    altura_volume, largura_volume = _fonte_ajustada(
+        volume_str, largura_coluna_direita, largura_max=56, proporcao=1.15, largura_min=28
+    )
+
+    y_rotulo_topo = 8
+    altura_rotulo_topo = 13
+    y_valor_topo = y_rotulo_topo + altura_rotulo_topo + 4
+    y_apos_topo = y_valor_topo + max(altura_lote, altura_volume) + 10
 
     zpl = (
         "^XA\n"
@@ -117,38 +133,56 @@ def gerar_zpl_caixa(lote, volume_atual, volume_total, nf_retorno, observacao, nf
         f"^LL{altura}\n"
         "^CI28\n"
 
-        # ------------------- LOTE (esquerda) / VOLUME (direita) -------------------
-        f"^FO{margem},8^A0N,11,11^FDLOTE^FS\n"
-        f"^FO{margem},22^A0N,24,20^FD{lote_str}^FS\n"
-        f"^FO{coluna_direita_x},8^A0N,11,11^FB{largura_coluna_direita},1,0,R,0^FDVOLUME^FS\n"
-        f"^FO{coluna_direita_x},22^A0N,24,20^FB{largura_coluna_direita},1,0,R,0^FD{volume_str}^FS\n"
-        f"^FO0,54^GB{largura},2,2^FS\n"
-
-        # ------------------- NF DE RETORNO (grande, negrito) -------------------
-        f"^FO0,60^A0N,12,12^FB{largura},1,0,C,0^FDNF DE RETORNO^FS\n"
+        f"^FO{margem},{y_rotulo_topo}^A0N,{altura_rotulo_topo},{altura_rotulo_topo}^FDLOTE^FS\n"
+        f"^FO{margem},{y_valor_topo}^A0N,{altura_lote},{largura_lote}^FD{lote_str}^FS\n"
+        f"^FO{coluna_direita_x},{y_rotulo_topo}^A0N,{altura_rotulo_topo},{altura_rotulo_topo}"
+        f"^FB{largura_coluna_direita},1,0,R,0^FDVOLUME^FS\n"
+        f"^FO{coluna_direita_x},{y_valor_topo}^A0N,{altura_volume},{largura_volume}"
+        f"^FB{largura_coluna_direita},1,0,R,0^FD{volume_str}^FS\n"
+        f"^FO0,{y_apos_topo}^GB{largura},2,2^FS\n"
     )
-    zpl += _campo_negrito(0, 78, altura_nf, largura_nf, largura, "C", nf_retorno_str)
 
-    y_apos_nf = 78 + altura_nf + 10
+    # ------------------- NF DE RETORNO (grande, negrito) -------------------
+    altura_nf, largura_nf = _fonte_ajustada(
+        nf_retorno_str, largura - 2 * margem, largura_max=48, proporcao=1.1, largura_min=22
+    )
+    y_nf_rotulo = y_apos_topo + 7
+    altura_rotulo_nf = 13
+    y_nf_valor = y_nf_rotulo + altura_rotulo_nf + 6
+
+    zpl += (
+        f"^FO0,{y_nf_rotulo}^A0N,{altura_rotulo_nf},{altura_rotulo_nf}^FB{largura},1,0,C,0^FDNF DE RETORNO^FS\n"
+    )
+    zpl += _campo_negrito(0, y_nf_valor, altura_nf, largura_nf, largura, "C", nf_retorno_str)
+
+    y_apos_nf = y_nf_valor + altura_nf + 10
     zpl += f"^FO0,{y_apos_nf}^GB{largura},2,2^FS\n"
 
     # ------------------- OBSERVAÇÃO (destaque fundo preto / texto branco) -------------------
+    altura_obs, largura_obs = _fonte_ajustada(
+        observacao_str, largura - 2 * margem, largura_max=36, proporcao=1.05, largura_min=22
+    )
     y_obs = y_apos_nf + 6
-    altura_caixa_obs = 46
+    altura_caixa_obs = altura_obs + 28
+    y_obs_texto = y_obs + (altura_caixa_obs - altura_obs) // 2
+
     zpl += (
         f"^FO0,{y_obs}^GB{largura},{altura_caixa_obs},{altura_caixa_obs}^FS\n"
-        f"^FO0,{y_obs + 12}^FR^A0N,22,20^FB{largura},1,0,C,0^FD{observacao_str}^FS\n"
+        f"^FO0,{y_obs_texto}^FR^A0N,{altura_obs},{largura_obs}^FB{largura},1,0,C,0^FD{observacao_str}^FS\n"
     )
 
     y_apos_obs = y_obs + altura_caixa_obs + 8
     zpl += f"^FO0,{y_apos_obs}^GB{largura},2,2^FS\n"
 
     # ------------------- NF DE ENTRADA (esquerda) + DATA/HORA (direita) -------------------
-    y_rodape = y_apos_obs + 6
+    y_rodape_rotulo = y_apos_obs + 8
+    altura_rotulo_rodape = 13
+    y_rodape_valor = y_rodape_rotulo + altura_rotulo_rodape + 4
+
     zpl += (
-        f"^FO{margem},{y_rodape}^A0N,10,10^FDNF DE ENTRADA^FS\n"
-        f"^FO{margem},{y_rodape + 14}^A0N,16,14^FD{nf_entrada_str}^FS\n"
-        f"^FO0,{y_rodape}^A0N,9,9^FB{largura - margem},1,0,R,0^FD{data_hora}^FS\n"
+        f"^FO{margem},{y_rodape_rotulo}^A0N,{altura_rotulo_rodape},{altura_rotulo_rodape}^FDNF DE ENTRADA^FS\n"
+        f"^FO{margem},{y_rodape_valor}^A0N,24,20^FD{nf_entrada_str}^FS\n"
+        f"^FO0,{y_rodape_rotulo}^A0N,11,11^FB{largura - margem},1,0,R,0^FD{data_hora}^FS\n"
         "^XZ\n"
     )
     return zpl
