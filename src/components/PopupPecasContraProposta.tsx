@@ -456,11 +456,31 @@ export default function PopupPecasContraProposta({
               (novo valor das peças + mão de obra) fica em destaque aqui
               mesmo com o detalhamento fechado, comparado com o valor da
               Contra Proposta recebido da Allied. */}
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
               Resumo
             </span>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              {/* Lucro Total e % Lucro Total direto no cabeçalho do Resumo
+                  (pedido explícito) — antes só apareciam expandindo o
+                  detalhamento; agora ficam visíveis mesmo recolhido, igual
+                  o Total após alteração. */}
+              <div className="text-right">
+                <span className="text-[10px] uppercase tracking-wide mr-1.5" style={{ color: "var(--muted)" }}>
+                  Lucro Total
+                </span>
+                <strong className="text-base" style={{ color: corPercentualLucro(resumo.percLucroTotal) }}>
+                  {formatarReal(resumo.lucroTotal)}
+                </strong>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase tracking-wide mr-1.5" style={{ color: "var(--muted)" }}>
+                  % Lucro Total
+                </span>
+                <strong className="text-base" style={{ color: corPercentualLucro(resumo.percLucroTotal) }}>
+                  {formatarPercentual(resumo.percLucroTotal)}
+                </strong>
+              </div>
               <div className="text-right">
                 <span className="text-[10px] uppercase tracking-wide mr-1.5" style={{ color: "var(--muted)" }}>
                   Total após alteração
