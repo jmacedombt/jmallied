@@ -447,8 +447,13 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
       custoPeca,
       custoPecaAdd: [null, null, null, null, null],
       valorTotalPeca: detalhe.vendaTotalPecas,
-      maoDeObra: detalhe.maoDeObra,
-      valorTotalReparo: detalhe.vendaTotalPecas + detalhe.maoDeObra,
+      // aparelho RECUSADO não cobra mão de obra (pedido explícito) —
+      // mesmo quando já tinha sido precificado antes de ser recusado
+      // (detalhe/validacao_snapshot ainda traz o valor calculado na
+      // época, mas não é isso que vai pra Allied). Valor Total de Reparo
+      // acompanha, sem somar mão de obra.
+      maoDeObra: 0,
+      valorTotalReparo: detalhe.vendaTotalPecas,
       statusOrcamento: "RECUSADO",
       motivoReprova: a.motivo_reprova,
       obs: a.observacao_tecnica_reparadora,
