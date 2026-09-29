@@ -7,9 +7,25 @@ import {
   type LinhaPrevisaoResultadoLote,
   type MetricasPrevisaoResultado,
 } from "@/lib/financeiro";
+import { corPercentualLucro } from "@/components/CelulaLucroPercentual";
 
 function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+function formatarPercentual(valor: number): string {
+  return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
+// % Lucro de Peças = Margem de Peças / Venda de Peças; % Lucro Total =
+// Margem Total / Valor Líquido — mesma fórmula já usada em Validação de
+// Orçamentos / Contra Proposta (ver calcularResumoValidacao em
+// lib/orcamentos.ts), só que aqui em cima dos totais do(s) lote(s)
+// selecionado(s) (pedido explícito, 29/09/2026).
+function percLucroPecas(m: MetricasPrevisaoResultado): number {
+  return m.vendaPecas > 0 ? (m.margemPecas / m.vendaPecas) * 100 : 0;
+}
+function percLucroTotal(m: MetricasPrevisaoResultado): number {
+  return m.valorLiquido > 0 ? (m.margemTotal / m.valorLiquido) * 100 : 0;
 }
 
 // Conteúdo dos tooltips (pedido explícito) — em cima do TÍTULO da coluna
@@ -250,6 +266,18 @@ export default function PainelPrevisaoResultados({ linhas }: { linhas: LinhaPrev
           </span>
           <span className="text-xs" style={{ color: "var(--muted)" }}>
             Margem Total: <strong style={{ color: "var(--ink)" }}>{formatarReal(totalSelecionado.margemTotal)}</strong>
+          </span>
+          <span className="text-xs" style={{ color: "var(--muted)" }}>
+            % Lucro de Peças:{" "}
+            <strong style={{ color: corPercentualLucro(percLucroPecas(totalSelecionado)) }}>
+              {formatarPercentual(percLucroPecas(totalSelecionado))}
+            </strong>
+          </span>
+          <span className="text-xs" style={{ color: "var(--muted)" }}>
+            % Lucro Total:{" "}
+            <strong style={{ color: corPercentualLucro(percLucroTotal(totalSelecionado)) }}>
+              {formatarPercentual(percLucroTotal(totalSelecionado))}
+            </strong>
           </span>
           <span className="text-xs" style={{ color: "var(--accent2)" }}>
             Valor Líquido: <strong>{formatarReal(totalSelecionado.valorLiquido)}</strong>
