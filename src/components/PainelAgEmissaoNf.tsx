@@ -22,6 +22,7 @@ import PopupDetalheGrupoNf from "@/components/PopupDetalheGrupoNf";
 import PopupNfEmissao from "@/components/PopupNfEmissao";
 import PopupConfirmarProdutoEntregue, { type LinhaResumoEnvio } from "@/components/PopupConfirmarProdutoEntregue";
 import PopupEtiquetaCaixaAvulsa from "@/components/PopupEtiquetaCaixaAvulsa";
+import PopupConfirmarEtiquetaCaixa from "@/components/PopupConfirmarEtiquetaCaixa";
 import {
   STATUS_AG_NF_RETORNO_RECUSADOS,
   STATUS_AG_NF_SERVICO_VENDA_RETORNO,
@@ -36,12 +37,7 @@ import { gerarExcelExportacaoN3, type ItemExportacaoN3 } from "@/lib/exportN3";
 import { gerarExcelPreOrdem } from "@/lib/preOrdemExport";
 import { gerarExcelModeloRetorno, type ItemModeloRetorno } from "@/lib/modeloRetorno";
 import { extrairOsReparadoraDoAllPending } from "@/lib/allPending";
-import {
-  imprimirCaixaViaAgente,
-  imprimirLoteDeCaixas,
-  quantidadeCaixas,
-  ErroImpressaoAgente,
-} from "@/lib/etiquetas";
+import { imprimirCaixaViaAgente, quantidadeCaixas, ErroImpressaoAgente } from "@/lib/etiquetas";
 
 type Perfil = { cargo: string; is_master: boolean } | null;
 
@@ -166,20 +162,20 @@ function BotaoIconeNf({
 }
 
 /** Botão "Etiqueta de Caixa" de cada linha (Aprovados e Recusados) —
- * imprime, em sequência, uma etiqueta por caixa daquela NF Remessa (21
- * aparelhos por caixa, ver quantidadeCaixas em lib/etiquetas.ts). Só
- * libera depois que a NF Retorno daquele lote já foi lançada, porque o
- * número da NF Retorno é um dos campos da etiqueta. */
+ * abre a confirmação (PopupConfirmarEtiquetaCaixa, com prévia da
+ * etiqueta) antes de imprimir, em sequência, uma etiqueta por caixa
+ * daquela NF Remessa (21 aparelhos por caixa, ver quantidadeCaixas em
+ * lib/etiquetas.ts). Só libera depois que a NF Retorno daquele lote já
+ * foi lançada, porque o número da NF Retorno é um dos campos da
+ * etiqueta. */
 function BotaoEtiquetaCaixa({
   quantidade,
   habilitado,
-  carregando,
   titulo,
   onClick,
 }: {
   quantidade: number;
   habilitado: boolean;
-  carregando: boolean;
   titulo: string;
   onClick: () => void;
 }) {
@@ -188,15 +184,15 @@ function BotaoEtiquetaCaixa({
       type="button"
       onClick={(e) => {
         e.stopPropagation();
-        if (!habilitado || carregando) return;
+        if (!habilitado) return;
         onClick();
       }}
-      disabled={!habilitado || carregando}
+      disabled={!habilitado}
       title={titulo}
       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition hover:bg-[var(--surface2)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
       style={{ borderColor: "var(--line)", color: "var(--ink)" }}
     >
-      {carregando ? <Loader2 size={13} className="animate-spin" /> : <Tag size={13} />}
+      <Tag size={13} />
       Etiqueta de Caixa ({quantidadeCaixas(quantidade)})
     </button>
   );
@@ -488,13 +484,16 @@ function ConferenciaAllPending({
 // da NF Retorno de cada lote.
 //
 // Etiqueta de caixa (pedido explícito): depois que a NF Retorno de um
-// lote já foi lançada, o botão "Etiqueta de Caixa" de cada linha imprime
-// (via Allied Print Agent — mesma Zebra 60x40mm da Ag. Triagem) uma
-// etiqueta por caixa daquele lote, calculado com 21 aparelhos por caixa
-// (ver quantidadeCaixas em lib/etiquetas.ts) — LOTE e VOLUME reiniciam
-// em 1 a cada NF Remessa. "Teste de Impressão" e "Etiqueta Avulsa" (no
-// topo da tela) usam a mesma rota, mas com dados fixos/livres, sem
-// vincular a nenhum lote real.
+// lote já foi lançada, o botão "Etiqueta de Caixa" de cada linha abre
+// uma prévia + confirmação (PopupConfirmarEtiquetaCaixa) — só depois de
+// confirmar é que imprime de fato (via Allied Print Agent — mesma Zebra
+// 60x40mm da Ag. Triagem), uma etiqueta por caixa daquele lote,
+// calculado com 21 aparelhos por caixa (ver quantidadeCaixas em
+// lib/etiquetas.ts) — LOTE e VOLUME reiniciam em 1 a cada NF Remessa.
+// "Teste de Impressão" (no topo da tela) usa a mesma rota, mas com dados
+// fixos, sem prévia/confirmação e sem vincular a nenhum lote real;
+// "Etiqueta Avulsa" tem seu próprio fluxo de prévia/confirmação (ver
+// PopupEtiquetaCaixaAvulsa).
 export default function PainelAgEmissaoNf({
   aparelhos,
   topo,
@@ -532,11 +531,12 @@ export default function PainelAgEmissaoNf({
   const [erroAcao, setErroAcao] = useState<string | null>(null);
 
   // Etiqueta de caixa (LOTE/VOLUME/NF DE RETORNO/OBSERVAÇÃO/NF DE
-  // ENTRADA) — `imprimindoCaixa` guarda a chaveGrupo em impressão nesse
-  // momento (só pra desabilitar o botão daquela linha e mostrar o
-  // spinner); `msgCaixa` é o aviso de sucesso, mostrado ao lado dos
-  // botões de Teste de Impressão/Etiqueta Avulsa.
-  const [imprimindoCaixa, setImprimindoCaixa] = useState<string | null>(null);
+  // ENTRADA) — `confirmandoCaixa` guarda qual linha (bloco + grupo) está
+  // com o pop-up de prévia/confirmação aberto (ver
+  // PopupConfirmarEtiquetaCaixa, que é quem de fato imprime depois que o
+  // operador confirma); `msgCaixa` é o aviso de sucesso do Teste de
+  // Impressão, mostrado ao lado dele no topo da tela.
+  const [confirmandoCaixa, setConfirmandoCaixa] = useState<{ bloco: Bloco; grupo: GrupoNfRemessa } | null>(null);
   const [msgCaixa, setMsgCaixa] = useState<string | null>(null);
   const [testandoImpressaoCaixa, setTestandoImpressaoCaixa] = useState(false);
   const [avulsaAberta, setAvulsaAberta] = useState(false);
@@ -753,33 +753,18 @@ export default function PainelAgEmissaoNf({
     });
   }
 
-  /** Imprime, em sequência, uma etiqueta de caixa por caixa da NF
-   * Remessa desse grupo (LOTE/VOLUME reiniciam em 1 — pedido explícito).
+  /** Abre a prévia/confirmação (PopupConfirmarEtiquetaCaixa) do botão
+   * "Etiqueta de Caixa" dessa linha — quem realmente manda pro Allied
+   * Print Agent é o próprio pop-up, só depois que o operador confirmar.
    * Exige a NF Retorno desse lote já lançada, porque o número dela é um
-   * dos campos da etiqueta. */
-  async function imprimirEtiquetasCaixa(bloco: Bloco, grupo: GrupoNfRemessa) {
-    const nfRetornoAtual = infoRetorno(bloco, grupo)?.numero;
-    if (!nfRetornoAtual) {
+   * dos campos da etiqueta (o botão já vem desabilitado nesse caso). */
+  function abrirConfirmacaoEtiquetaCaixa(bloco: Bloco, grupo: GrupoNfRemessa) {
+    if (!infoRetorno(bloco, grupo)) {
       setErroAcao("Lance a NF Retorno desse lote antes de imprimir a etiqueta de caixa.");
       return;
     }
     setErroAcao(null);
-    setMsgCaixa(null);
-    setImprimindoCaixa(chaveGrupo(bloco, grupo.nfRemessa));
-    try {
-      await imprimirLoteDeCaixas({
-        nfRetorno: nfRetornoAtual,
-        observacao: bloco === "aprovados" ? "APROVADO" : "REPROVADO",
-        nfEntrada: grupo.nfRemessa,
-        quantidadeAparelhos: grupo.quantidade,
-      });
-      setMsgCaixa(
-        `${quantidadeCaixas(grupo.quantidade)} etiqueta(s) de caixa enviada(s) pra impressão (NF Remessa ${grupo.nfRemessa}).`
-      );
-    } catch (e) {
-      setErroAcao(e instanceof ErroImpressaoAgente ? e.message : "Não foi possível imprimir as etiquetas de caixa.");
-    }
-    setImprimindoCaixa(null);
+    setConfirmandoCaixa({ bloco, grupo });
   }
 
   /** "Teste de Impressão" (topo da tela) — imprime uma etiqueta de caixa
@@ -995,13 +980,12 @@ export default function PainelAgEmissaoNf({
                 <BotaoEtiquetaCaixa
                   quantidade={g.quantidade}
                   habilitado={infoRetorno("aprovados", g) != null}
-                  carregando={imprimindoCaixa === chaveGrupo("aprovados", g.nfRemessa)}
                   titulo={
                     infoRetorno("aprovados", g) == null
                       ? "Lance a NF Retorno desse lote antes de imprimir a etiqueta de caixa."
                       : `Imprime ${quantidadeCaixas(g.quantidade)} etiqueta(s) de caixa desse lote (21 aparelhos por caixa)`
                   }
-                  onClick={() => imprimirEtiquetasCaixa("aprovados", g)}
+                  onClick={() => abrirConfirmacaoEtiquetaCaixa("aprovados", g)}
                 />
               </div>
             )}
@@ -1039,13 +1023,12 @@ export default function PainelAgEmissaoNf({
                 <BotaoEtiquetaCaixa
                   quantidade={g.quantidade}
                   habilitado={infoRetorno("recusados", g) != null}
-                  carregando={imprimindoCaixa === chaveGrupo("recusados", g.nfRemessa)}
                   titulo={
                     infoRetorno("recusados", g) == null
                       ? "Lance a NF Retorno desse lote antes de imprimir a etiqueta de caixa."
                       : `Imprime ${quantidadeCaixas(g.quantidade)} etiqueta(s) de caixa desse lote (21 aparelhos por caixa)`
                   }
-                  onClick={() => imprimirEtiquetasCaixa("recusados", g)}
+                  onClick={() => abrirConfirmacaoEtiquetaCaixa("recusados", g)}
                 />
               </div>
             )}
@@ -1102,6 +1085,17 @@ export default function PainelAgEmissaoNf({
       )}
 
       {avulsaAberta && <PopupEtiquetaCaixaAvulsa onFechar={() => setAvulsaAberta(false)} />}
+
+      {confirmandoCaixa && (
+        <PopupConfirmarEtiquetaCaixa
+          nfRemessa={confirmandoCaixa.grupo.nfRemessa}
+          quantidadeAparelhos={confirmandoCaixa.grupo.quantidade}
+          nfRetorno={infoRetorno(confirmandoCaixa.bloco, confirmandoCaixa.grupo)?.numero ?? ""}
+          observacao={confirmandoCaixa.bloco === "aprovados" ? "APROVADO" : "REPROVADO"}
+          nfEntrada={confirmandoCaixa.grupo.nfRemessa}
+          onFechar={() => setConfirmandoCaixa(null)}
+        />
+      )}
     </div>
   );
 }
