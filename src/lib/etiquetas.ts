@@ -137,14 +137,21 @@ export function quantidadeCaixas(quantidadeAparelhos: number): number {
  * Remessa) — LOTE e VOLUME reiniciam em 1 a cada chamada (pedido
  * explícito: reinicia a cada NF Remessa). Para no primeiro erro e avisa
  * quantas já saíram, pra não duplicar impressão ao tentar de novo.
+ *
+ * `totalCaixas` sobrescreve o cálculo automático (21 aparelhos por
+ * caixa) — pedido explícito: dar a opção de ajustar a quantidade de
+ * etiquetas na hora de confirmar a impressão (ver
+ * PopupConfirmarEtiquetaCaixa), pra quando a separação física das
+ * caixas não bater exatamente com a conta.
  */
 export async function imprimirLoteDeCaixas(dados: {
   nfRetorno: string;
   observacao: string;
   nfEntrada: string;
   quantidadeAparelhos: number;
+  totalCaixas?: number;
 }): Promise<void> {
-  const total = quantidadeCaixas(dados.quantidadeAparelhos);
+  const total = dados.totalCaixas ?? quantidadeCaixas(dados.quantidadeAparelhos);
   for (let atual = 1; atual <= total; atual++) {
     try {
       await imprimirCaixaViaAgente({
