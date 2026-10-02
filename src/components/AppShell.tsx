@@ -29,6 +29,7 @@ import {
   Percent,
   Printer,
   Receipt,
+  RefreshCcw,
   Search,
   Settings,
   ShieldCheck,
@@ -209,9 +210,9 @@ const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
       // própria tela, ver PainelConsultaAlteracao.tsx).
       { href: "/operacional/consulta-alteracao", label: "Consulta/Alteração", icone: Search },
       { href: "/operacional/backlog", label: "Backlog", icone: ClipboardList },
-      // Ordem do menu (pedido explícito, 23/09/2026): Painel, Backlog,
-      // Orçamentos Enviados, Validação de Orçamento (Allied), Contra
-      // Propostas, Modelo de Retorno.
+      // Ordem do menu (pedido explícito, 23/09/2026 e 02/10/2026): Painel,
+      // Backlog, Orçamentos Enviados, Validação de Orçamento (Allied),
+      // Contra Propostas, Reorçamento, Modelo de Retorno.
       //
       // "Orçamentos Enviados" e "Validação de Orçamento (Allied)"
       // liberados pro ALLIED (pedido explícito) — o primeiro é o mesmo
@@ -230,6 +231,11 @@ const GRUPOS_MENU_ALLIED: GrupoMenu[] = [
       // não veem o detalhe peça a peça em Ag. Contra Proposta (ver
       // aviso em PainelContraProposta.tsx), só esse resultado.
       { href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight },
+      // "Reorçamento" (pedido explícito, 02/10/2026) — histórico de toda
+      // planilha Complementar já gerada em "4 - Ag. Resposta de
+      // Reorçamento" > Enviar planilha Complementar, mesmo formato de
+      // Contra Propostas, também liberado pro ALLIED (pedido explícito).
+      { href: "/operacional/reorcamento", label: "Reorçamento", icone: RefreshCcw },
       // "Modelo de Retorno" liberado pro ALLIED (pedido explícito) — a
       // planilha só tem venda de peça/mão de obra, nunca custo/BID (ver
       // lib/modeloRetorno.ts e a rota de API, que agora aceita esse
@@ -367,6 +373,9 @@ export default function AppShell({
   // Contra Proposta (podeConfirmarAprovacaoOrcamento é o mesmo
   // podeLancarNfProdutoEntregue por baixo, ver lib/orcamentos.ts).
   const podeVerContraPropostas = podeVerModeloRetorno;
+  // "Reorçamento" (pedido explícito, 02/10/2026) — mesmo cargo de Contra
+  // Propostas (também liberado pro ALLIED, via podeVerContraPropostas).
+  const podeVerReorcamento = podeVerContraPropostas;
   // "Orçamentos Enviados" e "Validação de Orçamento (Allied)" (pedido
   // explícito) — mesmo cargo de quem já confirma o envio/sobe o arquivo
   // de aprovação (podeConfirmarAnaliseEmLote/podeConfirmarAprovacaoOrcamento,
@@ -387,11 +396,11 @@ export default function AppShell({
             if (g.id === "operacional") {
               return {
                 ...g,
-                // Ordem do menu (pedido explícito, 23/09/2026 e
-                // 30/09/2026): Painel, Backlog, Reconhecimento Lote
+                // Ordem do menu (pedido explícito, 23/09/2026, 30/09/2026
+                // e 02/10/2026): Painel, Backlog, Reconhecimento Lote
                 // (fixos acima, ver g.itens), Orçamentos Enviados,
                 // Validação de Orçamento (Allied), Contra Propostas,
-                // Modelo de Retorno, Notas Fiscais.
+                // Reorçamento, Modelo de Retorno, Notas Fiscais.
                 itens: [
                   ...g.itens,
                   ...(podeVerOrcamentosEnviados
@@ -408,6 +417,9 @@ export default function AppShell({
                     : []),
                   ...(podeVerContraPropostas
                     ? [{ href: "/operacional/contra-propostas", label: "Contra Propostas", icone: ArrowLeftRight }]
+                    : []),
+                  ...(podeVerReorcamento
+                    ? [{ href: "/operacional/reorcamento", label: "Reorçamento", icone: RefreshCcw }]
                     : []),
                   ...(podeVerModeloRetorno
                     ? [{ href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet }]
