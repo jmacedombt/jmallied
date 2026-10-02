@@ -12,12 +12,18 @@ import { type FaixaMarkup } from "@/lib/bid";
 const POSICOES_VALIDAS = ["Extra 1", "Extra 2", "Extra 3", "Extra 4", "Extra 5"];
 
 // Ajuste manual das Peça Add / Custo Add de um reorçamento, em "4 - Ag.
-// Resposta de Reorçamento" — só antes de mandar a planilha Complementar
-// pra Allied (reorcamento_enviado_em ainda vazio). Depois de enviado
-// fica travado: o Excel já saiu com esses valores, editar depois
-// deixaria a tela diferente do que a Allied recebeu. Recalcula tudo do
-// zero, igual o Reorçamento original ([id]/reorcamento/route.ts) —
-// nunca confia no total calculado no navegador.
+// Resposta de Reorçamento" — tanto antes de mandar a planilha
+// Complementar pra Allied (reorcamento_enviado_em ainda vazio) quanto
+// DEPOIS de já enviado (pedido explícito, 02/10/2026: às vezes a Allied
+// manda uma contra proposta pro reorçamento, aceita com um valor
+// diferente, e precisa alterar de novo antes de aprovar/reprovar — ver
+// botão "Alterar" em PainelRespostaReorcamento.tsx / forcarEdicao em
+// PopupDetalheReorcamento.tsx). Alterar depois de enviado NÃO manda uma
+// planilha nova pra Allied — só atualiza o valor aqui dentro; a cópia
+// que a Allied recebeu por e-mail continua com os valores antigos.
+// Recalcula tudo do zero, igual o Reorçamento original
+// ([id]/reorcamento/route.ts) — nunca confia no total calculado no
+// navegador.
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
   const {
@@ -53,7 +59,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const { data: atual, error: erroAtual } = await admin
     .from("orcamentos")
-    .select("status_operacional, validacao_snapshot, reorcamento_detalhe, reorcamento_enviado_em")
+    .select("status_operacional, validacao_snapshot, reorcamento_detalhe")
     .eq("id", params.id)
     .single();
 
@@ -62,9 +68,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
   if (atual.status_operacional !== STATUS_AG_RESPOSTA_REORCAMENTO || !atual.reorcamento_detalhe) {
     return NextResponse.json({ error: "Esse orçamento não está com um reorçamento pendente nessa etapa." }, { status: 409 });
-  }
-  if (atual.reorcamento_enviado_em) {
-    return NextResponse.json({ error: "Esse reorçamento já foi enviado pra Allied — não dá mais pra editar." }, { status: 409 });
   }
 
   const snapshotAtual = atual.validacao_snapshot as DetalheValidacaoOrcamento | null;

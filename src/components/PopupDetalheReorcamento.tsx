@@ -56,7 +56,14 @@ type LinhaForm = { posicao: string; codigo: string; custoTexto: string };
 // (reorcamento_enviado_em vazio), as peças adicionais ficam editáveis —
 // recalcula tudo ao digitar (sem precisar de botão "Calcular"), e
 // "Salvar alterações" pede confirmação antes de gravar. Depois de
-// enviado, fica só consulta (o Excel já saiu com esses valores).
+// enviado, fica só consulta (o Excel já saiu com esses valores) — A
+// MENOS que `forcarEdicao` esteja true (botão "Alterar" em
+// PainelRespostaReorcamento.tsx, pedido explícito 02/10/2026: às vezes a
+// Allied manda uma contra proposta pro reorçamento já enviado, que é
+// aceita com um valor diferente, e precisa alterar de novo antes de
+// aprovar/reprovar). Alterar depois de enviado NÃO manda uma planilha
+// nova pra Allied — só atualiza o valor aqui dentro (ver aviso na tela e
+// no pop-up de confirmação).
 export default function PopupDetalheReorcamento({
   aparelho,
   faixasMarkup,
@@ -64,6 +71,7 @@ export default function PopupDetalheReorcamento({
   configMaoDeObra,
   podeCadastrarBid,
   podeEditar = true,
+  forcarEdicao = false,
   solucoesPorPartNumber = {},
   onFechar,
   onAtualizado,
@@ -80,6 +88,11 @@ export default function PopupDetalheReorcamento({
    * Abertura) — trava a edição das peças adicionais mesmo se o
    * reorçamento ainda não foi enviado pra Allied. */
   podeEditar?: boolean;
+  /** true libera a edição mesmo com reorcamento_enviado_em já
+   * preenchido — vem do botão "Alterar" (pedido explícito, 02/10/2026).
+   * Sem efeito nenhum enquanto o reorçamento ainda não foi enviado (já
+   * editável sozinho nesse caso). */
+  forcarEdicao?: boolean;
   /** "Peça Solução" (BID) de cada código das peças ORIGINAIS (as
    * adicionais já têm seu próprio lookup ao vivo — pecaSolucaoMap acima)
    * — pedido explícito, mostrada em toda tela que lista as peças de um
@@ -88,7 +101,8 @@ export default function PopupDetalheReorcamento({
   onFechar: () => void;
   onAtualizado: () => void;
 }) {
-  const editavel = !aparelho.reorcamento_enviado_em && aparelho.validacao_snapshot != null && podeEditar;
+  const editavel = (!aparelho.reorcamento_enviado_em || forcarEdicao) && aparelho.validacao_snapshot != null && podeEditar;
+  const alterandoPosEnvio = editavel && !!aparelho.reorcamento_enviado_em;
 
   const [linhas, setLinhas] = useState<LinhaForm[]>(
     POSICOES.map((posicao) => {
@@ -222,11 +236,13 @@ export default function PopupDetalheReorcamento({
           style={editavel ? { background: "rgba(217, 119, 6, 0.12)", color: "#b45309" } : { background: "rgba(37, 99, 235, 0.1)", color: "#2563eb" }}
         >
           {editavel ? <Clock size={12} /> : <CheckCircle2 size={12} />}
-          {editavel
-            ? "Ainda não foi enviado pra Allied — as peças adicionais abaixo podem ser ajustadas."
-            : aparelho.reorcamento_enviado_em
-              ? `Enviado pra Allied em ${formatarDataHoraBrasilia(aparelho.reorcamento_enviado_em)}.`
-              : "Já enviado pra Allied — só consulta."}
+          {alterandoPosEnvio
+            ? `Alterando um reorçamento já enviado pra Allied em ${formatarDataHoraBrasilia(aparelho.reorcamento_enviado_em!)} (ex: contra proposta aceita) — as peças adicionais abaixo podem ser ajustadas. A planilha que a Allied recebeu continua com os valores antigos; essa alteração só atualiza aqui dentro.`
+            : editavel
+              ? "Ainda não foi enviado pra Allied — as peças adicionais abaixo podem ser ajustadas."
+              : aparelho.reorcamento_enviado_em
+                ? `Enviado pra Allied em ${formatarDataHoraBrasilia(aparelho.reorcamento_enviado_em)}.`
+                : "Já enviado pra Allied — só consulta."}
         </div>
 
         {pecasOriginais.length > 0 && (
@@ -426,8 +442,15 @@ export default function PopupDetalheReorcamento({
           mensagem={
             <>
               Vai salvar as peças adicionais desse reorçamento, com o novo valor total do reparo de{" "}
-              <strong>{formatarReal(detalheExibido.vendaTotalPecas + detalheExibido.maoDeObra)}</strong>. Confirma as
-              alterações?
+              <strong>{formatarReal(detalheExibido.vendaTotalPecas + detalheExibido.maoDeObra)}</strong>.
+              {alterandoPosEnvio && (
+                <>
+                  {" "}
+                  Esse reorçamento já foi enviado pra Allied — essa alteração <strong>não</strong> manda uma planilha
+                  nova, só atualiza o valor aqui dentro pra você aprovar ou reprovar com o valor certo.
+                </>
+              )}{" "}
+              Confirma as alterações?
             </>
           }
           rotuloConfirmar="Confirmar"

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, CheckCircle2, Clock, Send } from "lucide-react";
+import { Ban, CheckCircle2, Clock, Pencil, Send } from "lucide-react";
 import {
   podeConfirmarAprovacaoOrcamento,
   type ConfiguracaoMaoDeObra,
@@ -54,6 +54,15 @@ function pendenteDeEnvio(a: AparelhoRespostaReorcamento): boolean {
 // Aprovar já fica liberado direto, sem passar pelo botão novo). "Enviar
 // planilha Complementar" junta TODOS os pendentes de uma vez, não
 // importa o lote.
+//
+// Botão "Alterar" (pedido explícito, 02/10/2026): às vezes a Allied
+// manda uma contra proposta pro reorçamento já enviado, que é aceita
+// com um valor diferente — esse botão reabre o pop-up de detalhe
+// liberando a edição das peças adicionais mesmo já enviado (não manda
+// uma planilha nova, só atualiza o valor aqui dentro); depois é só usar
+// Aprovar/Reprovar normalmente. Só aparece pra quem tem
+// reorcamento_detalhe (reorçamento do técnico) — quem chegou direto de
+// Contra Proposta aceita não tem edição de peça nessa tela.
 export default function PainelRespostaReorcamento({
   aparelhos,
   perfil,
@@ -79,6 +88,12 @@ export default function PainelRespostaReorcamento({
   const router = useRouter();
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
   const [detalheReorcamento, setDetalheReorcamento] = useState<AparelhoRespostaReorcamento | null>(null);
+  // true só quando o pop-up foi aberto pelo botão "Alterar" (pedido
+  // explícito, 02/10/2026) — libera a edição das peças adicionais
+  // mesmo já tendo sido enviado pra Allied (ex: contra proposta aceita
+  // com valor diferente). Clicar na linha pra só consultar sempre abre
+  // com isso em false.
+  const [forcarEdicaoDetalhe, setForcarEdicaoDetalhe] = useState(false);
   const [detalheSimples, setDetalheSimples] = useState<AparelhoRespostaReorcamento | null>(null);
   const [mostrarEnvio, setMostrarEnvio] = useState(false);
   const [aprovando, setAprovando] = useState<AparelhoRespostaReorcamento | null>(null);
@@ -101,8 +116,20 @@ export default function PainelRespostaReorcamento({
   );
 
   function abrirDetalhe(a: AparelhoRespostaReorcamento) {
+    setForcarEdicaoDetalhe(false);
     if (a.reorcamento_detalhe) setDetalheReorcamento(a);
     else setDetalheSimples(a);
+  }
+
+  // Botão "Alterar" (pedido explícito, 02/10/2026) — reabre o mesmo
+  // pop-up de detalhe do reorçamento, mas liberando a edição das peças
+  // adicionais mesmo já tendo sido enviado pra Allied. Só pra quem tem
+  // reorcamento_detalhe (reorçamento pedido pelo técnico em "6 - Ag.
+  // Reparo") — quem chegou aqui direto de uma Contra Proposta aceita
+  // não tem edição de peça nessa tela.
+  function abrirAlterar(a: AparelhoRespostaReorcamento) {
+    setForcarEdicaoDetalhe(true);
+    setDetalheReorcamento(a);
   }
 
   async function confirmarAprovar() {
@@ -210,6 +237,17 @@ export default function PainelRespostaReorcamento({
                   <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     {!apenasVisualizacao && (
                       <div className="inline-flex items-center gap-1.5">
+                        {!pendente && a.reorcamento_detalhe && (
+                          <button
+                            type="button"
+                            onClick={() => abrirAlterar(a)}
+                            title="Alterar valores das peças (ex: contra proposta aceita pela Allied)"
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[var(--accent2)]"
+                            style={{ borderColor: "var(--line)", color: "var(--accent2)" }}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        )}
                         {!pendente && (
                           <button
                             type="button"
@@ -293,10 +331,15 @@ export default function PainelRespostaReorcamento({
           configMaoDeObra={configMaoDeObra}
           podeCadastrarBid={podeCadastrarBid}
           podeEditar={!apenasVisualizacao}
+          forcarEdicao={forcarEdicaoDetalhe}
           solucoesPorPartNumber={solucoesPorPartNumber}
-          onFechar={() => setDetalheReorcamento(null)}
+          onFechar={() => {
+            setDetalheReorcamento(null);
+            setForcarEdicaoDetalhe(false);
+          }}
           onAtualizado={() => {
             setDetalheReorcamento(null);
+            setForcarEdicaoDetalhe(false);
             router.refresh();
           }}
         />
