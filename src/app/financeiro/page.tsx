@@ -33,11 +33,13 @@ export default async function FinanceiroPage() {
 
   const linhas = await buscarNotasFiscaisFinanceiro(supabase);
 
-  // 2 gráficos, sempre os últimos 12 meses (pedido explícito), cada um
-  // considerando uma data diferente: emitidas → Data Emissão (todo
-  // lançamento entra); recebidas → Data Recebimento (só quem já está
-  // Vlr. Recebido).
-  const meses = ultimosNMeses(12);
+  // 2 gráficos, cada um considerando uma data diferente: emitidas →
+  // Data Emissão (todo lançamento entra); recebidas → Data Recebimento
+  // (só quem já está Vlr. Recebido). Notas Emitidas mostra só os
+  // últimos 6 meses (pedido explícito, 02/10/2026) — Valores Recebidos
+  // continua nos últimos 12 (não pedido pra mudar).
+  const mesesEmitidas = ultimosNMeses(6);
+  const mesesRecebidas = ultimosNMeses(12);
 
   const mapaEmitidas = somarValorPorMes(
     linhas.map((l) => ({ data: l.dataEmissao, valor: (l.nfMaoDeObraValor ?? 0) + (l.nfPecasValor ?? 0) }))
@@ -48,11 +50,11 @@ export default async function FinanceiroPage() {
       .map((l) => ({ data: l.dataRecebimento as string, valor: (l.nfMaoDeObraValor ?? 0) + (l.nfPecasValor ?? 0) }))
   );
 
-  const pontosEmitidas: PontoBarra[] = meses.map((mes) => ({
+  const pontosEmitidas: PontoBarra[] = mesesEmitidas.map((mes) => ({
     rotulo: formatarRotuloPeriodo(mes, "mes"),
     valor: mapaEmitidas[mes] ?? 0,
   }));
-  const pontosRecebidas: PontoBarra[] = meses.map((mes) => ({
+  const pontosRecebidas: PontoBarra[] = mesesRecebidas.map((mes) => ({
     rotulo: formatarRotuloPeriodo(mes, "mes"),
     valor: mapaRecebidas[mes] ?? 0,
   }));

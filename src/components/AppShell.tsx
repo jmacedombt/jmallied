@@ -28,6 +28,7 @@ import {
   PackageCheck,
   Percent,
   Printer,
+  Receipt,
   Search,
   Settings,
   ShieldCheck,
@@ -356,6 +357,12 @@ export default function AppShell({
   // pra Produto Entregue (mesma permissão de quem gera a planilha em
   // Ag. Emissão de Nota Fiscal — ver migration 0049).
   const podeVerModeloRetorno = !allied && !restritoOperacional && !restritoFinanceiro && podeLancarNfProdutoEntregue(perfil);
+  // "Notas Fiscais" (pedido explícito) — relação das NFs já lançadas em
+  // Ag. Emissão de Nota Fiscal, agrupada por NF Remessa. Mesmo cargo de
+  // "Modelo de Retorno" acima, mas SEM o fallback ALLIED: esse relatório
+  // mostra número/valor de NF, que a Allied não precisa ver (ver
+  // comentário em api/operacional/notas-fiscais/route.ts).
+  const podeVerNotasFiscais = !allied && !restritoOperacional && !restritoFinanceiro && podeLancarNfProdutoEntregue(perfil);
   // "Contra Propostas" (migration 0060) — mesmo cargo que já decide a
   // Contra Proposta (podeConfirmarAprovacaoOrcamento é o mesmo
   // podeLancarNfProdutoEntregue por baixo, ver lib/orcamentos.ts).
@@ -380,10 +387,11 @@ export default function AppShell({
             if (g.id === "operacional") {
               return {
                 ...g,
-                // Ordem do menu (pedido explícito, 23/09/2026): Painel,
-                // Backlog, Reconhecimento Lote (fixos acima, ver
-                // g.itens), Orçamentos Enviados, Validação de Orçamento
-                // (Allied), Contra Propostas, Modelo de Retorno.
+                // Ordem do menu (pedido explícito, 23/09/2026 e
+                // 30/09/2026): Painel, Backlog, Reconhecimento Lote
+                // (fixos acima, ver g.itens), Orçamentos Enviados,
+                // Validação de Orçamento (Allied), Contra Propostas,
+                // Modelo de Retorno, Notas Fiscais.
                 itens: [
                   ...g.itens,
                   ...(podeVerOrcamentosEnviados
@@ -403,6 +411,9 @@ export default function AppShell({
                     : []),
                   ...(podeVerModeloRetorno
                     ? [{ href: "/operacional/modelo-retorno", label: "Modelo de Retorno", icone: FileSpreadsheet }]
+                    : []),
+                  ...(podeVerNotasFiscais
+                    ? [{ href: "/operacional/notas-fiscais", label: "Notas Fiscais", icone: Receipt }]
                     : []),
                 ],
               };

@@ -46,8 +46,25 @@ html.light {
   --surface: #ffffff;
   --surface2: #eef1f8;
   --ink: #16233d;
-  --muted: #5c6b85;
+  /* Mais escuro que antes (pedido explícito, 02/10/2026: "no modo claro
+     os menus e textos ficam muito claros") — esse tom é usado em quase
+     todo texto secundário (menu inativo, cabeçalho de tabela, legendas),
+     então precisa de contraste melhor em cima do branco/quase-branco do
+     modo claro do que precisava em cima do azul-marinho do modo escuro. */
+  --muted: #46536b;
   --line: #dfe4ee;
+
+  /* "Cor do sistema" (--accent/--accent2) é escolhida pelo usuário e
+     vale igual nos dois temas (ColorPickerSistema.tsx) — mas o tom
+     claro padrão da família J.Macedo (#5aa9ff) foi pensado pra "brilhar"
+     em cima do azul-marinho do modo escuro, e lavava quase todo texto
+     que usa essa cor (item ativo do menu, botões, links) em cima do
+     branco do modo claro. Essa variante mais escura só entra quando
+     NINGUÉM ainda setou --accent2 direto no elemento (inline style, que
+     sempre ganha de CSS) — ou seja, só afeta quem está no padrão
+     J.Macedo; quem personalizou a cor no seletor continua vendo a MESMA
+     cor nos dois temas, como já era. */
+  --accent2: #1a56c4;
 }
 
 input:-webkit-autofill {

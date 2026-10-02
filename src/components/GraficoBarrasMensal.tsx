@@ -1,8 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 export type PontoBarra = { rotulo: string; valor: number };
+
+/** Clareia uma cor "#rrggbb" por um fator 0..1 (0 = cor original, 1 =
+ * branco) — usado só pro stop de cima do degradê (ver estiloBarra
+ * "degrade" abaixo). Devolve null pra qualquer cor que não seja um hex
+ * de 6 dígitos (ex: uma var(--...) — aí a barra cai pro preenchimento
+ * sólido normal, nunca quebra por tentar interpretar a cor). */
+function clarearHex(hex: string, fator: number): string | null {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const misturar = (c: number) => Math.round(c + (255 - c) * fator);
+  return `rgb(${misturar(r)}, ${misturar(g)}, ${misturar(b)})`;
+}
 
 // mesmo sistema de coordenadas (viewBox abstrato, esticado por
 // preserveAspectRatio="none") já usado em GraficoLinhaGradiente.tsx —
@@ -21,8 +37,10 @@ function formatarReal(valor: number): string {
 
 /**
  * Gráfico de barras mensal (pedido explícito, "conforme o print") — um
- * valor por mês, sempre os últimos 12 meses (ver ultimosNMeses em
- * lib/financeiro.ts), com o valor em R$ escrito acima de cada barra.
+ * valor por mês, com o valor em R$ escrito acima de cada barra. A
+ * quantidade de meses é decidida por quem chama (ver ultimosNMeses em
+ * lib/financeiro.ts e os dois usos em financeiro/page.tsx: 6 meses pra
+ * Notas Emitidas, 12 pra Valores Recebidos — pedido explícito, 02/10/2026).
  * Moeda é sempre formatada aqui dentro (nunca recebida como prop): esse
  * componente é "use client" e as duas telas que o usam hoje
  * (financeiro/page.tsx) são Server Component — passar uma função como
@@ -36,14 +54,28 @@ export default function GraficoBarrasMensal({
   cor = "var(--accent2)",
   altura = 260,
   mensagemVazia = "Nenhum valor nesse período.",
+  estiloBarra = "solido",
 }: {
   titulo?: string;
   pontos: PontoBarra[];
   cor?: string;
   altura?: number;
   mensagemVazia?: string;
+  /** "degrade" (pedido explícito, 02/10/2026 — gráfico de Notas
+   * Emitidas em financeiro/page.tsx) pinta a barra com um degradê
+   * (mais clara no topo, a cor cheia na base) e aplica uma sombra
+   * suave projetada na cor da barra. "solido" (padrão) mantém o
+   * visual original — cor chapada, sem sombra —, usado em todo o
+   * resto que já usa esse componente. Cai pro sólido sozinho se `cor`
+   * não for um hex de 6 dígitos (ver clarearHex). */
+  estiloBarra?: "solido" | "degrade";
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const idUnico = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const corClara = estiloBarra === "degrade" ? clarearHex(cor, 0.45) : null;
+  const usaDegrade = corClara !== null;
+  const idGradiente = `grad-barra-${idUnico}`;
+  const idSombra = `sombra-barra-${idUnico}`;
 
   const alturaPlot = altura - PADDING_TOPO - ALTURA_EIXO;
   const baseline = PADDING_TOPO + alturaPlot;
@@ -95,6 +127,18 @@ export default function GraficoBarrasMensal({
           role="img"
           aria-label={titulo ?? "Gráfico de barras mensal"}
         >
+          {usaDegrade && (
+            <defs>
+              <linearGradient id={idGradiente} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={corClara!} />
+                <stop offset="100%" stopColor={cor} />
+              </linearGradient>
+              <filter id={idSombra} x="-60%" y="-60%" width="220%" height="220%">
+                <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor={cor} floodOpacity="0.45" />
+              </filter>
+            </defs>
+          )}
+
           <line
             x1={PADDING_LADO}
             y1={baseline}
@@ -121,7 +165,8 @@ export default function GraficoBarrasMensal({
                   width={b.largura}
                   height={b.altura}
                   rx={4}
-                  fill={cor}
+                  fill={usaDegrade ? `url(#${idGradiente})` : cor}
+                  filter={usaDegrade ? `url(#${idSombra})` : undefined}
                   opacity={emHover ? 1 : 0.85}
                 />
 

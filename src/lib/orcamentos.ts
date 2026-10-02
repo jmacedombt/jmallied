@@ -198,6 +198,7 @@ export const STATUS_AG_REPARO = STATUS_OPERACIONAL.find((s) => s.slug === "6-ag-
 export const STATUS_OQC = STATUS_OPERACIONAL.find((s) => s.slug === "oqc-controle-qualidade")!.valor;
 export const STATUS_REPARO_FINALIZADO = STATUS_OPERACIONAL.find((s) => s.slug === "7-reparo-finalizado")!.valor;
 export const STATUS_ORCAMENTO_REPROVADO = STATUS_OPERACIONAL.find((s) => s.slug === "8-orcamento-reprovado")!.valor;
+export const STATUS_PRODUTO_ENTREGUE = STATUS_OPERACIONAL.find((s) => s.slug === "produto-entregue")!.valor;
 
 // Frase padrão do motivo de recusa da Contra Proposta (pedido explícito)
 // — pré-preenche o pop-up de "Reprovar Contra Proposta"

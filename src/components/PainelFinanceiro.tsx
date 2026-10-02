@@ -19,9 +19,11 @@ function formatarDataCurta(iso: string | null): string {
 
 /**
  * Tela principal do módulo Financeiro (pedido explícito, com print de
- * referência): KPIs no topo, os 2 gráficos ("Notas Emitidas" e "Valores
- * Recebidos", últimos 12 meses) e a tabela de lançamentos, com o botão
- * "+ Novo lançamento" e as ações de cada linha (editar / mudar status).
+ * referência): KPIs no topo, os 2 gráficos ("Notas Emitidas", últimos 6
+ * meses, com degradê + sombra na barra — pedido explícito, 02/10/2026;
+ * "Valores Recebidos", últimos 12 meses) e a tabela de lançamentos, com
+ * o botão "+ Novo lançamento" e as ações de cada linha (editar / mudar
+ * status).
  * A grande maioria das linhas chega sozinha (ver salvar-nf/route.ts →
  * registrarLancamentoFinanceiro) — o formulário aqui é o complemento
  * manual + a correção de qualquer campo.
@@ -129,7 +131,8 @@ export default function PainelFinanceiro({
           titulo="Notas emitidas por mês (Mão de Obra + Peças)"
           pontos={pontosEmitidas}
           cor="#0d9488"
-          mensagemVazia="Nenhuma NF emitida nos últimos 12 meses."
+          mensagemVazia="Nenhuma NF emitida nos últimos 6 meses."
+          estiloBarra="degrade"
         />
         <GraficoBarrasMensal
           titulo="Valores recebidos por mês"
