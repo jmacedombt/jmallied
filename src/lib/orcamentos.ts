@@ -764,6 +764,27 @@ export const STATUS_DESTINO_RETROCEDER_PRODUTO_ENTREGUE = STATUS_OPERACIONAL.fil
   (s) => s.slug !== "produto-entregue" && s.slug !== "ag-emissao-nf"
 );
 
+// ---- "Movimentar" (menu Operacional, pedido explícito, 03/10/2026) ----
+// Trocar o status_operacional de vários orçamentos de uma vez, a partir
+// de upload de lista (Trade Allied/OS Reparadora) — ver
+// PainelMovimentar.tsx e /api/operacional/movimentar/*.
+
+// Mesma trava de cargo já usada pra retroceder/voltar etapa manualmente
+// (Administrador ou Gerente) — reaproveitada em vez de criar uma
+// permissão nova só pra isso (pedido explícito: "somente disponível
+// para o administrador e gerente").
+export const podeMovimentarOrcamentos = podeVoltarEtapaAgEmissaoNf;
+
+// Status de destino válidos pra "Movimentar" — TODOS os do pipeline,
+// sem restrição (pedido explícito), diferente de
+// STATUS_DESTINO_RETROCEDER_PRODUTO_ENTREGUE acima (que exclui "Produto
+// Entregue" de propósito). Aqui só excluímos "Ag. Emissão de Nota
+// Fiscal" porque não é um status real gravado em
+// orcamentos.status_operacional — é só o rótulo de tela que agrupa os 2
+// de GRUPO_STATUS_AG_EMISSAO_NF (mesmo motivo já documentado na entrada
+// dela em STATUS_OPERACIONAL acima; escolher um dos 2 seria ambíguo).
+export const STATUS_DESTINO_MOVIMENTAR = STATUS_OPERACIONAL.filter((s) => s.slug !== "ag-emissao-nf");
+
 // ---- Contra Proposta (Ag. Contra Proposta) — ajuste peça a peça ----
 // (ver migration 0033, PopupPecasContraProposta.tsx, PainelContraProposta.tsx)
 

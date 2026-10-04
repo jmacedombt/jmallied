@@ -34,6 +34,7 @@ import {
   Settings,
   ShieldCheck,
   ShieldPlus,
+  Shuffle,
   SlidersHorizontal,
   Tags,
   TrendingUp,
@@ -49,7 +50,7 @@ import ChatWidget from "@/components/ChatWidget";
 import ColorPickerSistema from "@/components/ColorPickerSistema";
 import InactivityGuard from "@/components/InactivityGuard";
 import IndicadorUsuariosOnline from "@/components/IndicadorUsuariosOnline";
-import { podeConfirmarAnaliseEmLote, podeLancarNfProdutoEntregue } from "@/lib/orcamentos";
+import { podeConfirmarAnaliseEmLote, podeLancarNfProdutoEntregue, podeMovimentarOrcamentos } from "@/lib/orcamentos";
 import { isAllied, operacionalRestrito, financeiroRestrito } from "@/lib/usuarios";
 import { podeAcessarFinanceiro } from "@/lib/financeiro";
 
@@ -64,6 +65,10 @@ type ItemMenu = {
   href: string;
   label: string;
   icone: typeof Users;
+  /** Destaque visual (cor fixa, chamativa, não acompanha a Cor do
+   * Sistema) pra item sensível — pedido explícito, hoje só "Movimentar"
+   * (03/10/2026). */
+  destaque?: boolean;
 };
 
 type GrupoMenu = {
@@ -318,6 +323,16 @@ const ESTILO_ATIVO: React.CSSProperties = {
   boxShadow: "inset 3px 0 0 var(--accent)",
 };
 
+// Item de menu "destaque" (ItemMenu.destaque) — cor FIXA (não usa var(),
+// de propósito: o objetivo é sempre chamar atenção, mesmo que o usuário
+// tenha escolhido outra "Cor do sistema") + negrito. Hoje só "Movimentar"
+// (pedido explícito, 03/10/2026) — mesmo laranja já usado no sistema pra
+// ação sensível/chamativa (ex: botão "Enviar planilha Complementar").
+const ESTILO_DESTAQUE: React.CSSProperties = {
+  color: "#f97316",
+  fontWeight: 600,
+};
+
 // Dentro de um grupo, mais de um item pode "bater" com a rota atual (ex:
 // "/operacional" e "/operacional/reconhecimento-lote" começam ambos com
 // "/operacional") — pega sempre o href mais específico (mais longo) que
@@ -369,6 +384,10 @@ export default function AppShell({
   // mostra número/valor de NF, que a Allied não precisa ver (ver
   // comentário em api/operacional/notas-fiscais/route.ts).
   const podeVerNotasFiscais = !allied && !restritoOperacional && !restritoFinanceiro && podeLancarNfProdutoEntregue(perfil);
+  // "Movimentar" (pedido explícito, 03/10/2026) — só Administrador ou
+  // Gerente (ver podeMovimentarOrcamentos), nem Allied, nem os demais
+  // cargos de gestão.
+  const podeVerMovimentar = !allied && !restritoOperacional && !restritoFinanceiro && podeMovimentarOrcamentos(perfil);
   // "Contra Propostas" (migration 0060) — mesmo cargo que já decide a
   // Contra Proposta (podeConfirmarAprovacaoOrcamento é o mesmo
   // podeLancarNfProdutoEntregue por baixo, ver lib/orcamentos.ts).
@@ -396,11 +415,11 @@ export default function AppShell({
             if (g.id === "operacional") {
               return {
                 ...g,
-                // Ordem do menu (pedido explícito, 23/09/2026, 30/09/2026
-                // e 02/10/2026): Painel, Backlog, Reconhecimento Lote
-                // (fixos acima, ver g.itens), Orçamentos Enviados,
+                // Ordem do menu (pedido explícito, 23/09/2026, 30/09/2026,
+                // 02/10/2026 e 03/10/2026): Painel, Backlog, Reconhecimento
+                // Lote (fixos acima, ver g.itens), Orçamentos Enviados,
                 // Validação de Orçamento (Allied), Contra Propostas,
-                // Reorçamento, Modelo de Retorno, Notas Fiscais.
+                // Reorçamento, Modelo de Retorno, Notas Fiscais, Movimentar.
                 itens: [
                   ...g.itens,
                   ...(podeVerOrcamentosEnviados
@@ -426,6 +445,9 @@ export default function AppShell({
                     : []),
                   ...(podeVerNotasFiscais
                     ? [{ href: "/operacional/notas-fiscais", label: "Notas Fiscais", icone: Receipt }]
+                    : []),
+                  ...(podeVerMovimentar
+                    ? [{ href: "/operacional/movimentar", label: "Movimentar", icone: Shuffle, destaque: true }]
                     : []),
                 ],
               };
@@ -602,7 +624,7 @@ export default function AppShell({
                           href={item.href}
                           onClick={() => setSidebarAberta(false)}
                           className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition hover:bg-[var(--surface2)]"
-                          style={ativo ? ESTILO_ATIVO : { color: "var(--muted)" }}
+                          style={ativo ? ESTILO_ATIVO : item.destaque ? ESTILO_DESTAQUE : { color: "var(--muted)" }}
                         >
                           <IconeItem size={15} />
                           {item.label}

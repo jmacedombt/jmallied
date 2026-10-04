@@ -4,9 +4,11 @@ import PainelAuditoria from "@/components/PainelAuditoria";
 
 // "Auditoria" (pedido explícito, 25/09/2026, migration 0070) — histórico
 // das alterações de OS Reparadora feitas em Operacional > Consulta/
-// Alteração. Só pro Administrador (is_master) — mais restrito que a
-// própria alteração (Supervisor/Gerente também alteram, mas não veem
-// esse histórico, de propósito).
+// Alteração e, abaixo (migration 0073), das movimentações em lote feitas
+// em Operacional > Movimentar. Só pro Administrador (is_master) — mais
+// restrito que as próprias ações (Supervisor/Gerente também alteram OS
+// Reparadora, Gerente também Movimenta, mas não veem esse histórico, de
+// propósito).
 export default async function AuditoriaPage() {
   const supabase = createClient();
   const {
@@ -26,7 +28,7 @@ export default async function AuditoriaPage() {
   return (
     <AppShell
       titulo="Auditoria"
-      tituloInfo="Toda alteração de OS Reparadora feita em Operacional > Consulta/Alteração fica registrada aqui, com quem alterou e quando — disponível por 60 dias."
+      tituloInfo="Toda alteração de OS Reparadora feita em Operacional > Consulta/Alteração (60 dias) e toda movimentação de status em lote feita em Operacional > Movimentar (sem limite) ficam registradas aqui, com quem fez e quando."
       perfil={perfil}
     >
       {perfil?.is_master ? (
