@@ -173,7 +173,12 @@ export async function imprimirLoteDeCaixas(dados: {
   }
 }
 
-async function confirmarImpressao(logId: string, sucesso: boolean, mensagemErro?: string) {
+/** Grava o resultado real de uma impressão (ou o cancelamento dela) no
+ * log criado por `localizarParaEtiqueta` — exportada porque, no fluxo
+ * com prévia (Impressão Avulsa, ver PainelBipagem), quem decide quando
+ * confirmar é a tela (depois do operador clicar "Confirmar e
+ * Imprimir"), não mais essa lib sozinha. */
+export async function confirmarImpressao(logId: string, sucesso: boolean, mensagemErro?: string) {
   try {
     await fetch(`/api/operacional/etiquetas/${logId}/confirmar`, {
       method: "POST",
@@ -188,14 +193,19 @@ async function confirmarImpressao(logId: string, sucesso: boolean, mensagemErro?
 
 export type ResultadoBipagem = { ok: boolean; mensagem: string };
 
-/**
- * Fluxo completo de uma bipagem (código -> localizar -> imprimir ->
- * confirmar), usado tanto no popup de bipar/imprimir individual (Ag.
- * Triagem e Impressão Avulsa) quanto na confirmação em massa (seleção
- * de várias linhas de uma vez em Ag. Triagem) — pra não ter duas cópias
- * dessa lógica podendo divergir.
- */
-export async function processarBipagem(codigo: string, modo: TipoBipagem): Promise<ResultadoBipagem> {
+export type ResultadoLocalizar =
+  | { ok: true; logId: string; orcamento: OrcamentoParaEtiqueta & { os_reparadora: string } }
+  | { ok: false; mensagem: string };
+
+/** Primeira metade de uma bipagem: acha o aparelho pelo código e já
+ * grava o log (etiquetas_impressoes) — sem imprimir nada ainda. Usada
+ * direto pelo fluxo com prévia (Impressão Avulsa, pedido explícito
+ * 06/10/2026: "quando imprimir quero o preview na tela") e por dentro
+ * de `processarBipagem` (fluxo direto, sem prévia, de Ag. Triagem). Já
+ * resolve sozinha o caso "achou mas sem OS Reparadora" (não dá pra
+ * imprimir etiqueta nenhuma, prévia ou não), fechando o log como
+ * falha. */
+export async function localizarParaEtiqueta(codigo: string, modo: TipoBipagem): Promise<ResultadoLocalizar> {
   const res = await fetch("/api/operacional/etiquetas/localizar", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -227,6 +237,26 @@ export async function processarBipagem(codigo: string, modo: TipoBipagem): Promi
     };
   }
 
+  return { ok: true, logId: data.logId, orcamento: { ...orc, os_reparadora: orc.os_reparadora } };
+}
+
+/**
+ * Fluxo completo de uma bipagem, direto (localizar -> imprimir ->
+ * confirmar), sem prévia — usado em Ag. Triagem (bipagem rápida em
+ * sequência, não dá pra parar em cada uma pra confirmar na tela) e na
+ * confirmação em massa (seleção de várias linhas de uma vez). A
+ * Impressão Avulsa NÃO usa mais essa função direto — ver
+ * localizarParaEtiqueta + confirmarImpressao em PainelBipagem, que
+ * intercalam a prévia antes de imprimir de fato.
+ */
+export async function processarBipagem(codigo: string, modo: TipoBipagem): Promise<ResultadoBipagem> {
+  const localizado = await localizarParaEtiqueta(codigo, modo);
+  if (!localizado.ok) {
+    return { ok: false, mensagem: localizado.mensagem };
+  }
+
+  const orc = localizado.orcamento;
+
   try {
     await imprimirViaAgente({
       os_reparadora: orc.os_reparadora,
@@ -235,11 +265,11 @@ export async function processarBipagem(codigo: string, modo: TipoBipagem): Promi
     });
   } catch (erro) {
     const mensagem = erro instanceof ErroImpressaoAgente ? erro.message : "Erro inesperado ao imprimir.";
-    await confirmarImpressao(data.logId, false, mensagem);
+    await confirmarImpressao(localizado.logId, false, mensagem);
     return { ok: false, mensagem: `OS ${orc.os_reparadora} encontrada, mas falhou ao imprimir: ${mensagem}` };
   }
 
-  await confirmarImpressao(data.logId, true);
+  await confirmarImpressao(localizado.logId, true);
   return {
     ok: true,
     mensagem:

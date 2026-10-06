@@ -215,17 +215,15 @@ def gerar_zpl(os_reparadora: str, nf_remessa_allied: str, modelo_comercial: str)
         os_num, largura - 2 * margem, largura_max=44
     )
 
-    # ---- Códigos de barras lado a lado: OS na metade esquerda, NF na direita ----
+    # ---- Código de barras da OS, centralizado na etiqueta inteira ----
+    # (pedido explícito, 06/10/2026: tirar o código de barras da NF
+    # Remessa — não precisa mais imprimir — e centralizar o da OS, que
+    # antes dividia a largura com o da NF, cada um na sua metade)
     modulo_barra_os = 1
-    modulo_barra_nf = 1
     altura_barra = 45
-    metade = largura // 2
 
     largura_bc_os = _estimar_largura_barcode(os_num, modulo_barra_os)
-    x_bc_os = max(margem, (metade - largura_bc_os) // 2)
-
-    largura_bc_nf = _estimar_largura_barcode(nf, modulo_barra_nf)
-    x_bc_nf = metade + max(0, (metade - largura_bc_nf) // 2)
+    x_bc_os = max(margem, (largura - largura_bc_os) // 2)
 
     zpl = (
         "^XA\n"
@@ -252,13 +250,10 @@ def gerar_zpl(os_reparadora: str, nf_remessa_allied: str, modelo_comercial: str)
         f"^FO0,130^A0N,{altura_os},{largura_os}^FB{largura},1,0,C,0^FD{os_num}^FS\n"
         f"^FO0,204^GB{largura},2,2^FS\n"
 
-        # ------------- CÓDIGOS DE BARRAS: OS (esquerda) / NF (direita) -------------
+        # ------------- CÓDIGO DE BARRAS DA OS, CENTRALIZADO -------------
         f"^FO{x_bc_os},210^BY{modulo_barra_os}\n"
         f"^BCN,{altura_barra},N,N,N\n"
         f"^FD{os_num}^FS\n"
-        f"^FO{x_bc_nf},210^BY{modulo_barra_nf}\n"
-        f"^BCN,{altura_barra},N,N,N\n"
-        f"^FD{nf}^FS\n"
         f"^FO0,262^GB{largura},2,2^FS\n"
 
         # ------------------- RODAPÉ -------------------
