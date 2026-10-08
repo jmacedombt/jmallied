@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { podeAcessarFinanceiro, hojeIso, type StatusFinanceiro } from "@/lib/financeiro";
+import { podeAcessarFinanceiro, hojeIso, type StatusFinanceiro, type TipoNotaFinanceiro } from "@/lib/financeiro";
 
 function numeroOuNull(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
@@ -21,7 +21,7 @@ const STATUS_VALIDOS: StatusFinanceiro[] = ["Em Aberto", "Vlr. Recebido"];
 // "só mudar o status" quanto "só corrigir um número"), exceto a regra
 // de negócio abaixo, que é sempre aplicada quando `status` vem no
 // corpo: "Vlr. Recebido" sempre grava uma Data de Recebimento (a que
-// vier no corpo, ou hoje se não vier nenhuma); voltar pra "Em Aberto"
+// vier no corpo, ou hoje se não vier nenhuma) na NF indicada em `nf`; voltar pra "Em Aberto"
 // sempre limpa a Data de Recebimento (pedido explícito: "ao lado ao
 // mudar para o Status de valor recebido tem que colocar a data de
 // recebimento do valor").
@@ -59,17 +59,21 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   if ("nf_pecas_numero" in body) atualizacoes.nf_pecas_numero = textoOuNull(body.nf_pecas_numero);
   if ("nf_pecas_valor" in body) atualizacoes.nf_pecas_valor = numeroOuNull(body.nf_pecas_valor);
 
+  // status é POR NOTA FISCAL (migration 0075, pedido explícito
+  // 07/10/2026): quem muda o status precisa dizer de qual NF do
+  // lançamento é — `nf: "mao_de_obra" | "pecas"`.
   if ("status" in body) {
     const status = body.status as StatusFinanceiro;
     if (!STATUS_VALIDOS.includes(status)) {
       return NextResponse.json({ error: "Status inválido." }, { status: 400 });
     }
-    atualizacoes.status = status;
-    if (status === "Vlr. Recebido") {
-      atualizacoes.data_recebimento = textoOuNull(body.data_recebimento) || hojeIso();
-    } else {
-      atualizacoes.data_recebimento = null;
+    const nf = body.nf as TipoNotaFinanceiro;
+    if (nf !== "mao_de_obra" && nf !== "pecas") {
+      return NextResponse.json({ error: "Informe de qual nota fiscal é o status (Mão de Obra ou Peças)." }, { status: 400 });
     }
+    atualizacoes[`nf_${nf}_status`] = status;
+    atualizacoes[`nf_${nf}_data_recebimento`] =
+      status === "Vlr. Recebido" ? textoOuNull(body.data_recebimento) || hojeIso() : null;
   }
 
   const { error } = await admin.from("financeiro_notas_fiscais").update(atualizacoes).eq("id", params.id);

@@ -1,9 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import PainelFinanceiro from "@/components/PainelFinanceiro";
-import { podeAcessarFinanceiro, buscarNotasFiscaisFinanceiro, ultimosNMeses, somarValorPorMes } from "@/lib/financeiro";
+import { podeAcessarFinanceiro, buscarNotasFiscaisFinanceiro, expandirNotas, ultimosNMeses, somarValorPorMes } from "@/lib/financeiro";
 import { formatarRotuloPeriodo } from "@/lib/metricas";
-import type { PontoBarra } from "@/components/GraficoBarrasMensal";
+import type { PontoGrafico } from "@/components/GraficoLinhaGradiente";
 
 export default async function FinanceiroPage() {
   const supabase = createClient();
@@ -33,28 +33,27 @@ export default async function FinanceiroPage() {
 
   const linhas = await buscarNotasFiscaisFinanceiro(supabase);
 
+  const notas = expandirNotas(linhas);
+
   // 2 gráficos, cada um considerando uma data diferente: emitidas →
-  // Data Emissão (todo lançamento entra); recebidas → Data Recebimento
-  // (só quem já está Vlr. Recebido). Notas Emitidas mostra só os
-  // últimos 6 meses (pedido explícito, 02/10/2026) — Valores Recebidos
-  // continua nos últimos 12 (não pedido pra mudar).
-  const mesesEmitidas = ultimosNMeses(6);
-  const mesesRecebidas = ultimosNMeses(12);
+  // Data Emissão (toda NF entra); recebidas → Data Recebimento de cada
+  // NF (só as que já estão Vlr. Recebido — baixa é por nota, migration
+  // 0075). Os dois mostram os últimos 6 meses (pedido explícito,
+  // 07/10/2026 — antes Recebidos mostrava 12).
+  const meses = ultimosNMeses(6);
 
-  const mapaEmitidas = somarValorPorMes(
-    linhas.map((l) => ({ data: l.dataEmissao, valor: (l.nfMaoDeObraValor ?? 0) + (l.nfPecasValor ?? 0) }))
-  );
+  const mapaEmitidas = somarValorPorMes(notas.map((n) => ({ data: n.dataEmissao, valor: n.valor ?? 0 })));
   const mapaRecebidas = somarValorPorMes(
-    linhas
-      .filter((l) => l.status === "Vlr. Recebido" && l.dataRecebimento)
-      .map((l) => ({ data: l.dataRecebimento as string, valor: (l.nfMaoDeObraValor ?? 0) + (l.nfPecasValor ?? 0) }))
+    notas
+      .filter((n) => n.status === "Vlr. Recebido" && n.dataRecebimento)
+      .map((n) => ({ data: n.dataRecebimento as string, valor: n.valor ?? 0 }))
   );
 
-  const pontosEmitidas: PontoBarra[] = mesesEmitidas.map((mes) => ({
+  const pontosEmitidas: PontoGrafico[] = meses.map((mes) => ({
     rotulo: formatarRotuloPeriodo(mes, "mes"),
     valor: mapaEmitidas[mes] ?? 0,
   }));
-  const pontosRecebidas: PontoBarra[] = mesesRecebidas.map((mes) => ({
+  const pontosRecebidas: PontoGrafico[] = meses.map((mes) => ({
     rotulo: formatarRotuloPeriodo(mes, "mes"),
     valor: mapaRecebidas[mes] ?? 0,
   }));
@@ -62,7 +61,7 @@ export default async function FinanceiroPage() {
   return (
     <AppShell
       titulo="Financeiro"
-      tituloInfo="NF Mão de Obra e NF Peças entram aqui sozinhas ao serem emitidas em Ag. Emissão de Nota Fiscal (mesmo dia = mesmo lançamento). Marque como Vlr. Recebido quando o pagamento cair."
+      tituloInfo="NF Mão de Obra e NF Peças entram aqui sozinhas ao serem emitidas em Ag. Emissão de Nota Fiscal. A baixa (Vlr. Recebido) é feita por nota fiscal: clique no status de cada nota, ou selecione várias para dar baixa em massa."
       perfil={perfil}
     >
       <h1 className="text-xl font-semibold mb-1" style={{ color: "var(--ink)" }}>
@@ -72,7 +71,7 @@ export default async function FinanceiroPage() {
         Notas fiscais de Mão de Obra e Peças, valores em aberto e recebidos.
       </p>
 
-      <PainelFinanceiro linhas={linhas} pontosEmitidas={pontosEmitidas} pontosRecebidas={pontosRecebidas} />
+      <PainelFinanceiro linhas={linhas} notas={notas} pontosEmitidas={pontosEmitidas} pontosRecebidas={pontosRecebidas} />
     </AppShell>
   );
 }

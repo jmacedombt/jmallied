@@ -21,9 +21,70 @@ export type LinhaFinanceiro = {
   nfMaoDeObraValor: number | null;
   nfPecasNumero: string | null;
   nfPecasValor: number | null;
+  // status e data de recebimento são POR NOTA FISCAL (migration 0075,
+  // pedido explícito 07/10/2026) — a baixa é feita nota por nota, não
+  // pelo lançamento do dia inteiro.
+  nfMaoDeObraStatus: StatusFinanceiro;
+  nfMaoDeObraDataRecebimento: string | null;
+  nfPecasStatus: StatusFinanceiro;
+  nfPecasDataRecebimento: string | null;
+};
+
+export type TipoNotaFinanceiro = "mao_de_obra" | "pecas";
+
+export const ROTULO_TIPO_NOTA: Record<TipoNotaFinanceiro, string> = {
+  mao_de_obra: "Mão de Obra",
+  pecas: "Peças",
+};
+
+/** Uma NF só (Mão de Obra OU Peças) — é assim que a tabela do
+ * Financeiro mostra os dados: uma linha por nota fiscal (pedido
+ * explícito, 07/10/2026), cada uma com o próprio status e data de
+ * recebimento. `chave` é única por nota (id do lançamento + tipo). */
+export type NotaFinanceiro = {
+  chave: string;
+  lancamentoId: string;
+  tipo: TipoNotaFinanceiro;
+  dataEmissao: string;
+  numero: string;
+  valor: number | null;
   status: StatusFinanceiro;
   dataRecebimento: string | null;
 };
+
+/** Abre cada lançamento nas NFs que ele tem (lançamento sem Nº numa das
+ * duas NFs só gera a linha da outra). Mantém a ordem dos lançamentos
+ * (mais recente primeiro), Mão de Obra antes de Peças. */
+export function expandirNotas(linhas: LinhaFinanceiro[]): NotaFinanceiro[] {
+  const notas: NotaFinanceiro[] = [];
+  for (const l of linhas) {
+    if (l.nfMaoDeObraNumero) {
+      notas.push({
+        chave: `${l.id}:mao_de_obra`,
+        lancamentoId: l.id,
+        tipo: "mao_de_obra",
+        dataEmissao: l.dataEmissao,
+        numero: l.nfMaoDeObraNumero,
+        valor: l.nfMaoDeObraValor,
+        status: l.nfMaoDeObraStatus,
+        dataRecebimento: l.nfMaoDeObraDataRecebimento,
+      });
+    }
+    if (l.nfPecasNumero) {
+      notas.push({
+        chave: `${l.id}:pecas`,
+        lancamentoId: l.id,
+        tipo: "pecas",
+        dataEmissao: l.dataEmissao,
+        numero: l.nfPecasNumero,
+        valor: l.nfPecasValor,
+        status: l.nfPecasStatus,
+        dataRecebimento: l.nfPecasDataRecebimento,
+      });
+    }
+  }
+  return notas;
+}
 
 /** "aaaa-mm-dd" de hoje, sempre no fuso de Brasília — usado tanto pra
  * decidir em qual lançamento do dia encaixar uma NF nova (ver
@@ -156,7 +217,7 @@ export async function buscarNotasFiscaisFinanceiro(supabase: SupabaseClient): Pr
   const { data, error } = await supabase
     .from("financeiro_notas_fiscais")
     .select(
-      "id, data_emissao, nf_mao_de_obra_numero, nf_mao_de_obra_valor, nf_pecas_numero, nf_pecas_valor, status, data_recebimento"
+      "id, data_emissao, nf_mao_de_obra_numero, nf_mao_de_obra_valor, nf_pecas_numero, nf_pecas_valor, nf_mao_de_obra_status, nf_mao_de_obra_data_recebimento, nf_pecas_status, nf_pecas_data_recebimento"
     )
     .order("data_emissao", { ascending: false })
     .order("criado_em", { ascending: false });
@@ -170,8 +231,10 @@ export async function buscarNotasFiscaisFinanceiro(supabase: SupabaseClient): Pr
     nfMaoDeObraValor: l.nf_mao_de_obra_valor == null ? null : Number(l.nf_mao_de_obra_valor),
     nfPecasNumero: (l.nf_pecas_numero as string | null) ?? null,
     nfPecasValor: l.nf_pecas_valor == null ? null : Number(l.nf_pecas_valor),
-    status: l.status as StatusFinanceiro,
-    dataRecebimento: (l.data_recebimento as string | null) ?? null,
+    nfMaoDeObraStatus: (l.nf_mao_de_obra_status as StatusFinanceiro) ?? "Em Aberto",
+    nfMaoDeObraDataRecebimento: (l.nf_mao_de_obra_data_recebimento as string | null) ?? null,
+    nfPecasStatus: (l.nf_pecas_status as StatusFinanceiro) ?? "Em Aberto",
+    nfPecasDataRecebimento: (l.nf_pecas_data_recebimento as string | null) ?? null,
   }));
 }
 

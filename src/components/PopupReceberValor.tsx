@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { CalendarCheck2, Loader2, RotateCcw, Wallet, X } from "lucide-react";
-import { hojeIso, type LinhaFinanceiro } from "@/lib/financeiro";
+import { hojeIso, ROTULO_TIPO_NOTA, type NotaFinanceiro } from "@/lib/financeiro";
 
 /**
- * Pop-up de mudança de Status de um lançamento (pedido explícito: "o
+ * Pop-up de mudança de Status de UMA nota fiscal (desde 07/10/2026 a
+ * baixa é por nota, não pelo lançamento do dia — migration 0075).
+ * Pedido original: "o
  * status inicial sem Em Aberto e com opção de alterar para Vlr.
  * Recebido / Ao lado ao mudar para o Status de valor recebido tem que
  * colocar a data de recebimento do valor"). Também cobre o caminho
@@ -14,22 +16,22 @@ import { hojeIso, type LinhaFinanceiro } from "@/lib/financeiro";
  * Produto Entregue.
  */
 export default function PopupReceberValor({
-  linha,
+  nota,
   onFechar,
   onConfirmarRecebimento,
   onReverterParaEmAberto,
 }: {
-  linha: LinhaFinanceiro;
+  nota: NotaFinanceiro;
   onFechar: () => void;
   onConfirmarRecebimento: (dataRecebimento: string) => Promise<void>;
   onReverterParaEmAberto: () => Promise<void>;
 }) {
-  const [dataRecebimento, setDataRecebimento] = useState(linha.dataRecebimento ?? hojeIso());
+  const [dataRecebimento, setDataRecebimento] = useState(nota.dataRecebimento ?? hojeIso());
   const [processando, setProcessando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const jaRecebido = linha.status === "Vlr. Recebido";
-  const valorTotal = (linha.nfMaoDeObraValor ?? 0) + (linha.nfPecasValor ?? 0);
+  const jaRecebido = nota.status === "Vlr. Recebido";
+  const valorTotal = nota.valor ?? 0;
 
   async function confirmar() {
     if (!dataRecebimento) {
@@ -52,7 +54,7 @@ export default function PopupReceberValor({
     try {
       await onReverterParaEmAberto();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível reverter esse lançamento.");
+      setErro(e instanceof Error ? e.message : "Não foi possível reverter essa nota fiscal.");
       setProcessando(false);
     }
   }
@@ -86,8 +88,14 @@ export default function PopupReceberValor({
         </div>
 
         <div className="rounded-lg border p-3 mb-4 text-sm" style={{ borderColor: "var(--line)", background: "var(--surface2)" }}>
+          <div className="flex items-center justify-between mb-1">
+            <span style={{ color: "var(--muted)" }}>NF {ROTULO_TIPO_NOTA[nota.tipo]}</span>
+            <span className="font-semibold" style={{ color: "var(--ink)" }}>
+              {nota.numero}
+            </span>
+          </div>
           <div className="flex items-center justify-between">
-            <span style={{ color: "var(--muted)" }}>Valor total da NF</span>
+            <span style={{ color: "var(--muted)" }}>Valor da NF</span>
             <span className="font-semibold" style={{ color: "var(--ink)" }}>
               {valorTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
             </span>
@@ -97,9 +105,9 @@ export default function PopupReceberValor({
         {jaRecebido ? (
           <>
             <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
-              Esse lançamento já está marcado como recebido, com data de{" "}
+              Essa nota fiscal já está marcada como recebida, com data de{" "}
               <strong style={{ color: "var(--ink)" }}>
-                {new Date(`${linha.dataRecebimento}T00:00:00`).toLocaleDateString("pt-BR")}
+                {new Date(`${nota.dataRecebimento}T00:00:00`).toLocaleDateString("pt-BR")}
               </strong>
               .
             </p>
