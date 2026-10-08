@@ -179,6 +179,22 @@ export const STATUS_OPERACIONAL = [
 
 export type StatusOperacional = (typeof STATUS_OPERACIONAL)[number]["valor"];
 
+// "Ag. Peças - (Recebimento)" (pedido explícito, 08/10/2026) — card/tela
+// SEM número logo depois de "5 - Ag. Peças". NÃO é um status_operacional
+// novo: no banco o aparelho continua em "5 - Ag. Peças"; o que separa as
+// duas telas é o campo pedido_peca_feito:
+//   5 - Ag. Peças              → pedido_peca_feito = false (ainda sem pedido)
+//   Ag. Peças - (Recebimento)  → pedido_peca_feito = true  (pedido feito, aguardando a peça)
+// Por isso fica FORA de STATUS_OPERACIONAL (Métricas, Backlog, Movimentar,
+// Previsão de Recebimento etc. continuam vendo tudo como 5 - Ag. Peças) —
+// só o painel Operacional (operacional/page.tsx) e a tela da etapa
+// (operacional/[slug]/page.tsx) tratam esse slug à parte.
+export const ETAPA_AG_PECAS_RECEBIMENTO = {
+  slug: "ag-pecas-recebimento",
+  label: "Ag. Peças - (Recebimento)",
+  slugBase: "5-ag-pecas",
+} as const;
+
 export function statusPorSlug(slug: string) {
   return STATUS_OPERACIONAL.find((s) => s.slug === slug) ?? null;
 }

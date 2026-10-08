@@ -11,6 +11,7 @@ import {
   GRUPO_STATUS_AG_EMISSAO_NF,
   STATUS_AG_NF_SERVICO_VENDA_RETORNO,
   STATUS_AG_NF_RETORNO_RECUSADOS,
+  ETAPA_AG_PECAS_RECEBIMENTO,
   calcularMaoDeObraVigente,
   calcularVendaPecasVigente,
   type CamposPecasOrcamento,
@@ -53,9 +54,19 @@ const COLUNAS_PECAS_VALIDACAO =
   "peca_1, peca_2, peca_3, peca_4, peca_5, peca_6, peca_7, peca_8, peca_9, peca_10, peca_add_1, peca_add_2, peca_add_3, peca_add_4, peca_add_5";
 
 export default async function StatusOperacionalPage({ params }: { params: { slug: string } }) {
-  const statusEncontrado = statusPorSlug(params.slug);
+  // "Ag. Peças - (Recebimento)" não é status próprio no banco: usa o de
+  // "5 - Ag. Peças" e filtra pedido_peca_feito = true (ver
+  // ETAPA_AG_PECAS_RECEBIMENTO em lib/orcamentos.ts). Em "5 - Ag. Peças"
+  // ficam só os que ainda não têm pedido (pedido_peca_feito = false).
+  const ehAgPecasRecebimento = params.slug === ETAPA_AG_PECAS_RECEBIMENTO.slug;
+  const statusEncontrado = statusPorSlug(ehAgPecasRecebimento ? ETAPA_AG_PECAS_RECEBIMENTO.slugBase : params.slug);
   if (!statusEncontrado) notFound();
-  const status = statusEncontrado;
+  const ehAgPecas = statusEncontrado.slug === ETAPA_AG_PECAS_RECEBIMENTO.slugBase;
+  const status = ehAgPecasRecebimento
+    ? { ...statusEncontrado, label: ETAPA_AG_PECAS_RECEBIMENTO.label }
+    : statusEncontrado;
+  // filtro de pedido_peca_feito das 2 telas de Ag. Peças (undefined = qualquer outra etapa)
+  const filtroPedidoPeca: boolean | undefined = ehAgPecas ? ehAgPecasRecebimento : undefined;
 
   const supabase = createClient();
   const {
@@ -102,7 +113,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         style={{ borderColor: "var(--line)", background: "var(--surface2)", color: "var(--ink)" }}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-        <ContadorAoVivo status={status.valor} contagemInicial={contagemInicial} /> pendente(s) nessa etapa
+        <ContadorAoVivo status={status.valor} contagemInicial={contagemInicial} pedidoPecaFeito={filtroPedidoPeca} /> pendente(s) nessa etapa
       </span>
     );
   }
@@ -156,6 +167,18 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     );
   }
 
+  // mesmo card de cima, só que separado entre as 2 telas de Ag. Peças
+  // (sem pedido x Recebimento) — ver migration 0076.
+  async function cardPrevisaoAgPecas(pedidoFeito: boolean) {
+    const { data, error } = await supabase.rpc("previsao_recebimento_ag_pecas", { p_pedido_feito: pedidoFeito });
+    if (error) {
+      console.error("previsao_recebimento_ag_pecas:", error.message);
+      return <CardValorPrevisao maoDeObra={0} vendaPecas={0} indisponivel />;
+    }
+    const linha = (data ?? [])[0] as { mao_de_obra: number; venda_pecas: number } | undefined;
+    return <CardValorPrevisao maoDeObra={Number(linha?.mao_de_obra ?? 0)} vendaPecas={Number(linha?.venda_pecas ?? 0)} />;
+  }
+
   // ALLIED (login externo, só consulta) enxerga qualquer etapa, mas
   // sempre com essa mesma tela genérica de só-leitura — nunca os
   // painéis internos com botão de ação/seleção em massa. Os dados vêm
@@ -169,7 +192,11 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     // com nenhuma linha, então busca as 2 e organiza em blocos separados
     // (Aprovados / Recusados), igual a tela interna PainelAgEmissaoNf.
     const ehEmissaoNf = status.slug === "ag-emissao-nf";
-    const aparelhosBrutos = await buscarAparelhosAllied(supabase, ehEmissaoNf ? [...GRUPO_STATUS_AG_EMISSAO_NF] : status.valor);
+    const aparelhosBrutosTodos = await buscarAparelhosAllied(supabase, ehEmissaoNf ? [...GRUPO_STATUS_AG_EMISSAO_NF] : status.valor);
+    const aparelhosBrutos =
+      filtroPedidoPeca === undefined
+        ? aparelhosBrutosTodos
+        : aparelhosBrutosTodos.filter((a) => !!a.pedido_peca_feito === filtroPedidoPeca);
 
     // "Peça Solução" (BID) de cada código dessa etapa (pedido explícito
     // — mostrar também pro login ALLIED) — buscada à parte da RPC
@@ -674,10 +701,10 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pedido_peca_feito, validacao_snapshot, data_reconhecimento"
       )
       .eq("status_operacional", status.valor)
-      .order("pedido_peca_feito", { ascending: true })
+      .eq("pedido_peca_feito", ehAgPecasRecebimento)
       .order("updated_at", { ascending: false });
 
-    const cardPrevisaoEl = await cardPrevisao(status.valor);
+    const cardPrevisaoEl = await cardPrevisaoAgPecas(ehAgPecasRecebimento);
 
     // "Peça Solução" (BID) de cada código nessa etapa (pedido explícito
     // — mostrar em todo pop-up que lista peças de um atendimento).
@@ -698,7 +725,8 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
               {cardPrevisaoEl}
             </>
           }
-          mensagemVazia="Nenhum aparelho em 5 - Ag. Peças no momento."
+          modo={ehAgPecasRecebimento ? "recebimento" : "pedido"}
+          mensagemVazia={`Nenhum aparelho em ${status.label} no momento.`}
         />
       </AppShell>
     );

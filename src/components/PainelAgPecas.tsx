@@ -26,8 +26,18 @@ export type AparelhoAgPecas = {
 
 type Perfil = { cargo: string; is_master: boolean } | null;
 
-// "5 - Ag. Peças" — mesmo padrão de seleção (individual + em lote) de
-// 2 - Ag. Análise. Cada aparelho passa por: sem pedido -> "Pedido feito"
+// "5 - Ag. Peças" e "Ag. Peças - (Recebimento)" — mesmo padrão de
+// seleção (individual + em lote) de 2 - Ag. Análise. Desde 08/10/2026
+// (pedido explícito) são 2 telas/cards separados, usando este mesmo
+// painel (prop `modo`):
+//   modo "pedido"      → "5 - Ag. Peças": só aparelhos SEM pedido; "Pedido
+//                         feito" tira o aparelho daqui e manda pra Recebimento.
+//   modo "recebimento" → "Ag. Peças - (Recebimento)": só aparelhos COM
+//                         pedido (linha amarela); "Peça chegou" avança pra
+//                         6 - Ag. Reparo; desfazer volta pra 5 - Ag. Peças.
+// No banco os dois continuam em "5 - Ag. Peças" (ver
+// ETAPA_AG_PECAS_RECEBIMENTO em lib/orcamentos.ts).
+// Fluxo original: Cada aparelho passa por: sem pedido -> "Pedido feito"
 // (fundo/borda amarela, pode desmarcar se clicado por engano) -> "Peça
 // chegou" (fundo/borda verde, avança pra 6 - Ag. Reparo — só libera
 // depois que o pedido foi marcado).
@@ -37,7 +47,10 @@ export default function PainelAgPecas({
   perfil = null,
   mensagemVazia = "Nenhum aparelho em 5 - Ag. Peças no momento.",
   solucoesPorPartNumber = {},
+  modo = "pedido",
 }: {
+  /** "pedido" = tela 5 - Ag. Peças; "recebimento" = tela Ag. Peças - (Recebimento). */
+  modo?: "pedido" | "recebimento";
   aparelhos: AparelhoAgPecas[];
   topo: React.ReactNode;
   perfil?: Perfil;
@@ -52,7 +65,6 @@ export default function PainelAgPecas({
   const [itens, setItens] = useState(aparelhos);
   const [buscaOs, setBuscaOs] = useState("");
   const [buscaTrade, setBuscaTrade] = useState("");
-  const [somenteSemPedido, setSomenteSemPedido] = useState(false);
 
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [processandoId, setProcessandoId] = useState<string | null>(null);
@@ -61,7 +73,7 @@ export default function PainelAgPecas({
   const [erroLote, setErroLote] = useState<string | null>(null);
   const [reprovando, setReprovando] = useState<AparelhoReprovavel | null>(null);
   const [detalhe, setDetalhe] = useState<AparelhoAgPecas | null>(null);
-  const [destaqueSaida, setDestaqueSaida] = useState<Record<string, "verde" | "vermelho">>({});
+  const [destaqueSaida, setDestaqueSaida] = useState<Record<string, "verde" | "vermelho" | "amarelo">>({});
   const [saindoAgora, setSaindoAgora] = useState<Set<string>>(new Set());
 
   useEffect(() => setItens(aparelhos), [aparelhos]);
@@ -77,12 +89,9 @@ export default function PainelAgPecas({
     return itens.filter((a) => {
       if (os && !(a.os_reparadora ?? "").includes(os)) return false;
       if (trade && !a.trade_allied.toLowerCase().includes(trade)) return false;
-      if (somenteSemPedido && a.pedido_peca_feito) return false;
       return true;
     });
-  }, [itens, buscaOs, buscaTrade, somenteSemPedido]);
-
-  const pedidosFeitos = useMemo(() => itens.filter((a) => a.pedido_peca_feito).length, [itens]);
+  }, [itens, buscaOs, buscaTrade]);
 
   const todosSelecionadosNaTela = filtrados.length > 0 && filtrados.every((a) => selecionados.has(a.id));
 
@@ -108,9 +117,9 @@ export default function PainelAgPecas({
     });
   }
 
-  // "Pedido feito" (ou desmarcar) num aparelho só — não tira ele da
-  // lista, só recolore a linha, então basta atualizar o estado local e
-  // avisar o servidor.
+  // "Pedido feito" (em 5 - Ag. Peças) ou desfazer o pedido (em
+  // Recebimento) num aparelho só — nos dois casos ele muda de tela, então
+  // sai da lista com animação (amarelo).
   async function alternarPedido(a: AparelhoAgPecas) {
     const feito = !a.pedido_peca_feito;
     setProcessandoId(a.id);
@@ -121,7 +130,9 @@ export default function PainelAgPecas({
         body: JSON.stringify({ feito }),
       });
       if (res.ok) {
-        setItens((atual) => atual.map((x) => (x.id === a.id ? { ...x, pedido_peca_feito: feito } : x)));
+        setProcessandoId(null);
+        await animarSaidaDaLista([a.id], "amarelo");
+        return;
       }
     } catch {
       // silencioso — a linha simplesmente não muda, a pessoa tenta de novo
@@ -150,17 +161,16 @@ export default function PainelAgPecas({
         setProcessandoLotePedido(false);
         return;
       }
-      setItens((atual) => atual.map((x) => (ids.includes(x.id) ? { ...x, pedido_peca_feito: true } : x)));
       setSelecionados(new Set());
       setProcessandoLotePedido(false);
-      router.refresh();
+      await animarConfirmacaoEmOnda(ids, "amarelo");
     } catch {
       setErroLote("Falha de conexão. Tente novamente.");
       setProcessandoLotePedido(false);
     }
   }
 
-  async function animarSaidaDaLista(ids: string[], cor: "verde" | "vermelho") {
+  async function animarSaidaDaLista(ids: string[], cor: "verde" | "vermelho" | "amarelo") {
     const idsSet = new Set(ids);
     setSelecionados((atual) => {
       const novo = new Set(atual);
@@ -208,9 +218,9 @@ export default function PainelAgPecas({
   const DURACAO_VERDE_MS = 700;
   const DURACAO_SAIDA_MS = 300;
 
-  async function animarConfirmacaoEmOnda(ids: string[]) {
+  async function animarConfirmacaoEmOnda(ids: string[], cor: "verde" | "amarelo" = "verde") {
     for (const id of ids) {
-      setDestaqueSaida((atual) => ({ ...atual, [id]: "verde" }));
+      setDestaqueSaida((atual) => ({ ...atual, [id]: cor }));
       (async () => {
         await esperar(DURACAO_VERDE_MS);
         setSaindoAgora((atual) => new Set([...atual, id]));
@@ -277,14 +287,6 @@ export default function PainelAgPecas({
       <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
         <div className="flex items-center flex-wrap [&>*]:!mb-0">
           {topo}
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium mb-3 ml-2"
-            style={{ borderColor: "rgba(202, 138, 4, 0.4)", background: "rgba(202, 138, 4, 0.12)", color: "#ca8a04" }}
-            title="Pedido já feito, aguardando a peça chegar fisicamente"
-          >
-            <ShoppingCart size={12} />
-            <strong>{pedidosFeitos}</strong> pedido(s) feito(s), aguardando chegada
-          </span>
         </div>
 
         <div className="flex items-center flex-wrap gap-2">
@@ -318,13 +320,6 @@ export default function PainelAgPecas({
               style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
             />
           </div>
-          <label
-            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs cursor-pointer transition hover:border-[var(--accent2)]"
-            style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
-          >
-            <input type="checkbox" checked={somenteSemPedido} onChange={(e) => setSomenteSemPedido(e.target.checked)} />
-            Somente sem pedido
-          </label>
         </div>
       </div>
 
@@ -337,7 +332,7 @@ export default function PainelAgPecas({
             <strong>{selecionados.size}</strong> selecionado(s)
           </span>
           <div className="flex items-center gap-2 flex-wrap">
-            {podeLotePedido && (
+            {podeLotePedido && modo === "pedido" && (
               <button
                 type="button"
                 onClick={marcarPedidoEmLote}
@@ -350,7 +345,7 @@ export default function PainelAgPecas({
                 Marcar pedido feito ({selecionadosSemPedido})
               </button>
             )}
-            {podeLoteChegada && (
+            {podeLoteChegada && modo === "recebimento" && (
               <button
                 type="button"
                 onClick={chegadaEmLote}
@@ -409,6 +404,8 @@ export default function PainelAgPecas({
                         ? "#22c55e"
                         : destaque === "vermelho"
                           ? "#ef4444"
+                          : destaque === "amarelo"
+                            ? "#eab308"
                           : a.pedido_peca_feito
                             ? "#ca8a04"
                             : "var(--line)",
@@ -417,6 +414,8 @@ export default function PainelAgPecas({
                         ? "rgba(34, 197, 94, 0.22)"
                         : destaque === "vermelho"
                           ? "rgba(239, 68, 68, 0.22)"
+                          : destaque === "amarelo"
+                            ? "rgba(234, 179, 8, 0.28)"
                           : a.pedido_peca_feito
                             ? "rgba(202, 138, 4, 0.14)"
                             : "var(--surface)",
@@ -481,7 +480,7 @@ export default function PainelAgPecas({
                           disabled={processando}
                           className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[#ca8a04] disabled:opacity-60"
                           style={{ borderColor: "var(--line)", color: "#ca8a04" }}
-                          title="Marcar que o pedido dessa peça já foi feito"
+                          title="Marcar que o pedido dessa peça já foi feito — vai pra Ag. Peças - (Recebimento)"
                         >
                           {processando ? <Loader2 size={14} className="animate-spin" /> : <ShoppingCart size={14} />}
                           Pedido feito
@@ -494,7 +493,7 @@ export default function PainelAgPecas({
                             disabled={processando}
                             className="inline-flex items-center justify-center w-8 h-8 rounded-lg border transition hover:border-[var(--accent2)] disabled:opacity-60 shrink-0"
                             style={{ borderColor: "var(--line)", color: "var(--muted)" }}
-                            title="Desmarcar pedido feito (clicou por engano)"
+                            title="Desfazer pedido feito (clicou por engano) — volta pra 5 - Ag. Peças"
                           >
                             <Undo2 size={14} />
                           </button>
@@ -538,8 +537,10 @@ export default function PainelAgPecas({
       </div>
 
       <p className="text-xs flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
-        <Gauge size={12} /> Linhas em amarelo já têm o pedido da peça feito, aguardando chegar. "Peça chegou" só libera
-        depois do pedido marcado.
+        <Gauge size={12} />
+        {modo === "pedido"
+          ? 'Aparelhos ainda sem pedido da peça. "Pedido feito" move o aparelho para Ag. Peças - (Recebimento).'
+          : 'Pedido da peça já feito, aguardando chegar. "Peça chegou" avança para 6 - Ag. Reparo; a seta desfaz o pedido e volta para 5 - Ag. Peças.'}
       </p>
 
       {reprovando && (

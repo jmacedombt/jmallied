@@ -8,6 +8,7 @@ import {
   MessageSquareWarning,
   RefreshCcw,
   PackageSearch,
+  PackageOpen,
   Hammer,
   ShieldCheck,
   BadgeCheck,
@@ -19,7 +20,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ContadorAoVivo from "@/components/ContadorAoVivo";
-import { STATUS_OPERACIONAL, GRUPO_STATUS_AG_EMISSAO_NF } from "@/lib/orcamentos";
+import { STATUS_OPERACIONAL, GRUPO_STATUS_AG_EMISSAO_NF, STATUS_AG_PECAS, ETAPA_AG_PECAS_RECEBIMENTO } from "@/lib/orcamentos";
 import { buscarProdutoEntreguePorLote } from "@/lib/allied";
 
 const ICONES: Record<string, typeof Inbox> = {
@@ -31,6 +32,7 @@ const ICONES: Record<string, typeof Inbox> = {
   "ag-contra-proposta": MessageSquareWarning,
   "4-ag-resposta-reorcamento": RefreshCcw,
   "5-ag-pecas": PackageSearch,
+  "ag-pecas-recebimento": PackageOpen,
   "6-ag-reparo": Hammer,
   "oqc-controle-qualidade": ShieldCheck,
   "7-reparo-finalizado": BadgeCheck,
@@ -51,6 +53,7 @@ const CORES: Record<string, { cor: string; clara: string }> = {
   "ag-contra-proposta": { cor: "#ca8a04", clara: "#fde047" },
   "4-ag-resposta-reorcamento": { cor: "#ea580c", clara: "#fb923c" },
   "5-ag-pecas": { cor: "#0891b2", clara: "#22d3ee" },
+  "ag-pecas-recebimento": { cor: "#ca8a04", clara: "#facc15" },
   "6-ag-reparo": { cor: "#9333ea", clara: "#c084fc" },
   "oqc-controle-qualidade": { cor: "#4f46e5", clara: "#818cf8" },
   "7-reparo-finalizado": { cor: "#059669", clara: "#34d399" },
@@ -90,11 +93,41 @@ export default async function OperacionalPage() {
   // status_operacional REAIS diferentes (ver GRUPO_STATUS_AG_EMISSAO_NF
   // em lib/orcamentos.ts) — por isso não dá pra usar direto
   // mapaContagens.get(status.valor) igual as outras etapas.
-  function quantidadeDoStatus(status: (typeof STATUS_OPERACIONAL)[number]): number {
+  function quantidadeDoStatus(status: { slug: string; valor: string }): number {
     if (status.slug === "ag-emissao-nf") {
       return GRUPO_STATUS_AG_EMISSAO_NF.reduce((soma, v) => soma + (mapaContagens.get(v) ?? 0), 0);
     }
     return mapaContagens.get(status.valor) ?? 0;
+  }
+
+  // "5 - Ag. Peças" x "Ag. Peças - (Recebimento)" (pedido explícito,
+  // 08/10/2026): os dois cards dividem o MESMO status_operacional ("5 -
+  // Ag. Peças"), separados pelo campo pedido_peca_feito — ver
+  // ETAPA_AG_PECAS_RECEBIMENTO em lib/orcamentos.ts.
+  const { count: contagemRecebimento } = await supabase
+    .from("orcamentos")
+    .select("id", { count: "exact", head: true })
+    .eq("status_operacional", STATUS_AG_PECAS)
+    .eq("pedido_peca_feito", true);
+  const quantidadeRecebimento = contagemRecebimento ?? 0;
+  const quantidadeAgPecasSemPedido = Math.max(0, (mapaContagens.get(STATUS_AG_PECAS) ?? 0) - quantidadeRecebimento);
+
+  // cards na ordem de exibição: as etapas de STATUS_OPERACIONAL + o card
+  // "Ag. Peças - (Recebimento)" logo depois de "5 - Ag. Peças".
+  type CardEtapa = { slug: string; valor: string; label: string; pedidoPecaFeito?: boolean };
+  const cardsEtapas: CardEtapa[] = STATUS_OPERACIONAL.flatMap((s): CardEtapa[] =>
+    s.slug === ETAPA_AG_PECAS_RECEBIMENTO.slugBase
+      ? [
+          { slug: s.slug, valor: s.valor, label: s.label, pedidoPecaFeito: false },
+          { slug: ETAPA_AG_PECAS_RECEBIMENTO.slug, valor: s.valor, label: ETAPA_AG_PECAS_RECEBIMENTO.label, pedidoPecaFeito: true },
+        ]
+      : [{ slug: s.slug, valor: s.valor, label: s.label }]
+  );
+
+  function quantidadeDoCard(card: CardEtapa): number {
+    if (card.slug === ETAPA_AG_PECAS_RECEBIMENTO.slug) return quantidadeRecebimento;
+    if (card.slug === ETAPA_AG_PECAS_RECEBIMENTO.slugBase) return quantidadeAgPecasSemPedido;
+    return quantidadeDoStatus(card);
   }
 
   // total usado como base do percentual de cada card — sem "Produto
@@ -168,10 +201,10 @@ export default async function OperacionalPage() {
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {STATUS_OPERACIONAL.map((status) => {
+        {cardsEtapas.map((status) => {
           const Icone = ICONES[status.slug];
           const cores = CORES[status.slug];
-          const quantidade = quantidadeDoStatus(status);
+          const quantidade = quantidadeDoCard(status);
           const ehProdutoEntregue = status.slug === "produto-entregue";
           // "Produto Entregue" usa uma base diferente das demais: fatia
           // do TOTAL (entregues + tudo que ainda está em andamento no
@@ -214,6 +247,7 @@ export default async function OperacionalPage() {
                   <ContadorAoVivo
                     status={status.slug === "ag-emissao-nf" ? GRUPO_STATUS_AG_EMISSAO_NF : status.valor}
                     contagemInicial={quantidade}
+                    pedidoPecaFeito={status.pedidoPecaFeito}
                   />
                 </span>
               </div>

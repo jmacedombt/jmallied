@@ -1,6 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { STATUS_OPERACIONAL } from "@/lib/orcamentos";
+import { STATUS_OPERACIONAL, ETAPA_AG_PECAS_RECEBIMENTO } from "@/lib/orcamentos";
 import {
   operacionalRestrito,
   rotaBloqueadaParaOperacional,
@@ -16,7 +16,7 @@ import {
 // — mesmo entrando pela URL direto. Isso é só a metade "página" da
 // proteção: a metade "dado" (nunca devolver custo/BID) é reforçada no
 // banco, ver migration 0035_cargo_allied.sql.
-const SLUGS_OPERACIONAL_ALLIED = STATUS_OPERACIONAL.map((s) => s.slug);
+const SLUGS_OPERACIONAL_ALLIED = [...STATUS_OPERACIONAL.map((s) => s.slug), ETAPA_AG_PECAS_RECEBIMENTO.slug];
 
 // chamadas de API que ALLIED pode fazer: o botão "Exportar backlog" da
 // tela Backlog (sem nenhuma coluna de custo), o download de uma versão
