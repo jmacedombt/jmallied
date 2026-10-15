@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, FileSpreadsheet, Loader2, PackageCheck, X } from "lucide-react";
+import { AlertTriangle, FileCheck2, FileSpreadsheet, Loader2, Lock, PackageCheck, X } from "lucide-react";
 
 export type LinhaResumoEnvio = {
   bloco: "aprovados" | "recusados";
@@ -27,6 +27,12 @@ function formatarReal(valor: number): string {
  *    (ver lib/modeloRetorno.ts) — não muda status nenhum, pode clicar
  *    quantas vezes quiser, o pop-up continua aberto.
  *  - "Confirmar envio": manda de fato os blocos pra "Produto Entregue".
+ *
+ * Trava (pedido explícito, 15/10/2026): "Confirmar envio" só libera
+ * depois que a planilha de retorno foi emitida com sucesso NESTE pop-up
+ * (estado local — ao fechar e abrir de novo, precisa emitir outra vez).
+ * Ao emitir, o botão da planilha fica verde e o ícone faz uma animação
+ * de confirmação.
  */
 export default function PopupConfirmarProdutoEntregue({
   linhas,
@@ -41,11 +47,13 @@ export default function PopupConfirmarProdutoEntregue({
 }) {
   const [enviando, setEnviando] = useState(false);
   const [emitindo, setEmitindo] = useState(false);
+  const [planilhaEmitida, setPlanilhaEmitida] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   const totalQuantidade = linhas.reduce((soma, l) => soma + l.quantidade, 0);
 
   async function confirmar() {
+    if (!planilhaEmitida) return;
     setEnviando(true);
     setErro(null);
     try {
@@ -61,6 +69,7 @@ export default function PopupConfirmarProdutoEntregue({
     setErro(null);
     try {
       await onEmitirPlanilha();
+      setPlanilhaEmitida(true);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível gerar a planilha de retorno.");
     }
@@ -158,6 +167,26 @@ export default function PopupConfirmarProdutoEntregue({
           </table>
         </div>
 
+        <style>{`
+          @keyframes planilha-emitida-pop {
+            0% { transform: scale(0.4) rotate(-20deg); opacity: 0; }
+            55% { transform: scale(1.35) rotate(8deg); opacity: 1; }
+            75% { transform: scale(0.9) rotate(-4deg); }
+            100% { transform: scale(1) rotate(0deg); }
+          }
+          @keyframes planilha-emitida-brilho {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
+            100% { box-shadow: 0 0 0 12px rgba(34, 197, 94, 0); }
+          }
+        `}</style>
+
+        {!planilhaEmitida && (
+          <p className="text-xs mb-3 flex items-center gap-1.5" style={{ color: "#f59e0b" }}>
+            <Lock size={12} />
+            Emita a planilha de retorno para liberar o "Confirmar envio".
+          </p>
+        )}
+
         {erro && (
           <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-4 flex items-start gap-2">
             <AlertTriangle size={15} className="shrink-0 mt-0.5" />
@@ -171,10 +200,26 @@ export default function PopupConfirmarProdutoEntregue({
             onClick={emitirPlanilha}
             disabled={bloqueado}
             className="inline-flex items-center gap-2 rounded-lg border text-sm font-medium px-4 py-2.5 transition hover:bg-[var(--surface2)] disabled:opacity-60"
-            style={{ borderColor: "var(--line)", color: "var(--ink)" }}
+            style={
+              planilhaEmitida
+                ? {
+                    borderColor: "#22c55e",
+                    color: "#22c55e",
+                    background: "rgba(34, 197, 94, 0.12)",
+                    animation: "planilha-emitida-brilho 0.9s ease-out 2",
+                  }
+                : { borderColor: "var(--line)", color: "var(--ink)" }
+            }
+            title={planilhaEmitida ? "Planilha emitida — clique para baixar de novo" : undefined}
           >
-            {emitindo ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}
-            {emitindo ? "Gerando..." : "Emitir planilha de retorno"}
+            {emitindo ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : planilhaEmitida ? (
+              <FileCheck2 size={16} style={{ animation: "planilha-emitida-pop 0.6s ease-out" }} />
+            ) : (
+              <FileSpreadsheet size={15} />
+            )}
+            {emitindo ? "Gerando..." : planilhaEmitida ? "Planilha de retorno emitida" : "Emitir planilha de retorno"}
           </button>
 
           <div className="flex items-center gap-2">
@@ -190,11 +235,18 @@ export default function PopupConfirmarProdutoEntregue({
             <button
               type="button"
               onClick={confirmar}
-              disabled={bloqueado}
-              className="inline-flex items-center gap-2 rounded-lg text-white text-sm font-medium px-5 py-2.5 transition disabled:opacity-60"
-              style={{ background: "#22c55e" }}
+              disabled={bloqueado || !planilhaEmitida}
+              title={!planilhaEmitida ? "Emita a planilha de retorno antes de confirmar o envio" : undefined}
+              className="inline-flex items-center gap-2 rounded-lg text-white text-sm font-medium px-5 py-2.5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: planilhaEmitida ? "#22c55e" : "#6b7280" }}
             >
-              {enviando ? <Loader2 size={15} className="animate-spin" /> : <PackageCheck size={15} />}
+              {enviando ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : planilhaEmitida ? (
+                <PackageCheck size={15} />
+              ) : (
+                <Lock size={15} />
+              )}
               {enviando ? "Enviando..." : "Confirmar envio"}
             </button>
           </div>
