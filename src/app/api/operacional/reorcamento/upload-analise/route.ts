@@ -181,6 +181,12 @@ export async function POST(request: Request) {
         resultado_aprovacao_allied: "Contra Proposta",
         resultado_aprovacao_definido_em: agora,
         contra_proposta_valor_recebido_allied: valorContraProposta,
+        // ajuste antigo (se já passou por contra proposta antes) não tinha
+        // as peças ADD — limpa pra tela montar de novo a partir do
+        // reorçamento (originais + ADD), ver PainelContraProposta.tsx.
+        contra_proposta_pecas: null,
+        contra_proposta_mao_de_obra: null,
+        contra_proposta_ajustado: false,
         contra_proposta_decisao: null,
         contra_proposta_motivo_recusa: null,
         contra_proposta_decidido_por: null,

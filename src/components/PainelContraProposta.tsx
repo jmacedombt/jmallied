@@ -59,6 +59,13 @@ export type AparelhoContraPropostaLista = {
    * de fato foi mandado pra Allied).
    */
   validacao_snapshot: DetalheValidacaoOrcamento | null;
+  /** detalhe do reorçamento (peças originais + peças ADD lançadas em
+   * "6 - Ag. Reparo") — preenchido quando o aparelho veio de "4 - Ag.
+   * Resposta de Reorçamento" (Upload Análise Allied com BQ = Contra
+   * Proposta, pedido explícito 15/10/2026). Quando existe, é a base da
+   * Contra Proposta no lugar do validacao_snapshot, pra peça ADD
+   * aparecer com valor e entrar na sugestão. */
+  reorcamento_detalhe?: DetalheValidacaoOrcamento | null;
   /** valor total (peças + mão de obra) que a Allied contra-propôs,
    * lido da coluna BS do upload de aprovação de orçamentos (pedido
    * explícito) — null enquanto nenhum arquivo com esse valor foi
@@ -75,7 +82,14 @@ export type AparelhoContraPropostaLista = {
  * congelado em Validação de Orçamentos) — referência fixa, nunca muda
  * com o ajuste manual da Contra Proposta. */
 function valorEnviadoDe(a: AparelhoContraPropostaLista): number {
-  return (a.validacao_snapshot?.vendaTotalPecas ?? 0) + (a.validacao_snapshot?.maoDeObra ?? 0);
+  const base = detalheBaseDe(a);
+  return (base?.vendaTotalPecas ?? 0) + (base?.maoDeObra ?? 0);
+}
+
+/** Base da Contra Proposta: o reorçamento (originais + ADD) quando
+ * existir, senão o snapshot de Validação de Orçamentos. */
+function detalheBaseDe(a: AparelhoContraPropostaLista): DetalheValidacaoOrcamento | null {
+  return a.reorcamento_detalhe ?? a.validacao_snapshot;
 }
 
 /** Peças "efetivas" de um aparelho pra Contra Proposta: usa o que já foi
@@ -83,14 +97,21 @@ function valorEnviadoDe(a: AparelhoContraPropostaLista): number {
  * snapshot de Validação de Orçamentos — mesmo custo/imposto/venda
  * original já calculado lá (ver comentário do campo acima). */
 function pecasEfetivasDe(a: AparelhoContraPropostaLista): PecaContraProposta[] {
-  if (a.contra_proposta_pecas && a.contra_proposta_pecas.length > 0) return a.contra_proposta_pecas;
-  return a.validacao_snapshot ? montarPecasContraPropostaIniciais(a.validacao_snapshot) : [];
+  const base = detalheBaseDe(a);
+  const daBase = base ? montarPecasContraPropostaIniciais(base) : [];
+  if (a.contra_proposta_pecas && a.contra_proposta_pecas.length > 0) {
+    // ajuste já salvo: mantém o que foi salvo e acrescenta qualquer peça
+    // da base (ex: peça ADD do reorçamento) que ainda não estava nele.
+    const salvas = new Set(a.contra_proposta_pecas.map((p) => p.posicao));
+    return [...a.contra_proposta_pecas, ...daBase.filter((p) => !salvas.has(p.posicao))];
+  }
+  return daBase;
 }
 
 /** Mesma lógica de fallback pra mão de obra — fica null até alguém
  * ajustar e salvar. */
 function maoDeObraEfetivaDe(a: AparelhoContraPropostaLista): number {
-  return a.contra_proposta_mao_de_obra ?? a.validacao_snapshot?.maoDeObra ?? 0;
+  return a.contra_proposta_mao_de_obra ?? detalheBaseDe(a)?.maoDeObra ?? 0;
 }
 
 // "Ag. Contra Proposta" — aparelhos que a Allied respondeu com Contra

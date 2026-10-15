@@ -374,8 +374,18 @@ export default function PopupPecasContraProposta({
                 <tbody>
                   {pecas.map((p, i) => (
                     <tr key={p.posicao} className="border-t" style={{ borderColor: "var(--line)" }}>
-                      <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
-                        {p.posicao}
+                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: "var(--muted)" }}>
+                        {p.posicao.startsWith("Extra ") ? (
+                          <span
+                            className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold"
+                            style={{ color: "#ea580c", background: "rgba(234, 88, 12, 0.12)" }}
+                            title="Peça adicional (ADD)"
+                          >
+                            ADD {p.posicao.replace("Extra ", "")}
+                          </span>
+                        ) : (
+                          p.posicao
+                        )}
                       </td>
                       <td className="px-3 py-2 font-mono" style={{ color: "var(--ink)" }}>
                         {p.codigo}
