@@ -13,9 +13,13 @@
  * Destaques (pedido explícito, 25/09/2026 — mesma linguagem visual da
  * Contra Proposta, reaproveitando as MESMAS cores — ver
  * lib/coresPlanilhaExcel.ts):
- *  - Coluna "Tipo de Retorno": funciona igual a "STATUS ORÇAMENTO" da
- *    Contra Proposta (coluna BQ) — fundo + texto verde em Aprovado,
- *    fundo + texto vermelho em Reprovado.
+ *  - Coluna "Tipo de Retorno" (coluna AN) — desde 15/10/2026 (pedido
+ *    explícito) mostra COMO foi a decisão, cada uma com sua cor:
+ *      "Aprovado"     → verde
+ *      "Contra Proposta Aceita"   → azul
+ *      "Reprovado"    → vermelho
+ *      "Contra Proposta Recusada" → roxo
+ *    (ver classificarTipoRetorno abaixo).
  *  - Colunas "Valor Peça 1".."Valor Peça 10"/"Valor Peça Add 1".."Add 5":
  *    vermelho (mesma cor/negrito da coluna "STATUS ORÇAMENTO" recusado)
  *    nas linhas Reprovado.
@@ -31,16 +35,27 @@
  * do snapshot de dados que foi salvo na hora da emissão.
  */
 import type ExcelJS from "exceljs";
-import { type CamposValorVigente, calcularMaoDeObraVigente } from "@/lib/orcamentos";
+import { type CamposValorVigente, calcularMaoDeObraVigente, MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA } from "@/lib/orcamentos";
 import { pecasVigentes, type PecaPosicionada } from "@/lib/exportN3";
 import {
   PREENCHIMENTO_APROVADO,
   PREENCHIMENTO_RECUSADO,
   FONTE_APROVADO,
   FONTE_RECUSADO,
+  PREENCHIMENTO_CONTRA_PROPOSTA_ACEITA,
+  PREENCHIMENTO_CONTRA_PROPOSTA_RECUSADA,
+  FONTE_CONTRA_PROPOSTA_ACEITA,
+  FONTE_CONTRA_PROPOSTA_RECUSADA,
 } from "@/lib/coresPlanilhaExcel";
 
 export type ItemModeloRetorno = CamposValorVigente & {
+  /** id do orçamento — já vinha gravado nos snapshots do histórico
+   * (o item é o aparelho inteiro de Ag. Emissão de NF); usado pra
+   * completar contra_proposta_decisao ao baixar de novo um registro
+   * antigo (ver [id]/download/route.ts). */
+  id?: string;
+  /** "Aprovado" | "Reprovado" quando passou por Contra Proposta (migration 0060). */
+  contra_proposta_decisao?: string | null;
   nf_remessa_allied: string;
   os_care_allied: string | null;
   trade_allied: string;
@@ -140,6 +155,29 @@ function montarSlots(item: CamposValorVigente): { normais: (PecaPosicionada | nu
   return { normais, add };
 }
 
+export type TipoRetornoDetalhado =
+  | "Aprovado"
+  | "Contra Proposta Aceita"
+  | "Reprovado"
+  | "Contra Proposta Recusada";
+
+/** Classifica a coluna "Tipo de Retorno" (pedido explícito, 15/10/2026).
+ * Usa contra_proposta_decisao (migration 0060); se ela não vier
+ * preenchida, cai pros sinais antigos: contra_proposta_ajustado (valor
+ * da contra proposta aplicado) nos aprovados, e o motivo padrão de
+ * recusa de contra proposta nos reprovados. */
+export function classificarTipoRetorno(item: ItemModeloRetorno, tipo: "Aprovado" | "Reprovado"): TipoRetornoDetalhado {
+  const decisao = item.contra_proposta_decisao ?? null;
+  if (tipo === "Aprovado") {
+    const viaContraProposta = decisao === "Aprovado" || (decisao === null && !!item.contra_proposta_ajustado);
+    return viaContraProposta ? "Contra Proposta Aceita" : "Aprovado";
+  }
+  const viaContraProposta =
+    decisao === "Reprovado" ||
+    (decisao === null && (item.motivo_reprova ?? "").trim() === MOTIVO_PADRAO_CONTRA_PROPOSTA_RECUSADA);
+  return viaContraProposta ? "Contra Proposta Recusada" : "Reprovado";
+}
+
 function linhaItem(
   item: ItemModeloRetorno,
   tipo: "Aprovado" | "Reprovado",
@@ -161,7 +199,7 @@ function linhaItem(
   linha.push(calcularMaoDeObraVigente(item));
   linha.push(item.observacao_tecnica_reparadora || "");
   linha.push(tipo === "Reprovado" ? item.motivo_reprova || "" : "");
-  linha.push(tipo);
+  linha.push(classificarTipoRetorno(item, tipo));
   linha.push(item.nf_retorno_numero || "");
   if (tipo === "Aprovado") {
     linha.push(item.nf_pecas_numero || "", item.nf_mao_de_obra_numero || "", item.nf_pecas_valor ?? "", item.nf_mao_de_obra_valor ?? "");
@@ -222,12 +260,21 @@ async function montarWorkbook(
     // "Tipo de Retorno" funciona igual a "STATUS ORÇAMENTO" da Contra
     // Proposta (pedido explícito) — mesmas cores de lá.
     const celulaTipo = linhaExcel.getCell(IDX_TIPO_RETORNO + 1);
-    if (tipo === "Aprovado") {
+    const detalhado = classificarTipoRetorno(item, tipo);
+    if (detalhado === "Aprovado") {
       celulaTipo.fill = PREENCHIMENTO_APROVADO;
       celulaTipo.font = FONTE_APROVADO;
+    } else if (detalhado === "Contra Proposta Aceita") {
+      celulaTipo.fill = PREENCHIMENTO_CONTRA_PROPOSTA_ACEITA;
+      celulaTipo.font = FONTE_CONTRA_PROPOSTA_ACEITA;
     } else {
-      celulaTipo.fill = PREENCHIMENTO_RECUSADO;
-      celulaTipo.font = FONTE_RECUSADO;
+      if (detalhado === "Contra Proposta Recusada") {
+        celulaTipo.fill = PREENCHIMENTO_CONTRA_PROPOSTA_RECUSADA;
+        celulaTipo.font = FONTE_CONTRA_PROPOSTA_RECUSADA;
+      } else {
+        celulaTipo.fill = PREENCHIMENTO_RECUSADO;
+        celulaTipo.font = FONTE_RECUSADO;
+      }
 
       // reprovado: valor das peças em vermelho (pedido explícito) — só
       // nas posições que realmente têm valor lançado.

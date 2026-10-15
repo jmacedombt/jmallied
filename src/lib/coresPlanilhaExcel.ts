@@ -27,3 +27,20 @@ export const PREENCHIMENTO_RECUSADO: ExcelJS.Fill = {
 };
 export const FONTE_APROVADO: Partial<ExcelJS.Font> = { color: { argb: "FF16A34A" }, bold: true };
 export const FONTE_RECUSADO: Partial<ExcelJS.Font> = { color: { argb: "FFDC2626" }, bold: true };
+
+// "Tipo de Retorno" do Modelo de Retorno (pedido explícito, 15/10/2026):
+// Contra Proposta Aceita em azul e Contra Proposta Recusada em roxo
+// (Aprovado continua no verde e Reprovado no
+// vermelho acima).
+export const PREENCHIMENTO_CONTRA_PROPOSTA_ACEITA: ExcelJS.Fill = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFDBEAFE" }, // azul claro
+};
+export const PREENCHIMENTO_CONTRA_PROPOSTA_RECUSADA: ExcelJS.Fill = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFF3E8FF" }, // roxo claro
+};
+export const FONTE_CONTRA_PROPOSTA_ACEITA: Partial<ExcelJS.Font> = { color: { argb: "FF2563EB" }, bold: true };
+export const FONTE_CONTRA_PROPOSTA_RECUSADA: Partial<ExcelJS.Font> = { color: { argb: "FF9333EA" }, bold: true };

@@ -53,6 +53,7 @@ export type AparelhoAgEmissaoNf = CamposPecasComCusto &
     descricao_completa: string | null;
     pre_ordem: string | null;
     status_operacional: string;
+    contra_proposta_decisao?: string | null;
     nf_remessa_allied: string;
     /** valor VIGENTE (mesma prioridade da Previsão de Recebimento) — já
      * calculado no servidor, ver operacional/[slug]/page.tsx. */

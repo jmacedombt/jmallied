@@ -52,9 +52,32 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
 
   const dados = registro.dados as SnapshotModeloRetorno;
+
+  // Coluna "Tipo de Retorno" detalhada (pedido explícito, 15/10/2026):
+  // os registros antigos não guardaram contra_proposta_decisao, então
+  // busca agora no banco pelo id de cada aparelho (que já estava no
+  // snapshot) — assim o histórico também sai com Aprovado /
+  // Contra Proposta Aceita / Reprovado / Contra Proposta
+  // Recusada. O resto da planilha continua idêntico ao snapshot.
+  const ids = Array.from(
+    new Set([...dados.aprovados, ...dados.recusados].map((i) => i.id).filter((id): id is string => !!id))
+  );
+  const decisaoPorId = new Map<string, string | null>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data: linhas } = await admin
+      .from("orcamentos")
+      .select("id, contra_proposta_decisao")
+      .in("id", ids.slice(i, i + 200));
+    for (const l of linhas ?? []) decisaoPorId.set(l.id as string, (l.contra_proposta_decisao as string | null) ?? null);
+  }
+  const completar = (lista: SnapshotModeloRetorno["aprovados"]) =>
+    lista.map((item) =>
+      item.id && decisaoPorId.has(item.id) ? { ...item, contra_proposta_decisao: decisaoPorId.get(item.id) ?? null } : item
+    );
+
   const buffer = await gerarBufferModeloRetorno(
-    dados.aprovados,
-    dados.recusados,
+    completar(dados.aprovados),
+    completar(dados.recusados),
     dados.solucoesPorPartNumber,
     registro.data_referencia
   );
