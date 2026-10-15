@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, CheckCircle2, Clock, Pencil, Send } from "lucide-react";
+import { Ban, CheckCircle2, Clock, FileUp, Pencil, Send } from "lucide-react";
 import {
   podeConfirmarAprovacaoOrcamento,
   type ConfiguracaoMaoDeObra,
@@ -15,6 +15,7 @@ import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
 import PopupDetalheReorcamento from "@/components/PopupDetalheReorcamento";
 import PopupEnviarReorcamento from "@/components/PopupEnviarReorcamento";
 import PopupConfirmar from "@/components/PopupConfirmar";
+import PopupUploadAnaliseReorcamento from "@/components/PopupUploadAnaliseReorcamento";
 import { operacionalRestrito } from "@/lib/usuarios";
 
 export type AparelhoRespostaReorcamento = {
@@ -96,6 +97,8 @@ export default function PainelRespostaReorcamento({
   const [forcarEdicaoDetalhe, setForcarEdicaoDetalhe] = useState(false);
   const [detalheSimples, setDetalheSimples] = useState<AparelhoRespostaReorcamento | null>(null);
   const [mostrarEnvio, setMostrarEnvio] = useState(false);
+  // "Upload Análise Allied" (pedido explícito, 15/10/2026)
+  const [mostrarUploadAnalise, setMostrarUploadAnalise] = useState(false);
   const [aprovando, setAprovando] = useState<AparelhoRespostaReorcamento | null>(null);
   const [aprovandoDeVerdade, setAprovandoDeVerdade] = useState(false);
   const [erroAprovar, setErroAprovar] = useState<string | null>(null);
@@ -157,6 +160,22 @@ export default function PainelRespostaReorcamento({
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center flex-wrap gap-3">{topo}</div>
+        <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setMostrarUploadAnalise(true)}
+          disabled={!podeEnviar}
+          title={
+            !podeEnviar
+              ? "Seu cargo não tem permissão pra subir a análise da Allied."
+              : "Subir o Excel da Allied (coluna BQ) e movimentar os aparelhos"
+          }
+          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ background: "var(--accent2)" }}
+        >
+          <FileUp size={13} />
+          Upload Análise Allied
+        </button>
         <button
           type="button"
           onClick={() => setMostrarEnvio(true)}
@@ -174,6 +193,7 @@ export default function PainelRespostaReorcamento({
           <Send size={13} />
           Enviar planilha Complementar{pendentes.length > 0 && ` (${pendentes.length})`}
         </button>
+        </div>
       </div>
 
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
@@ -340,6 +360,16 @@ export default function PainelRespostaReorcamento({
           onAtualizado={() => {
             setDetalheReorcamento(null);
             setForcarEdicaoDetalhe(false);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {mostrarUploadAnalise && (
+        <PopupUploadAnaliseReorcamento
+          onFechar={() => setMostrarUploadAnalise(false)}
+          onConcluido={() => {
+            setMostrarUploadAnalise(false);
             router.refresh();
           }}
         />
