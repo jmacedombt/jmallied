@@ -19,6 +19,7 @@ import { PREENCHIMENTO_APROVADO, PREENCHIMENTO_RECUSADO, FONTE_APROVADO, FONTE_R
  */
 
 const IDX_CUSTO_PECA_1 = CABECALHO_PLANILHA_ORCAMENTOS.indexOf("CUSTO PEÇA 1");
+const IDX_CUSTO_PECA_ADD_1 = CABECALHO_PLANILHA_ORCAMENTOS.indexOf("CUSTO PEÇA ADD 1");
 const IDX_STATUS_ORCAMENTO = CABECALHO_PLANILHA_ORCAMENTOS.indexOf("STATUS ORÇAMENTO");
 const IDX_VALOR_TOTAL_PECA = CABECALHO_PLANILHA_ORCAMENTOS.indexOf("VALOR TOTAL PEÇA");
 const IDX_MAO_DE_OBRA = CABECALHO_PLANILHA_ORCAMENTOS.indexOf("MÃO DE OBRA");
@@ -90,6 +91,12 @@ export async function montarPlanilhaContraProposta(linhas: LinhaPlanilhaOrcament
       l.pecaAlterada.forEach((alterada, indice) => {
         if (!alterada) return;
         linhaExcel.getCell(IDX_CUSTO_PECA_1 + 1 + indice).font = FONTE_PECA_ALTERADA;
+      });
+    }
+    if (l.pecaAddAlterada) {
+      l.pecaAddAlterada.forEach((alterada, indice) => {
+        if (!alterada) return;
+        linhaExcel.getCell(IDX_CUSTO_PECA_ADD_1 + 1 + indice).font = FONTE_PECA_ALTERADA;
       });
     }
   }

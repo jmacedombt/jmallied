@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { Ban, CheckCheck, Clock, Gauge, Loader2, PackageCheck, Search, ShoppingCart, Undo2 } from "lucide-react";
 import PopupReprovarOrcamento, { type AparelhoReprovavel } from "@/components/PopupReprovarOrcamento";
 import PopupAtendimentoPecas from "@/components/PopupAtendimentoPecas";
-import { podeConfirmarChegadaPecaEmLote, podeConfirmarPedidoPecaEmLote, type DetalheValidacaoOrcamento } from "@/lib/orcamentos";
+import {
+  detalheVigenteDe,
+  podeConfirmarChegadaPecaEmLote,
+  podeConfirmarPedidoPecaEmLote,
+  type CamposValorVigente,
+  type DetalheValidacaoOrcamento,
+} from "@/lib/orcamentos";
 import { operacionalRestrito } from "@/lib/usuarios";
 
 function esperar(ms: number) {
@@ -22,7 +28,13 @@ export type AparelhoAgPecas = {
   descricao_completa: string | null;
   pedido_peca_feito: boolean;
   validacao_snapshot: DetalheValidacaoOrcamento | null;
-};
+} & Partial<Omit<CamposValorVigente, "validacao_snapshot">>;
+
+/** quantas peças ADD ("Extra N") o orçamento tem no valor vigente
+ * (reorçamento aprovado / contra proposta / validação). */
+function quantidadePecasAdd(a: AparelhoAgPecas): number {
+  return (detalheVigenteDe(a)?.pecas ?? []).filter((p) => p.posicao.startsWith("Extra ")).length;
+}
 
 type Perfil = { cargo: string; is_master: boolean } | null;
 
@@ -435,7 +447,18 @@ export default function PainelAgPecas({
                     />
                   </td>
                   <td className="px-4 py-2.5 font-medium" style={{ color: "var(--ink)" }}>
-                    {a.os_reparadora || "—"}
+                    <span className="inline-flex items-center gap-1.5 flex-wrap">
+                      {a.os_reparadora || "—"}
+                      {quantidadePecasAdd(a) > 0 && (
+                        <span
+                          className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{ color: "#ea580c", background: "rgba(234, 88, 12, 0.12)" }}
+                          title="Tem peça adicional (ADD) — clique na linha para ver"
+                        >
+                          +{quantidadePecasAdd(a)} ADD
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td className="px-4 py-2.5" style={{ color: "var(--ink)" }}>
                     {a.trade_allied}

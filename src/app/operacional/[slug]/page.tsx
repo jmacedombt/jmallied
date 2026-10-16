@@ -11,6 +11,7 @@ import {
   GRUPO_STATUS_AG_EMISSAO_NF,
   STATUS_AG_NF_SERVICO_VENDA_RETORNO,
   STATUS_AG_NF_RETORNO_RECUSADOS,
+  detalheVigenteDe,
   calcularMaoDeObraVigente,
   calcularVendaPecasVigente,
   type CamposPecasOrcamento,
@@ -671,7 +672,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pedido_peca_feito, validacao_snapshot, data_reconhecimento"
+        "id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pedido_peca_feito, validacao_snapshot, data_reconhecimento, aprovado_reorcamento_em, reorcamento_detalhe, contra_proposta_ajustado, contra_proposta_pecas, contra_proposta_mao_de_obra"
       )
       .eq("status_operacional", status.valor)
       .order("pedido_peca_feito", { ascending: true })
@@ -681,7 +682,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
 
     // "Peça Solução" (BID) de cada código nessa etapa (pedido explícito
     // — mostrar em todo pop-up que lista peças de um atendimento).
-    const codigos5AgPecas = ((aparelhos ?? []) as AparelhoAgPecas[]).flatMap((a) => (a.validacao_snapshot?.pecas ?? []).map((p) => p.codigo));
+    const codigos5AgPecas = ((aparelhos ?? []) as AparelhoAgPecas[]).flatMap((a) => (detalheVigenteDe(a)?.pecas ?? []).map((p) => p.codigo));
     const solucoesPorPartNumber = await buscarSolucoesPorPartNumber(supabase, codigos5AgPecas);
 
     return (

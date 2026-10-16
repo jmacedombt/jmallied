@@ -115,6 +115,8 @@ export type LinhaPlanilhaOrcamento = {
    * em lib/planilhaContraProposta.ts. Ausente/undefined em qualquer
    * linha que não seja "Contra Proposta aceita com alteração de valor". */
   pecaAlterada?: boolean[];
+  /** mesma ideia de pecaAlterada, pras 5 colunas CUSTO PEÇA ADD. */
+  pecaAddAlterada?: boolean[];
 };
 
 // Exportado (pedido explícito) pra lib/planilhaContraProposta.ts poder

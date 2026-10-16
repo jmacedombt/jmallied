@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Check, Copy, FileEdit, PackageSearch, Undo2, X } from "lucide-react";
 import {
+  detalheVigenteDe,
+  type CamposValorVigente,
   type DetalheValidacaoOrcamento,
   type InfoNotaFiscal,
   STATUS_DESTINO_RETROCEDER_PRODUTO_ENTREGUE,
@@ -18,7 +20,7 @@ export type AparelhoAtendimentoPecas = {
   sku: string | null;
   descricao_completa: string | null;
   validacao_snapshot: DetalheValidacaoOrcamento | null;
-};
+} & Partial<Omit<CamposValorVigente, "validacao_snapshot">>;
 
 /** Notas fiscais já lançadas em "Ag. Emissão de Nota Fiscal" (ver
  * migration 0048 e PainelAgEmissaoNf.tsx) — só é passado quando o
@@ -119,7 +121,10 @@ export default function PopupAtendimentoPecas({
     }
   }
 
-  const detalhe = aparelho.validacao_snapshot;
+  // valor VIGENTE (reorçamento aprovado > contra proposta aceita >
+  // validação) — assim as peças ADD aparecem aqui (pedido explícito,
+  // 16/10/2026). Telas que não mandam esses campos continuam iguais.
+  const detalhe = detalheVigenteDe(aparelho);
   const pecas = detalhe?.pecas ?? [];
 
   return (
@@ -191,8 +196,18 @@ export default function PopupAtendimentoPecas({
               <tbody>
                 {pecas.map((p) => (
                   <tr key={p.posicao} className="border-t" style={{ borderColor: "var(--line)" }}>
-                    <td className="px-3 py-2" style={{ color: "var(--muted)" }}>
-                      {p.posicao}
+                    <td className="px-3 py-2 whitespace-nowrap" style={{ color: "var(--muted)" }}>
+                      {p.posicao.startsWith("Extra ") ? (
+                        <span
+                          className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold"
+                          style={{ color: "#ea580c", background: "rgba(234, 88, 12, 0.12)" }}
+                          title="Peça adicional (ADD)"
+                        >
+                          ADD {p.posicao.replace("Extra ", "")}
+                        </span>
+                      ) : (
+                        p.posicao
+                      )}
                     </td>
                     <td className="px-3 py-2 font-medium" style={{ color: "var(--ink)" }}>
                       <span className="inline-flex items-center gap-1.5">

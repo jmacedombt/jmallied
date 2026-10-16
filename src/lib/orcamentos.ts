@@ -474,6 +474,42 @@ export type CamposValorVigente = {
   validacao_snapshot: DetalheValidacaoOrcamento | null;
 };
 
+/** Detalhe de peças/valores VIGENTE do orçamento (pedido explícito,
+ * 16/10/2026 — mostrar as peças ADD no pop-up de 5 - Ag. Peças e das
+ * etapas seguintes). Mesma cascata de calcularMaoDeObraVigente /
+ * pecasVigentes: reorçamento aprovado (originais + ADD) > contra
+ * proposta aceita (valor ajustado) > snapshot de Validação. Campos
+ * ausentes (telas que não buscam reorçamento/contra proposta) caem
+ * direto no validacao_snapshot, igual a antes. */
+export function detalheVigenteDe(o: Partial<CamposValorVigente>): DetalheValidacaoOrcamento | null {
+  if (o.aprovado_reorcamento_em && o.reorcamento_detalhe) return o.reorcamento_detalhe;
+  if (o.contra_proposta_ajustado && o.contra_proposta_pecas && o.contra_proposta_pecas.length > 0) {
+    const pecasCp = o.contra_proposta_pecas as PecaContraProposta[];
+    const resumo = calcularResumoContraProposta(pecasCp, Number(o.contra_proposta_mao_de_obra ?? 0));
+    return {
+      quantidadePecas: pecasCp.length,
+      custoTotalPecas: resumo.custoTotalPecas,
+      impostoTotalPecas: resumo.impostoTotalPecas,
+      vendaTotalPecas: resumo.vendaTotalPecas,
+      maoDeObra: resumo.maoDeObra,
+      lucroLiquidoPeca: resumo.lucroLiquidoPeca,
+      lucroTotal: resumo.lucroTotal,
+      percLucroPecas: resumo.percLucroPecas,
+      percLucroTotal: resumo.percLucroTotal,
+      temPecaSemCusto: false,
+      pecas: pecasCp.map((p) => ({
+        posicao: p.posicao,
+        codigo: p.codigo,
+        custo: p.custo,
+        valorComMargem: null,
+        imposto: p.imposto,
+        vendaPeca: p.vendaNova,
+      })),
+    };
+  }
+  return o.validacao_snapshot ?? null;
+}
+
 export function calcularMaoDeObraVigente(o: CamposValorVigente): number {
   if (o.aprovado_reorcamento_em && o.reorcamento_detalhe) return o.reorcamento_detalhe.maoDeObra ?? 0;
   if (o.contra_proposta_ajustado && o.contra_proposta_pecas) return o.contra_proposta_mao_de_obra ?? 0;

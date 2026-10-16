@@ -115,6 +115,8 @@ type LinhaContraProposta = CamposEstaticos & {
   contra_proposta_pecas: PecaContraProposta[] | null;
   contra_proposta_mao_de_obra: number | null;
   validacao_snapshot: DetalheValidacaoOrcamento | null;
+  /** quando veio de reorçamento (originais + ADD) — base no lugar do snapshot. */
+  reorcamento_detalhe?: DetalheValidacaoOrcamento | null;
 };
 
 const COLUNAS_PECAS_RAW =
@@ -137,20 +139,51 @@ function listaCampo(a: CamposEstaticos, prefixo: string): (string | null)[] {
  * enviado, nunca o que foi proposto/ajustado depois). Ignora posições
  * "Extra N" (peça adicional de Reorçamento) — a Contra Proposta nunca
  * mexe nessas, igual ao fluxo antigo (prepararEnvioContraProposta). */
+// Posições da planilha: Peça 1..10 e, desde 15/10/2026 (pedido
+// explícito), também as 5 colunas PEÇA ADD / CUSTO PEÇA ADD — posições
+// "Extra 1".."Extra 5" (peça adicional da importação original ou do
+// reorçamento). Antes as ADD ficavam sempre em branco nessa planilha.
+type PosicoesPlanilha = {
+  peca: (string | null)[];
+  custoPeca: (number | null)[];
+  pecaAdd: (string | null)[];
+  custoPecaAdd: (number | null)[];
+};
+
+function posicoesVazias(): PosicoesPlanilha {
+  return {
+    peca: Array.from({ length: 10 }, () => null),
+    custoPeca: Array.from({ length: 10 }, () => null),
+    pecaAdd: Array.from({ length: 5 }, () => null),
+    custoPecaAdd: Array.from({ length: 5 }, () => null),
+  };
+}
+
+function colocarNaPosicao(pos: PosicoesPlanilha, posicao: string, texto: string, valor: number | null) {
+  if (posicao.startsWith("Extra ")) {
+    const indice = Number(posicao.replace("Extra ", "")) - 1;
+    if (Number.isInteger(indice) && indice >= 0 && indice < 5) {
+      pos.pecaAdd[indice] = texto;
+      pos.custoPecaAdd[indice] = valor;
+    }
+    return;
+  }
+  const indice = Number(posicao) - 1;
+  if (Number.isInteger(indice) && indice >= 0 && indice < 10) {
+    pos.peca[indice] = texto;
+    pos.custoPeca[indice] = valor;
+  }
+}
+
 function montarPosicoesOriginais(
   detalhe: DetalheValidacaoOrcamento | null,
   pecaSolucaoOuCodigo: (codigo: string) => string
-): { peca: (string | null)[]; custoPeca: (number | null)[] } {
-  const peca: (string | null)[] = Array.from({ length: 10 }, () => null);
-  const custoPeca: (number | null)[] = Array.from({ length: 10 }, () => null);
+): PosicoesPlanilha {
+  const pos = posicoesVazias();
   for (const p of detalhe?.pecas ?? []) {
-    const indice = Number(p.posicao) - 1;
-    if (Number.isInteger(indice) && indice >= 0 && indice < 10) {
-      peca[indice] = pecaSolucaoOuCodigo(p.codigo);
-      custoPeca[indice] = p.vendaPeca;
-    }
+    colocarNaPosicao(pos, p.posicao, pecaSolucaoOuCodigo(p.codigo), p.vendaPeca);
   }
-  return { peca, custoPeca };
+  return pos;
 }
 
 /** Mesma ideia, a partir de contra_proposta_pecas (valor ACEITO/novo) —
@@ -158,17 +191,12 @@ function montarPosicoesOriginais(
 function montarPosicoesAceitas(
   pecas: PecaContraProposta[],
   pecaSolucaoOuCodigo: (codigo: string) => string
-): { peca: (string | null)[]; custoPeca: (number | null)[] } {
-  const peca: (string | null)[] = Array.from({ length: 10 }, () => null);
-  const custoPeca: (number | null)[] = Array.from({ length: 10 }, () => null);
+): PosicoesPlanilha {
+  const pos = posicoesVazias();
   for (const p of pecas) {
-    const indice = Number(p.posicao) - 1;
-    if (Number.isInteger(indice) && indice >= 0 && indice < 10) {
-      peca[indice] = pecaSolucaoOuCodigo(p.codigo);
-      custoPeca[indice] = p.vendaNova;
-    }
+    colocarNaPosicao(pos, p.posicao, pecaSolucaoOuCodigo(p.codigo), p.vendaNova);
   }
-  return { peca, custoPeca };
+  return pos;
 }
 
 /**
@@ -283,7 +311,7 @@ export async function montarLinhasJaReprovadas(
 
   const linhas: LinhaComOrdem[] = jaReprovados.map((a) => {
     const detalhe = detalhePorId.get(a.id) ?? null;
-    const { peca, custoPeca } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
+    const { peca, custoPeca, pecaAdd, custoPecaAdd } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
     const valorTotalPeca = detalhe?.vendaTotalPecas ?? 0;
     const maoDeObra = detalhe?.maoDeObra ?? 0;
     const linha: LinhaPlanilhaOrcamento = {
@@ -303,11 +331,11 @@ export async function montarLinhasJaReprovadas(
       descricaoDefeito: listaCampo(a, "descricao_defeito"),
       pecaDefeito: listaCampo(a, "peca_defeito"),
       observacaoTecnicaReparadora: a.observacao_tecnica_reparadora,
-      pecaAdd: [null, null, null, null, null],
-      custoPecaAdd: [null, null, null, null, null],
       obs: a.observacao_tecnica_reparadora,
       peca,
       custoPeca,
+      pecaAdd,
+      custoPecaAdd,
       valorTotalPeca,
       maoDeObra,
       valorTotalReparo: valorTotalPeca + maoDeObra,
@@ -348,7 +376,7 @@ export async function prepararGeracaoContraProposta(
   const { data: contraPropostaBruta, error: erroContraProposta } = await admin
     .from("orcamentos")
     .select(
-      `id, contra_proposta_decisao, contra_proposta_motivo_recusa, contra_proposta_pecas, contra_proposta_mao_de_obra, validacao_snapshot, ${COLUNAS_ESTATICAS}`
+      `id, contra_proposta_decisao, contra_proposta_motivo_recusa, contra_proposta_pecas, contra_proposta_mao_de_obra, validacao_snapshot, reorcamento_detalhe, ${COLUNAS_ESTATICAS}`
     )
     .eq("status_operacional", STATUS_AG_CONTRA_PROPOSTA)
     .eq("nf_remessa_allied", nfRemessa)
@@ -489,7 +517,7 @@ export async function prepararGeracaoContraProposta(
       ...contraProposta.flatMap((a) =>
         a.contra_proposta_decisao === "Aprovado"
           ? (a.contra_proposta_pecas ?? []).map((p) => p.codigo)
-          : (a.validacao_snapshot?.pecas ?? []).map((p) => p.codigo)
+          : ((a.reorcamento_detalhe ?? a.validacao_snapshot)?.pecas ?? []).map((p) => p.codigo)
       ),
       ...jaReprovados.flatMap((a) => (detalheJaReprovadoPorId.get(a.id)?.pecas ?? []).map((p) => p.codigo)),
     ])
@@ -530,7 +558,7 @@ export async function prepararGeracaoContraProposta(
 
   const linhasAprovadosIniciais: LinhaComOrdem[] = aprovadosIniciais.map((a) => {
     const detalhe = a.validacao_snapshot;
-    const { peca, custoPeca } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
+    const { peca, custoPeca, pecaAdd, custoPecaAdd } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
     const valorTotalPeca = detalhe?.vendaTotalPecas ?? 0;
     const maoDeObra = detalhe?.maoDeObra ?? 0;
     // (pedido explícito) OBS = "Allied Aprovou em: DD/MM/AAAA", usando a
@@ -546,6 +574,8 @@ export async function prepararGeracaoContraProposta(
       ...linhaBase(a),
       peca,
       custoPeca,
+      pecaAdd,
+      custoPecaAdd,
       valorTotalPeca,
       maoDeObra,
       valorTotalReparo: valorTotalPeca + maoDeObra,
@@ -565,27 +595,22 @@ export async function prepararGeracaoContraProposta(
       const pecas = a.contra_proposta_pecas ?? [];
       const maoDeObra = Number(a.contra_proposta_mao_de_obra ?? 0);
       const resumo = calcularResumoContraProposta(pecas, maoDeObra);
-      const { peca, custoPeca } = montarPosicoesAceitas(pecas, pecaSolucaoOuCodigo);
+      const { peca, custoPeca, pecaAdd, custoPecaAdd } = montarPosicoesAceitas(pecas, pecaSolucaoOuCodigo);
       // (pedido explícito) destaca em vermelho negrito só a(s) posição(ões)
       // de peça cujo valor a Contra Proposta REALMENTE mudou em relação
       // ao valor original enviado (validacao_snapshot) — compara posição
       // a posição, não a linha inteira.
-      const valorOriginalPorPosicao = new Map<number, number>();
-      for (const p of a.validacao_snapshot?.pecas ?? []) {
-        const indice = Number(p.posicao) - 1;
-        if (Number.isInteger(indice) && indice >= 0 && indice < 10 && p.vendaPeca != null) {
-          valorOriginalPorPosicao.set(indice, p.vendaPeca);
-        }
-      }
-      const pecaAlterada = Array.from({ length: 10 }, (_, indice) => {
-        if (custoPeca[indice] == null) return false;
-        const original = valorOriginalPorPosicao.get(indice);
-        return original === undefined || Math.abs(original - (custoPeca[indice] as number)) > 0.001;
-      });
+      const original = montarPosicoesOriginais(a.reorcamento_detalhe ?? a.validacao_snapshot, (c) => c);
+      const alterou = (novo: number | null, antigo: number | null) =>
+        novo != null && (antigo == null || Math.abs(antigo - novo) > 0.001);
+      const pecaAlterada = custoPeca.map((v, i) => alterou(v, original.custoPeca[i]));
+      const pecaAddAlterada = custoPecaAdd.map((v, i) => alterou(v, original.custoPecaAdd[i]));
       const linha: LinhaPlanilhaOrcamento = {
         ...linhaBase(a),
         peca,
         custoPeca,
+        pecaAdd,
+        custoPecaAdd,
         valorTotalPeca: resumo.vendaTotalPecas,
         maoDeObra: resumo.maoDeObra,
         valorTotalReparo: resumo.vendaTotalPecas + resumo.maoDeObra,
@@ -595,6 +620,7 @@ export async function prepararGeracaoContraProposta(
         // só pra quem teve a Contra Proposta aceita.
         obs: "Contra Proposta Aceita",
         pecaAlterada,
+        pecaAddAlterada,
       };
       return { linha, ordemPlanilha: a.ordem_planilha };
     }
@@ -602,14 +628,16 @@ export async function prepararGeracaoContraProposta(
     // Reprovado — mantém valores ORIGINAIS (nunca contra_proposta_pecas).
     const motivo = a.contra_proposta_motivo_recusa?.trim() || "";
     idsReprovados.push({ id: a.id, motivo });
-    const detalhe = a.validacao_snapshot;
-    const { peca, custoPeca } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
+    const detalhe = a.reorcamento_detalhe ?? a.validacao_snapshot;
+    const { peca, custoPeca, pecaAdd, custoPecaAdd } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
     const valorTotalPeca = detalhe?.vendaTotalPecas ?? 0;
     const maoDeObra = detalhe?.maoDeObra ?? 0;
     const linha: LinhaPlanilhaOrcamento = {
       ...linhaBase(a),
       peca,
       custoPeca,
+      pecaAdd,
+      custoPecaAdd,
       valorTotalPeca,
       maoDeObra,
       valorTotalReparo: valorTotalPeca + maoDeObra,
@@ -621,13 +649,15 @@ export async function prepararGeracaoContraProposta(
 
   const linhasJaReprovados: LinhaComOrdem[] = jaReprovados.map((a) => {
     const detalhe = detalheJaReprovadoPorId.get(a.id) ?? null;
-    const { peca, custoPeca } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
+    const { peca, custoPeca, pecaAdd, custoPecaAdd } = montarPosicoesOriginais(detalhe, pecaSolucaoOuCodigo);
     const valorTotalPeca = detalhe?.vendaTotalPecas ?? 0;
     const maoDeObra = detalhe?.maoDeObra ?? 0;
     const linha: LinhaPlanilhaOrcamento = {
       ...linhaBase(a),
       peca,
       custoPeca,
+      pecaAdd,
+      custoPecaAdd,
       valorTotalPeca,
       maoDeObra,
       valorTotalReparo: valorTotalPeca + maoDeObra,
