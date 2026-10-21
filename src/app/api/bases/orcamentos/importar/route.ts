@@ -256,17 +256,38 @@ export async function POST(request: Request) {
           valor_mais_de_uma_peca: configRaw?.valor_mais_de_uma_peca ?? 150,
         };
 
+        // Uma NF Remessa = UMA linha no histórico (pedido explícito,
+        // 21/10/2026): se essa NF já foi importada antes (ex: importação
+        // interrompida no meio e subida de novo), reaproveita a MESMA
+        // linha — atualiza arquivo/usuário/data em vez de criar outra. Os
+        // aparelhos que já existem nessa NF continuam ignorados (sem
+        // duplicar) e só entra o que faltava.
         emit({ tipo: "etapa", mensagem: "Registrando o lote..." });
-        const { data: lote, error: loteError } = await admin
+        const { data: loteExistente } = await admin
           .from("orcamentos_lotes")
-          .insert({
-            arquivo_nome: arquivo.name,
-            nf_remessa_allied: nfDoArquivo,
-            importado_por: user.id,
-            aparelhos_no_arquivo: linhasDados.length,
-          })
           .select("id")
-          .single();
+          .eq("nf_remessa_allied", nfDoArquivo)
+          .order("importado_em", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const dadosLote = {
+          arquivo_nome: arquivo.name,
+          nf_remessa_allied: nfDoArquivo,
+          importado_por: user.id,
+          aparelhos_no_arquivo: linhasDados.length,
+        };
+        const { data: lote, error: loteError } = loteExistente
+          ? await admin
+              .from("orcamentos_lotes")
+              .update({ ...dadosLote, importado_em: new Date().toISOString() })
+              .eq("id", loteExistente.id)
+              .select("id")
+              .single()
+          : await admin.from("orcamentos_lotes").insert(dadosLote).select("id").single();
+        if (loteExistente) {
+          emit({ tipo: "etapa", mensagem: `NF ${nfDoArquivo} já estava no histórico — a mesma linha será atualizada (sem criar outra).` });
+        }
 
         if (loteError || !lote) {
           emit({ tipo: "erro", mensagem: loteError?.message || "Não consegui registrar a importação." });

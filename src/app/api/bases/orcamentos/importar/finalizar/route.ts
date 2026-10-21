@@ -5,8 +5,8 @@ import { podeImportarOrcamentos } from "@/lib/orcamentos";
 // Fecha a importação da Base de Orçamentos (pedido explícito,
 // 21/10/2026) — preenche os números do histórico (Novos, Duplicados,
 // RRR, Modelos, SKUs) depois que todos os pacotes foram gravados (ver
-// importar/lote). Novos e RRR são contados direto no banco pelos
-// aparelhos ligados a esse lote, não pelo que a tela informou.
+// importar/lote). Novos e RRR são contados direto no banco por TODOS os
+// aparelhos da NF Remessa do lote, não pelo que a tela informou.
 export const maxDuration = 15;
 
 export async function POST(request: Request) {
@@ -29,9 +29,18 @@ export async function POST(request: Request) {
   const skus = Number(body?.skusUnicos ?? 0);
   if (!loteId) return NextResponse.json({ error: "Importação não informada." }, { status: 400 });
 
+  // conta TODOS os aparelhos da NF Remessa desse lote (uma NF = uma
+  // linha no histórico, mesmo que tenha entrado em mais de uma subida).
+  const { data: lote } = await admin.from("orcamentos_lotes").select("nf_remessa_allied").eq("id", loteId).single();
+  if (!lote) return NextResponse.json({ error: "Importação não encontrada." }, { status: 404 });
+
   const [{ count: novos }, { count: reincidentes }] = await Promise.all([
-    admin.from("orcamentos").select("id", { count: "exact", head: true }).eq("lote_id", loteId),
-    admin.from("orcamentos").select("id", { count: "exact", head: true }).eq("lote_id", loteId).eq("reincidente", true),
+    admin.from("orcamentos").select("id", { count: "exact", head: true }).eq("nf_remessa_allied", lote.nf_remessa_allied),
+    admin
+      .from("orcamentos")
+      .select("id", { count: "exact", head: true })
+      .eq("nf_remessa_allied", lote.nf_remessa_allied)
+      .eq("reincidente", true),
   ]);
 
   const aparelhosNovosInseridos = novos ?? 0;
