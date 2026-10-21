@@ -17,14 +17,14 @@ export const dynamic = "force-dynamic";
 // lotes menores que o antigo TAMANHO_LOTE (200) pra dar granularidade
 // real à barra de progresso ("atrelando item a item") sem estourar o
 // tempo de execução da function (limite do plano na Vercel).
-const TAMANHO_LOTE = 40;
 
 type Evento =
   | { tipo: "etapa"; mensagem: string }
   | { tipo: "validacao"; ok: boolean; mensagem: string }
   | { tipo: "progresso"; atual: number; total: number }
   | { tipo: "erro"; mensagem: string }
-  | { tipo: "concluido"; resultado: Record<string, number> };
+  | { tipo: "concluido"; resultado: Record<string, number> }
+  | { tipo: "preparado"; loteId: string; linhas: Record<string, unknown>[]; resumo: Record<string, number> };
 
 export async function POST(request: Request) {
   const supabase = createClient();
@@ -348,34 +348,16 @@ export async function POST(request: Request) {
           };
         });
 
-        emit({ tipo: "etapa", mensagem: `Gravando ${linhasComCalculo.length} aparelho(s)...` });
-        emit({ tipo: "progresso", atual: 0, total: linhasComCalculo.length });
-
-        let inseridos: { reincidente: boolean }[] = [];
-
-        for (let i = 0; i < linhasComCalculo.length; i += TAMANHO_LOTE) {
-          const pacote = linhasComCalculo.slice(i, i + TAMANHO_LOTE);
-          const { data, error } = await admin
-            .from("orcamentos")
-            .upsert(pacote, { onConflict: "nf_remessa_allied,trade_allied", ignoreDuplicates: true })
-            .select("reincidente");
-
-          if (error) {
-            emit({ tipo: "erro", mensagem: error.message });
-            controller.close();
-            return;
-          }
-          inseridos = inseridos.concat(data ?? []);
-          emit({
-            tipo: "progresso",
-            atual: Math.min(i + TAMANHO_LOTE, linhasComCalculo.length),
-            total: linhasComCalculo.length,
-          });
-        }
-
-        const aparelhosNovosInseridos = inseridos.length;
-        const aparelhosReincidentes = inseridos.filter((r) => r.reincidente).length;
-        const aparelhosDuplicadosIgnorados = linhasValidas.length - aparelhosNovosInseridos;
+        // A gravação dos aparelhos NÃO acontece mais aqui (pedido explícito,
+        // 21/10/2026): a importação da NF 1969657 parou em 120 de 174
+        // porque fazer tudo numa requisição só estourou o tempo máximo da
+        // Vercel — a função foi cortada no meio, sem "erro" nem
+        // "concluído" (mesmo problema já resolvido na Base GSPN). Agora
+        // esta rota só PREPARA (lê, valida, calcula, confere reincidência,
+        // registra o lote e guarda os arquivos) e devolve as linhas
+        // prontas; a tela grava em pacotes, uma requisição curta por
+        // pacote (importar/lote), e fecha com importar/finalizar, que
+        // preenche os números do histórico.
         const modelosComerciaisUnicos = new Set(linhasValidas.map((l) => l.modelo_comercial).filter(Boolean)).size;
         const skusUnicos = new Set(linhasValidas.map((l) => l.sku).filter(Boolean)).size;
 
@@ -384,23 +366,19 @@ export async function POST(request: Request) {
           .update({
             arquivo_path: uploadError ? null : caminhoArquivo,
             arquivo_pre_ordem_path: uploadErrorPreOrdem ? null : caminhoArquivoPreOrdem,
-            aparelhos_novos_inseridos: aparelhosNovosInseridos,
-            aparelhos_duplicados_ignorados: aparelhosDuplicadosIgnorados,
-            aparelhos_reincidentes: aparelhosReincidentes,
-            modelos_comerciais_unicos: modelosComerciaisUnicos,
-            skus_unicos: skusUnicos,
           })
           .eq("id", lote.id);
 
+        emit({ tipo: "etapa", mensagem: `Arquivos preparados — gravando ${linhasComCalculo.length} aparelho(s) em partes...` });
         emit({
-          tipo: "concluido",
-          resultado: {
+          tipo: "preparado",
+          loteId: lote.id,
+          linhas: linhasComCalculo,
+          resumo: {
             aparelhosNoArquivo: linhasDados.length,
             linhasInvalidas,
             duplicadasNoArquivo,
-            aparelhosNovosInseridos,
-            aparelhosDuplicadosIgnorados,
-            aparelhosReincidentes,
+            linhasValidas: linhasValidas.length,
             modelosComerciaisUnicos,
             skusUnicos,
           },

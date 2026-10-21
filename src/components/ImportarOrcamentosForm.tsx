@@ -24,7 +24,21 @@ type Evento =
   | { tipo: "validacao"; ok: boolean; mensagem: string }
   | { tipo: "progresso"; atual: number; total: number }
   | { tipo: "erro"; mensagem: string }
-  | { tipo: "concluido"; resultado: Resultado };
+  | { tipo: "concluido"; resultado: Resultado }
+  | { tipo: "preparado"; loteId: string; linhas: Record<string, unknown>[]; resumo: ResumoPreparado };
+
+type ResumoPreparado = {
+  aparelhosNoArquivo: number;
+  linhasInvalidas: number;
+  duplicadasNoArquivo: number;
+  linhasValidas: number;
+  modelosComerciaisUnicos: number;
+  skusUnicos: number;
+};
+
+// pacotes pequenos, uma requisição por pacote (pedido explícito,
+// 21/10/2026 — ver api/bases/orcamentos/importar/lote/route.ts).
+const TAMANHO_PACOTE = 40;
 
 export default function ImportarOrcamentosForm() {
   const router = useRouter();
@@ -78,6 +92,8 @@ export default function ImportarOrcamentosForm() {
       const decoder = new TextDecoder();
       let sobra = "";
       let concluiuComSucesso = false;
+      let preparado: { loteId: string; linhas: Record<string, unknown>[]; resumo: ResumoPreparado } | null = null;
+      let houveErro = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -103,13 +119,83 @@ export default function ImportarOrcamentosForm() {
           } else if (evento.tipo === "progresso") {
             setProgresso({ atual: evento.atual, total: evento.total });
           } else if (evento.tipo === "erro") {
+            houveErro = true;
             setErro(evento.mensagem);
+          } else if (evento.tipo === "preparado") {
+            preparado = { loteId: evento.loteId, linhas: evento.linhas, resumo: evento.resumo };
           } else if (evento.tipo === "concluido") {
             setResultado(evento.resultado);
             concluiuComSucesso = true;
           }
         }
       }
+
+      // a preparação terminou: grava os aparelhos em pacotes
+      if (preparado) {
+        const { loteId, linhas, resumo } = preparado;
+        setProgresso({ atual: 0, total: linhas.length });
+        let gravados = 0;
+        let falhou: string | null = null;
+        for (let i = 0; i < linhas.length; i += TAMANHO_PACOTE) {
+          const pacote = linhas.slice(i, i + TAMANHO_PACOTE);
+          try {
+            const resLote = await fetch("/api/bases/orcamentos/importar/lote", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ loteId, linhas: pacote }),
+            });
+            const dataLote = await resLote.json().catch(() => null);
+            if (!resLote.ok) {
+              falhou = dataLote?.error || "erro ao gravar um pacote";
+              break;
+            }
+          } catch {
+            falhou = "falha de conexão";
+            break;
+          }
+          gravados = Math.min(i + TAMANHO_PACOTE, linhas.length);
+          setProgresso({ atual: gravados, total: linhas.length });
+        }
+
+        // fecha o histórico mesmo se parou no meio — assim os números
+        // mostram o que de fato entrou.
+        const resFim = await fetch("/api/bases/orcamentos/importar/finalizar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            loteId,
+            linhasValidas: resumo.linhasValidas,
+            modelosComerciaisUnicos: resumo.modelosComerciaisUnicos,
+            skusUnicos: resumo.skusUnicos,
+          }),
+        }).catch(() => null);
+        const dataFim = resFim ? await resFim.json().catch(() => null) : null;
+
+        if (falhou) {
+          houveErro = true;
+          setErro(
+            `Importação interrompida (${falhou}) — gravados ${gravados} de ${linhas.length} aparelho(s). Suba os mesmos 2 arquivos de novo: os que já entraram são ignorados e só o que faltou é gravado.`
+          );
+        } else {
+          setResultado({
+            aparelhosNoArquivo: resumo.aparelhosNoArquivo,
+            linhasInvalidas: resumo.linhasInvalidas,
+            duplicadasNoArquivo: resumo.duplicadasNoArquivo,
+            aparelhosNovosInseridos: dataFim?.aparelhosNovosInseridos ?? 0,
+            aparelhosDuplicadosIgnorados: dataFim?.aparelhosDuplicadosIgnorados ?? 0,
+            aparelhosReincidentes: dataFim?.aparelhosReincidentes ?? 0,
+            modelosComerciaisUnicos: resumo.modelosComerciaisUnicos,
+            skusUnicos: resumo.skusUnicos,
+          });
+          concluiuComSucesso = true;
+        }
+      } else if (!concluiuComSucesso && !houveErro) {
+        // a requisição terminou sem "erro" nem resultado — foi cortada no meio
+        setErro(
+          "A importação foi interrompida antes de terminar (sem resposta do servidor). Suba os mesmos 2 arquivos de novo — o que já entrou não é duplicado."
+        );
+      }
+      if (houveErro) router.refresh();
 
       if (concluiuComSucesso) {
         if (inputRef.current) inputRef.current.value = "";
