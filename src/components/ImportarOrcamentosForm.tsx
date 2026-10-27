@@ -55,6 +55,10 @@ export default function ImportarOrcamentosForm() {
   const [nomeArquivoPreOrdem, setNomeArquivoPreOrdem] = useState<string | null>(null);
   // "Subir sem Pré-Ordem" (pedido explícito, 27/10/2026) — confirma antes
   const [confirmandoSemPreOrdem, setConfirmandoSemPreOrdem] = useState(false);
+  // NF Remessa temporária (pedido explícito, 27/10/2026): o servidor
+  // responde NF_VAZIA quando a coluna B vem vazia; a tela pergunta e
+  // reenvia com nfTemporaria=true.
+  const [confirmandoNfTemporaria, setConfirmandoNfTemporaria] = useState<{ semPreOrdem: boolean; mensagem: string } | null>(null);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -66,8 +70,9 @@ export default function ImportarOrcamentosForm() {
     enviar(false);
   }
 
-  async function enviar(semPreOrdem: boolean) {
+  async function enviar(semPreOrdem: boolean, nfTemporaria = false) {
     setConfirmandoSemPreOrdem(false);
+    setConfirmandoNfTemporaria(null);
     const arquivo = inputRef.current?.files?.[0];
     const arquivoPreOrdem = semPreOrdem ? null : inputPreOrdemRef.current?.files?.[0];
     if (!arquivo || (!semPreOrdem && !arquivoPreOrdem)) return;
@@ -82,6 +87,7 @@ export default function ImportarOrcamentosForm() {
     formData.append("arquivo", arquivo);
     if (arquivoPreOrdem) formData.append("arquivoPreOrdem", arquivoPreOrdem);
     if (semPreOrdem) formData.append("semPreOrdem", "true");
+    if (nfTemporaria) formData.append("nfTemporaria", "true");
 
     try {
       const res = await fetch("/api/bases/orcamentos/importar", { method: "POST", body: formData });
@@ -97,6 +103,11 @@ export default function ImportarOrcamentosForm() {
         // erros anteriores ao início do processamento (auth, permissão,
         // arquivo ausente/inválido) voltam como JSON simples, sem stream.
         const data = await res.json().catch(() => null);
+        if (data?.codigo === "NF_VAZIA") {
+          setConfirmandoNfTemporaria({ semPreOrdem, mensagem: data.error });
+          setEnviando(false);
+          return;
+        }
         setErro(data?.error || "Não foi possível importar a base.");
         setEnviando(false);
         return;
@@ -356,6 +367,22 @@ export default function ImportarOrcamentosForm() {
           rotuloConfirmar="Subir sem Pré-Ordem"
           onConfirmar={() => enviar(true)}
           onFechar={() => setConfirmandoSemPreOrdem(false)}
+        />
+      )}
+      {confirmandoNfTemporaria && (
+        <PopupConfirmar
+          titulo="Arquivo sem NF Remessa — criar NF temporária?"
+          mensagem={
+            <>
+              {confirmandoNfTemporaria.mensagem} Dá pra subir mesmo assim com uma <strong>NF temporária</strong> (TEMP + data
+              de hoje): os aparelhos entram em Ag. Abertura e seguem o fluxo normal. Só o <strong>Confirmar Envio</strong> da
+              Validação de Orçamentos fica bloqueado até a NF real. Quando chegar o arquivo definitivo (com a NF e, se
+              tiver, a Pré-Ordem), use <strong>Definir NF definitiva</strong> na linha dessa NF no histórico.
+            </>
+          }
+          rotuloConfirmar="Criar NF temporária e subir"
+          onConfirmar={() => enviar(confirmandoNfTemporaria.semPreOrdem, true)}
+          onFechar={() => setConfirmandoNfTemporaria(null)}
         />
       )}
     </div>

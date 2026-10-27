@@ -146,6 +146,16 @@ export function montarLinhasNaOrdemOriginal(...grupos: LinhaComOrdem[][]): Linha
  *   3) o BID precisa refletir o mesmo valor que a Base Peças tem agora.
  */
 export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): Promise<ResultadoPreparoEnvio> {
+  // NF temporária (pedido explícito, 27/10/2026 — migration 0080): a
+  // planilha da Allied leva a NF Remessa, então não envia até a NF real
+  // ser definida em Bases > Base Orçamentos > "Definir NF definitiva".
+  if (nfRemessa.toUpperCase().startsWith("TEMP-")) {
+    return {
+      ok: false,
+      status: 409,
+      erro: `A NF ${nfRemessa} é temporária — defina a NF definitiva em Bases > Base Orçamentos ("Definir NF definitiva") antes de confirmar o envio para a Allied.`,
+    };
+  }
   // .order("ordem_planilha") (pedido explícito): a planilha de envio pra
   // Allied tem que sair sempre na mesma ordem da planilha original de
   // Base de Orçamentos — sem isso, a ordem daqui saía arbitrária (sem

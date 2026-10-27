@@ -7,6 +7,7 @@ import {
   COL_NF_REMESSA_ALLIED,
   COL_SKU,
   conferirCabecalhoOrcamentos,
+  textoOuNull,
   type ConfiguracaoMaoDeObra,
   type LinhaOrcamentoImportada,
 } from "@/lib/orcamentos";
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
   // com a Base de Orçamentos e fica "Pré-Ordem pendente"; a Pré-Ordem é
   // casada depois (api/bases/orcamentos/pre-ordem).
   const semPreOrdem = formData.get("semPreOrdem") === "true";
-  const arquivoPreOrdem = arquivoPreOrdemBruto instanceof File && arquivoPreOrdemBruto.size > 0 ? arquivoPreOrdemBruto : null;
+  let arquivoPreOrdem = arquivoPreOrdemBruto instanceof File && arquivoPreOrdemBruto.size > 0 ? arquivoPreOrdemBruto : null;
 
   if (!(arquivo instanceof File)) {
     return Response.json({ error: "Envie o arquivo .xlsx da Base de Orçamentos." }, { status: 400 });
@@ -112,6 +113,56 @@ export async function POST(request: Request) {
   }
 
   const linhasDados = linhasBrutas.slice(1);
+
+  // NF Remessa TEMPORÁRIA (pedido explícito, 27/10/2026 — migration
+  // 0080): arquivo com a coluna B (NF Remessa Allied) vazia em TODAS as
+  // linhas pode subir mesmo assim; o sistema cria "TEMP-DDMMAAAA" (ou
+  // -2, -3...) e grava em todas as linhas. A tela pergunta antes
+  // (codigo NF_VAZIA → confirma → reenvia com nfTemporaria=true). NF
+  // vazia só em ALGUMAS linhas continua sendo erro.
+  let nfTemporariaGerada: string | null = null;
+  {
+    const nfs = linhasDados.map((l) => textoOuNull(l[COL_NF_REMESSA_ALLIED]));
+    const vazias = nfs.map((v, i) => (v ? null : i + 2)).filter((v): v is number => v !== null);
+    if (vazias.length > 0 && vazias.length < linhasDados.length) {
+      return Response.json(
+        {
+          error: `A coluna B (NF Remessa Allied) está vazia em ${vazias.length} linha(s) e preenchida nas outras (ex.: linhas ${vazias.slice(0, 10).join(", ")}). Preencha todas ou deixe todas vazias para usar uma NF temporária.`,
+        },
+        { status: 400 }
+      );
+    }
+    if (linhasDados.length > 0 && vazias.length === linhasDados.length) {
+      if (formData.get("nfTemporaria") !== "true") {
+        return Response.json(
+          {
+            codigo: "NF_VAZIA",
+            error: `O arquivo não tem a NF Remessa Allied (coluna B vazia nas ${linhasDados.length} linhas).`,
+          },
+          { status: 400 }
+        );
+      }
+      const adminTemp = createAdminClient();
+      const partes = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }).formatToParts(new Date());
+      const parte = (t: string) => partes.find((p) => p.type === t)?.value ?? "00";
+      const base = `TEMP-${parte("day")}${parte("month")}${parte("year")}`;
+      const { data: existentes } = await adminTemp.from("orcamentos_lotes").select("nf_remessa_allied").like("nf_remessa_allied", `${base}%`);
+      const usados = new Set((existentes ?? []).map((e: { nf_remessa_allied: string }) => e.nf_remessa_allied));
+      let candidato = base;
+      for (let n = 2; usados.has(candidato); n++) candidato = `${base}-${n}`;
+      nfTemporariaGerada = candidato;
+      for (const l of linhasDados) l[COL_NF_REMESSA_ALLIED] = candidato;
+      // Pré-Ordem não casa com NF temporária (a conferência de lote
+      // compara a NF) — entra depois, em "Definir NF definitiva".
+      arquivoPreOrdem = null;
+    }
+  }
+
   const linhasDadosPreOrdem = linhasBrutasPreOrdem.slice(1);
 
   const encoder = new TextEncoder();
@@ -124,6 +175,12 @@ export async function POST(request: Request) {
 
       try {
         emit({ tipo: "etapa", mensagem: `Arquivo de orçamentos lido: ${linhasDados.length} linha(s).` });
+        if (nfTemporariaGerada) {
+          emit({
+            tipo: "etapa",
+            mensagem: `Arquivo sem NF Remessa — criada a NF temporária ${nfTemporariaGerada}. Quando chegar o arquivo definitivo, use "Definir NF definitiva" no histórico.`,
+          });
+        }
         if (arquivoPreOrdem) {
           emit({ tipo: "etapa", mensagem: `Arquivo de Pré-Ordem lido: ${linhasDadosPreOrdem.length} linha(s).` });
         } else {
@@ -315,6 +372,7 @@ export async function POST(request: Request) {
           // estavam no sistema não são regravados aqui — a Pré-Ordem deles
           // entra pelo botão "Subir Pré-Ordem" do histórico.
           pre_ordem_pendente: !arquivoPreOrdem || (loteExistente?.pre_ordem_pendente ?? false),
+          nf_temporaria: nfTemporariaGerada !== null,
         };
         const { data: lote, error: loteError } = loteExistente
           ? await admin

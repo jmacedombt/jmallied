@@ -3,6 +3,7 @@ import AppShell from "@/components/AppShell";
 import ImportarOrcamentosForm from "@/components/ImportarOrcamentosForm";
 import BotaoSubirPreOrdem from "@/components/BotaoSubirPreOrdem";
 import BotaoExcluirLote from "@/components/BotaoExcluirLote";
+import BotaoDefinirNf from "@/components/BotaoDefinirNf";
 import { podeImportarOrcamentos, podeMovimentarOrcamentos } from "@/lib/orcamentos";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
@@ -24,6 +25,7 @@ type Lote = {
   modelos_comerciais_unicos: number;
   skus_unicos: number;
   pre_ordem_pendente: boolean;
+  nf_temporaria: boolean;
   usuarios: { nome: string; sobrenome: string } | { nome: string; sobrenome: string }[] | null;
 };
 
@@ -48,7 +50,7 @@ export default async function OrcamentosPage() {
     supabase
       .from("orcamentos_lotes")
       .select(
-        "id, nf_remessa_allied, importado_em, aparelhos_no_arquivo, aparelhos_novos_inseridos, aparelhos_duplicados_ignorados, aparelhos_reincidentes, modelos_comerciais_unicos, skus_unicos, pre_ordem_pendente, usuarios:importado_por (nome, sobrenome)"
+        "id, nf_remessa_allied, importado_em, aparelhos_no_arquivo, aparelhos_novos_inseridos, aparelhos_duplicados_ignorados, aparelhos_reincidentes, modelos_comerciais_unicos, skus_unicos, pre_ordem_pendente, nf_temporaria, usuarios:importado_por (nome, sobrenome)"
       )
       .order("importado_em", { ascending: false })
       .limit(20) as unknown as Promise<{ data: Lote[] | null }>,
@@ -124,12 +126,20 @@ export default async function OrcamentosPage() {
                     {lote.modelos_comerciais_unicos}
                   </td>
                   <td className="px-4 py-2.5">
-                    <BotaoSubirPreOrdem
-                      loteId={lote.id}
-                      nfRemessa={lote.nf_remessa_allied}
-                      pendente={!!lote.pre_ordem_pendente}
-                      podeSubir={podeImportarOrcamentos(perfil)}
-                    />
+                    {lote.nf_temporaria ? (
+                      <BotaoDefinirNf
+                        loteId={lote.id}
+                        nfTemporaria={lote.nf_remessa_allied}
+                        podeSubir={podeImportarOrcamentos(perfil)}
+                      />
+                    ) : (
+                      <BotaoSubirPreOrdem
+                        loteId={lote.id}
+                        nfRemessa={lote.nf_remessa_allied}
+                        pendente={!!lote.pre_ordem_pendente}
+                        podeSubir={podeImportarOrcamentos(perfil)}
+                      />
+                    )}
                   </td>
                   {podeMovimentarOrcamentos(perfil) && (
                     <td className="px-4 py-2.5 text-right">

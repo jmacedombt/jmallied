@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { podeImportarOrcamentos, textoOuNull, COL_NF_REMESSA_ALLIED, COL_SKU, COL_TRADE_ALLIED } from "@/lib/orcamentos";
-import { validarParPreOrdem, extrairValoresPreOrdem } from "@/lib/preOrdem";
+import { podeImportarOrcamentos } from "@/lib/orcamentos";
+import { conferirParPreOrdem, aplicarPreOrdemNaNf } from "@/lib/preOrdemAplicar";
 
 export const maxDuration = 30;
 
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
   const { data: lote } = await admin
     .from("orcamentos_lotes")
-    .select("id, nf_remessa_allied, arquivo_path")
+    .select("id, nf_remessa_allied, arquivo_path, nf_temporaria")
     .eq("id", loteId)
     .single();
   if (!lote) return NextResponse.json({ error: "NF não encontrada no histórico." }, { status: 404 });
@@ -65,79 +65,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não consegui ler o arquivo de Pré-Ordem. Confirme que é uma planilha válida." }, { status: 400 });
   }
 
-  const validacao = validarParPreOrdem(linhasOrcamento, linhasPreOrdem, COL_NF_REMESSA_ALLIED, COL_SKU);
-  if (!validacao.ok) {
-    if (validacao.motivo === "quantidade") {
-      return NextResponse.json(
-        {
-          error: `Quantidade de linhas diferente: ${validacao.linhasOrcamento} na Base de Orçamentos da NF ${lote.nf_remessa_allied} e ${validacao.linhasPreOrdem} na Pré-Ordem. Nada foi gravado.`,
-        },
-        { status: 400 }
-      );
-    }
-    const oQue = validacao.motivo === "lote" ? "O lote (NF Remessa)" : "O SKU";
-    const exemplos = validacao.divergencias
-      .slice(0, 10)
-      .map((d) => `linha ${d.linha}: orçamentos="${d.valorOrcamento ?? "—"}" / pré-ordem="${d.valorPreOrdem ?? "—"}"`)
-      .join("; ");
+  if (lote.nf_temporaria) {
     return NextResponse.json(
-      {
-        error: `${oQue} não bate em ${validacao.totalDivergencias} linha(s) — confira se é a Pré-Ordem dessa NF e se está na mesma ordem. Nada foi gravado. Ex.: ${exemplos}.`,
-      },
-      { status: 400 }
+      { error: "Essa NF ainda é temporária — use \"Definir NF definitiva\" e suba a Pré-Ordem junto com a Base definitiva." },
+      { status: 409 }
     );
   }
 
-  // Trade Allied (chave do aparelho dentro da NF) → Pré-Ordem da mesma posição
-  const valores = extrairValoresPreOrdem(linhasPreOrdem);
-  const preOrdemPorTrade = new Map<string, string | null>();
-  linhasOrcamento.forEach((linha, i) => {
-    const trade = textoOuNull(linha[COL_TRADE_ALLIED]);
-    if (trade && !preOrdemPorTrade.has(trade)) preOrdemPorTrade.set(trade, valores[i] ?? null);
-  });
+  const erroPar = conferirParPreOrdem(linhasOrcamento, linhasPreOrdem, lote.nf_remessa_allied);
+  if (erroPar) return NextResponse.json({ error: erroPar }, { status: 400 });
 
-  const { data: aparelhos, error: erroAparelhos } = await admin
-    .from("orcamentos")
-    .select("id, trade_allied, pre_ordem, status_operacional")
-    .eq("nf_remessa_allied", lote.nf_remessa_allied);
-  if (erroAparelhos) return NextResponse.json({ error: erroAparelhos.message }, { status: 400 });
-
-  type Mudanca = { id: string; trade: string; anterior: string | null; novo: string | null };
-  const mudancas: Mudanca[] = [];
-  let semPreOrdemNoArquivo = 0;
-  let jaIguais = 0;
-  let foraDoArquivo = 0;
-  for (const a of aparelhos ?? []) {
-    if (!preOrdemPorTrade.has(a.trade_allied)) {
-      foraDoArquivo += 1;
-      continue;
-    }
-    const novo = preOrdemPorTrade.get(a.trade_allied) ?? null;
-    if (!novo) {
-      semPreOrdemNoArquivo += 1;
-      continue;
-    }
-    if ((a.pre_ordem ?? null) === novo) jaIguais += 1;
-    else mudancas.push({ id: a.id, trade: a.trade_allied, anterior: a.pre_ordem ?? null, novo });
-  }
-
-  // grava em pequenos grupos em paralelo (rápido, sem estourar o tempo da Vercel)
-  const falhas: string[] = [];
-  for (let i = 0; i < mudancas.length; i += 20) {
-    const grupo = mudancas.slice(i, i + 20);
-    const resultados = await Promise.all(
-      grupo.map((m) => admin.from("orcamentos").update({ pre_ordem: m.novo }).eq("id", m.id))
-    );
-    resultados.forEach((r, idx) => {
-      if (r.error) falhas.push(grupo[idx].trade);
-    });
-  }
-  if (falhas.length > 0) {
-    return NextResponse.json(
-      { error: `Não consegui gravar a Pré-Ordem de ${falhas.length} aparelho(s) (ex.: ${falhas.slice(0, 5).join(", ")}). Tente de novo — o que já foi gravado não duplica.` },
-      { status: 400 }
-    );
-  }
+  const aplicado = await aplicarPreOrdemNaNf(admin, lote.nf_remessa_allied, linhasOrcamento, linhasPreOrdem);
+  if (!aplicado.ok) return NextResponse.json({ error: aplicado.erro }, { status: 400 });
 
   const agora = new Date().toISOString();
   const caminhoPreOrdem = `${lote.id}/pre-ordem-${arquivoPreOrdem.name}`;
@@ -158,16 +97,5 @@ export async function POST(request: Request) {
     })
     .eq("id", lote.id);
 
-  const preenchidas = mudancas.filter((m) => !m.anterior).length;
-  const substituidas = mudancas.filter((m) => m.anterior);
-
-  return NextResponse.json({
-    nfRemessa: lote.nf_remessa_allied,
-    aparelhosNaNf: (aparelhos ?? []).length,
-    preenchidas,
-    substituidas: substituidas.map((m) => ({ trade: m.trade, anterior: m.anterior, novo: m.novo })),
-    jaIguais,
-    semPreOrdemNoArquivo,
-    foraDoArquivo,
-  });
+  return NextResponse.json({ nfRemessa: lote.nf_remessa_allied, ...aplicado.resultado });
 }
