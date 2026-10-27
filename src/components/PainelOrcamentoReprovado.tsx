@@ -331,7 +331,15 @@ export default function PainelOrcamentoReprovado({
                     className="px-4 py-2.5 font-semibold"
                     style={{ background: "rgba(250, 204, 21, 0.14)", color: "var(--ink)" }}
                   >
-                    {a.pre_ordem || "—"}
+                    {a.pre_ordem || (
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap"
+                        style={{ color: "#d97706", background: "rgba(217, 119, 6, 0.14)" }}
+                        title="NF importada sem a Pré-Ordem — suba o arquivo em Bases > Base Orçamentos"
+                      >
+                        Pré-Ordem pendente
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2.5" style={{ color: "#ef4444" }} title={a.motivo_reprova ?? ""}>
                     {a.motivo_reprova || "—"}

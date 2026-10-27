@@ -175,7 +175,15 @@ export default function PopupDetalheGrupoNf({
                       {a.sku}
                     </td>
                     <td className="px-2.5 py-2 font-semibold whitespace-nowrap" style={{ background: "rgba(250, 204, 21, 0.14)", color: "var(--ink)" }}>
-                      {a.pre_ordem || "—"}
+                      {a.pre_ordem || (
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap"
+                        style={{ color: "#d97706", background: "rgba(217, 119, 6, 0.14)" }}
+                        title="NF importada sem a Pré-Ordem — suba o arquivo em Bases > Base Orçamentos"
+                      >
+                        Pré-Ordem pendente
+                      </span>
+                    )}
                     </td>
                     <td className="px-2.5 py-2 text-right whitespace-nowrap" style={{ color: "var(--ink)" }}>
                       {formatarReal(a.maoDeObra)}

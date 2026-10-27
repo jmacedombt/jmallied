@@ -48,12 +48,17 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const arquivo = formData.get("arquivo");
-  const arquivoPreOrdem = formData.get("arquivoPreOrdem");
+  const arquivoPreOrdemBruto = formData.get("arquivoPreOrdem");
+  // "Subir sem Pré-Ordem" (pedido explícito, 27/10/2026): a NF entra só
+  // com a Base de Orçamentos e fica "Pré-Ordem pendente"; a Pré-Ordem é
+  // casada depois (api/bases/orcamentos/pre-ordem).
+  const semPreOrdem = formData.get("semPreOrdem") === "true";
+  const arquivoPreOrdem = arquivoPreOrdemBruto instanceof File && arquivoPreOrdemBruto.size > 0 ? arquivoPreOrdemBruto : null;
 
   if (!(arquivo instanceof File)) {
     return Response.json({ error: "Envie o arquivo .xlsx da Base de Orçamentos." }, { status: 400 });
   }
-  if (!(arquivoPreOrdem instanceof File)) {
+  if (!arquivoPreOrdem && !semPreOrdem) {
     return Response.json(
       { error: "Envie também o arquivo .xlsx de Pré-Ordem (gerado no N3) — os dois sobem juntos." },
       { status: 400 }
@@ -61,10 +66,10 @@ export async function POST(request: Request) {
   }
 
   const bytes = Buffer.from(await arquivo.arrayBuffer());
-  const bytesPreOrdem = Buffer.from(await arquivoPreOrdem.arrayBuffer());
+  const bytesPreOrdem = arquivoPreOrdem ? Buffer.from(await arquivoPreOrdem.arrayBuffer()) : null;
 
   let linhasBrutas: unknown[][];
-  let linhasBrutasPreOrdem: unknown[][];
+  let linhasBrutasPreOrdem: unknown[][] = [];
   try {
     const workbook = XLSX.read(bytes, { type: "buffer", cellDates: true });
     const planilha = workbook.Sheets[workbook.SheetNames[0]];
@@ -76,9 +81,11 @@ export async function POST(request: Request) {
     );
   }
   try {
-    const workbookPre = XLSX.read(bytesPreOrdem, { type: "buffer", cellDates: true });
-    const planilhaPre = workbookPre.Sheets[workbookPre.SheetNames[0]];
-    linhasBrutasPreOrdem = XLSX.utils.sheet_to_json(planilhaPre, { header: 1, blankrows: false }) as unknown[][];
+    if (bytesPreOrdem) {
+      const workbookPre = XLSX.read(bytesPreOrdem, { type: "buffer", cellDates: true });
+      const planilhaPre = workbookPre.Sheets[workbookPre.SheetNames[0]];
+      linhasBrutasPreOrdem = XLSX.utils.sheet_to_json(planilhaPre, { header: 1, blankrows: false }) as unknown[][];
+    }
   } catch {
     return Response.json(
       { error: "Não consegui ler o arquivo de Pré-Ordem. Confirme que é uma planilha .xlsx válida." },
@@ -99,75 +106,84 @@ export async function POST(request: Request) {
 
       try {
         emit({ tipo: "etapa", mensagem: `Arquivo de orçamentos lido: ${linhasDados.length} linha(s).` });
-        emit({ tipo: "etapa", mensagem: `Arquivo de Pré-Ordem lido: ${linhasDadosPreOrdem.length} linha(s).` });
-
-        // ---- validações do par (linha bruta a bruta, por posição) ----
-        const validacao = validarParPreOrdem(linhasDados, linhasDadosPreOrdem, COL_NF_REMESSA_ALLIED, COL_SKU);
-
-        if (!validacao.ok && validacao.motivo === "quantidade") {
+        if (arquivoPreOrdem) {
+          emit({ tipo: "etapa", mensagem: `Arquivo de Pré-Ordem lido: ${linhasDadosPreOrdem.length} linha(s).` });
+        } else {
           emit({
-            tipo: "validacao",
-            ok: false,
-            mensagem: `Quantidade de linhas diferente: ${validacao.linhasOrcamento} na Base de Orçamentos e ${validacao.linhasPreOrdem} na Pré-Ordem.`,
+            tipo: "etapa",
+            mensagem: "Subindo SEM Pré-Ordem — a NF fica \"Pré-Ordem pendente\" até o arquivo ser subido no histórico.",
           });
-          emit({
-            tipo: "erro",
-            mensagem:
-              "Os dois arquivos não têm a mesma quantidade de linhas — confira se são do mesmo lote antes de subir de novo.",
-          });
-          controller.close();
-          return;
         }
-        emit({ tipo: "validacao", ok: true, mensagem: "Quantidade de linhas confere nos dois arquivos." });
 
-        if (!validacao.ok && validacao.motivo === "lote") {
-          const exemplos = validacao.divergencias
-            .slice(0, 5)
-            .map((d) => `linha ${d.linha}: orçamentos="${d.valorOrcamento ?? "—"}" / pré-ordem="${d.valorPreOrdem ?? "—"}"`)
-            .join("; ");
-          emit({
-            tipo: "validacao",
-            ok: false,
-            mensagem: `O lote (NF Remessa) não é o mesmo em ${validacao.totalDivergencias} linha(s). Ex.: ${exemplos}.`,
-          });
-          emit({
-            tipo: "erro",
-            mensagem:
-              "O lote não é o mesmo nos dois arquivos — confira se a Pré-Ordem baixada no N3 é da mesma NF Remessa antes de subir de novo.",
-          });
-          controller.close();
-          return;
-        }
-        emit({ tipo: "validacao", ok: true, mensagem: "Lote (NF Remessa) confere em todas as linhas." });
+        if (arquivoPreOrdem) {
+          // ---- validações do par (linha bruta a bruta, por posição) ----
+          const validacao = validarParPreOrdem(linhasDados, linhasDadosPreOrdem, COL_NF_REMESSA_ALLIED, COL_SKU);
 
-        if (!validacao.ok && validacao.motivo === "sku") {
-          const exemplos = validacao.divergencias
-            .slice(0, 5)
-            .map((d) => `linha ${d.linha}: orçamentos="${d.valorOrcamento ?? "—"}" / pré-ordem="${d.valorPreOrdem ?? "—"}"`)
-            .join("; ");
-          emit({
-            tipo: "validacao",
-            ok: false,
-            mensagem: `O SKU não bate em ${validacao.totalDivergencias} linha(s). Ex.: ${exemplos}.`,
-          });
-          emit({
-            tipo: "erro",
-            mensagem:
-              "O SKU não bate entre os dois arquivos nessas linhas — os arquivos podem estar fora de ordem. Confira antes de subir de novo.",
-          });
-          controller.close();
-          return;
+          if (!validacao.ok && validacao.motivo === "quantidade") {
+            emit({
+              tipo: "validacao",
+              ok: false,
+              mensagem: `Quantidade de linhas diferente: ${validacao.linhasOrcamento} na Base de Orçamentos e ${validacao.linhasPreOrdem} na Pré-Ordem.`,
+            });
+            emit({
+              tipo: "erro",
+              mensagem:
+                "Os dois arquivos não têm a mesma quantidade de linhas — confira se são do mesmo lote antes de subir de novo.",
+            });
+            controller.close();
+            return;
+          }
+          emit({ tipo: "validacao", ok: true, mensagem: "Quantidade de linhas confere nos dois arquivos." });
+
+          if (!validacao.ok && validacao.motivo === "lote") {
+            const exemplos = validacao.divergencias
+              .slice(0, 5)
+              .map((d) => `linha ${d.linha}: orçamentos="${d.valorOrcamento ?? "—"}" / pré-ordem="${d.valorPreOrdem ?? "—"}"`)
+              .join("; ");
+            emit({
+              tipo: "validacao",
+              ok: false,
+              mensagem: `O lote (NF Remessa) não é o mesmo em ${validacao.totalDivergencias} linha(s). Ex.: ${exemplos}.`,
+            });
+            emit({
+              tipo: "erro",
+              mensagem:
+                "O lote não é o mesmo nos dois arquivos — confira se a Pré-Ordem baixada no N3 é da mesma NF Remessa antes de subir de novo.",
+            });
+            controller.close();
+            return;
+          }
+          emit({ tipo: "validacao", ok: true, mensagem: "Lote (NF Remessa) confere em todas as linhas." });
+
+          if (!validacao.ok && validacao.motivo === "sku") {
+            const exemplos = validacao.divergencias
+              .slice(0, 5)
+              .map((d) => `linha ${d.linha}: orçamentos="${d.valorOrcamento ?? "—"}" / pré-ordem="${d.valorPreOrdem ?? "—"}"`)
+              .join("; ");
+            emit({
+              tipo: "validacao",
+              ok: false,
+              mensagem: `O SKU não bate em ${validacao.totalDivergencias} linha(s). Ex.: ${exemplos}.`,
+            });
+            emit({
+              tipo: "erro",
+              mensagem:
+                "O SKU não bate entre os dois arquivos nessas linhas — os arquivos podem estar fora de ordem. Confira antes de subir de novo.",
+            });
+            controller.close();
+            return;
+          }
+          emit({ tipo: "validacao", ok: true, mensagem: "SKU confere em todas as linhas." });
         }
-        emit({ tipo: "validacao", ok: true, mensagem: "SKU confere em todas as linhas." });
 
         // ---- lê cada linha já com o valor de pré-ordem atrelado pela MESMA posição ----
         emit({ tipo: "etapa", mensagem: "Atrelando Pré-Ordem às linhas e validando cada aparelho..." });
-        const valoresPreOrdem = extrairValoresPreOrdem(linhasDadosPreOrdem);
+        const valoresPreOrdem: (string | null)[] = arquivoPreOrdem ? extrairValoresPreOrdem(linhasDadosPreOrdem) : [];
 
         const linhasValidas: LinhaOrcamentoImportada[] = [];
         let linhasInvalidas = 0;
         for (let i = 0; i < linhasDados.length; i++) {
-          const lida = lerLinhaOrcamento(linhasDados[i], valoresPreOrdem[i]);
+          const lida = lerLinhaOrcamento(linhasDados[i], valoresPreOrdem[i] ?? null);
           if (!lida) {
             linhasInvalidas += 1;
             continue;
@@ -265,7 +281,7 @@ export async function POST(request: Request) {
         emit({ tipo: "etapa", mensagem: "Registrando o lote..." });
         const { data: loteExistente } = await admin
           .from("orcamentos_lotes")
-          .select("id")
+          .select("id, pre_ordem_pendente")
           .eq("nf_remessa_allied", nfDoArquivo)
           .order("importado_em", { ascending: false })
           .limit(1)
@@ -276,6 +292,11 @@ export async function POST(request: Request) {
           nf_remessa_allied: nfDoArquivo,
           importado_por: user.id,
           aparelhos_no_arquivo: linhasDados.length,
+          // sem Pré-Ordem → pendente. Com Pré-Ordem numa NF que já existia
+          // e estava pendente, continua pendente: os aparelhos que já
+          // estavam no sistema não são regravados aqui — a Pré-Ordem deles
+          // entra pelo botão "Subir Pré-Ordem" do histórico.
+          pre_ordem_pendente: !arquivoPreOrdem || (loteExistente?.pre_ordem_pendente ?? false),
         };
         const { data: lote, error: loteError } = loteExistente
           ? await admin
@@ -296,16 +317,18 @@ export async function POST(request: Request) {
         }
 
         const caminhoArquivo = `${lote.id}/${arquivo.name}`;
-        const caminhoArquivoPreOrdem = `${lote.id}/pre-ordem-${arquivoPreOrdem.name}`;
+        const caminhoArquivoPreOrdem = arquivoPreOrdem ? `${lote.id}/pre-ordem-${arquivoPreOrdem.name}` : null;
         const [{ error: uploadError }, { error: uploadErrorPreOrdem }] = await Promise.all([
           admin.storage.from("bases-orcamentos").upload(caminhoArquivo, bytes, {
             contentType: arquivo.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             upsert: true,
           }),
-          admin.storage.from("bases-orcamentos").upload(caminhoArquivoPreOrdem, bytesPreOrdem, {
-            contentType: arquivoPreOrdem.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            upsert: true,
-          }),
+          arquivoPreOrdem && bytesPreOrdem && caminhoArquivoPreOrdem
+            ? admin.storage.from("bases-orcamentos").upload(caminhoArquivoPreOrdem, bytesPreOrdem, {
+                contentType: arquivoPreOrdem.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                upsert: true,
+              })
+            : Promise.resolve({ error: null }),
         ]);
 
         // `indice` = posição desse aparelho dentro do arquivo (já sem
@@ -386,7 +409,9 @@ export async function POST(request: Request) {
           .from("orcamentos_lotes")
           .update({
             arquivo_path: uploadError ? null : caminhoArquivo,
-            arquivo_pre_ordem_path: uploadErrorPreOrdem ? null : caminhoArquivoPreOrdem,
+            // sem Pré-Ordem: mantém o caminho que já existia (se a NF
+            // já tinha Pré-Ordem de uma subida anterior)
+            ...(caminhoArquivoPreOrdem ? { arquivo_pre_ordem_path: uploadErrorPreOrdem ? null : caminhoArquivoPreOrdem } : {}),
           })
           .eq("id", lote.id);
 

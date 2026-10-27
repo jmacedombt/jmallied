@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ImportarOrcamentosForm from "@/components/ImportarOrcamentosForm";
+import BotaoSubirPreOrdem from "@/components/BotaoSubirPreOrdem";
 import { podeImportarOrcamentos } from "@/lib/orcamentos";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
@@ -21,6 +22,7 @@ type Lote = {
   aparelhos_reincidentes: number;
   modelos_comerciais_unicos: number;
   skus_unicos: number;
+  pre_ordem_pendente: boolean;
   usuarios: { nome: string; sobrenome: string } | { nome: string; sobrenome: string }[] | null;
 };
 
@@ -45,7 +47,7 @@ export default async function OrcamentosPage() {
     supabase
       .from("orcamentos_lotes")
       .select(
-        "id, nf_remessa_allied, importado_em, aparelhos_no_arquivo, aparelhos_novos_inseridos, aparelhos_duplicados_ignorados, aparelhos_reincidentes, modelos_comerciais_unicos, skus_unicos, usuarios:importado_por (nome, sobrenome)"
+        "id, nf_remessa_allied, importado_em, aparelhos_no_arquivo, aparelhos_novos_inseridos, aparelhos_duplicados_ignorados, aparelhos_reincidentes, modelos_comerciais_unicos, skus_unicos, pre_ordem_pendente, usuarios:importado_por (nome, sobrenome)"
       )
       .order("importado_em", { ascending: false })
       .limit(20) as unknown as Promise<{ data: Lote[] | null }>,
@@ -83,6 +85,7 @@ export default async function OrcamentosPage() {
               <th className="px-4 py-2.5 font-medium">Duplicados</th>
               <th className="px-4 py-2.5 font-medium">RRR</th>
               <th className="px-4 py-2.5 font-medium">Modelos</th>
+              <th className="px-4 py-2.5 font-medium">Pré-Ordem</th>
             </tr>
           </thead>
           <tbody>
@@ -118,13 +121,21 @@ export default async function OrcamentosPage() {
                   <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
                     {lote.modelos_comerciais_unicos}
                   </td>
+                  <td className="px-4 py-2.5">
+                    <BotaoSubirPreOrdem
+                      loteId={lote.id}
+                      nfRemessa={lote.nf_remessa_allied}
+                      pendente={!!lote.pre_ordem_pendente}
+                      podeSubir={podeImportarOrcamentos(perfil)}
+                    />
+                  </td>
                 </tr>
               );
             })}
 
             {(!lotes || lotes.length === 0) && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
+                <td colSpan={9} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
                   Nenhuma importação realizada ainda.
                 </td>
               </tr>

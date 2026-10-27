@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Info, UploadCloud, XCircle } from "lucide-react";
 import BarraProgresso from "@/components/BarraProgresso";
+import PopupConfirmar from "@/components/PopupConfirmar";
 import { EXPLICACAO_PRE_ORDEM } from "@/lib/preOrdem";
 
 type Resultado = {
@@ -52,12 +53,24 @@ export default function ImportarOrcamentosForm() {
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [nomeArquivo, setNomeArquivo] = useState<string | null>(null);
   const [nomeArquivoPreOrdem, setNomeArquivoPreOrdem] = useState<string | null>(null);
+  // "Subir sem Pré-Ordem" (pedido explícito, 27/10/2026) — confirma antes
+  const [confirmandoSemPreOrdem, setConfirmandoSemPreOrdem] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!inputRef.current?.files?.[0]) return;
+    if (!inputPreOrdemRef.current?.files?.[0]) {
+      setConfirmandoSemPreOrdem(true);
+      return;
+    }
+    enviar(false);
+  }
+
+  async function enviar(semPreOrdem: boolean) {
+    setConfirmandoSemPreOrdem(false);
     const arquivo = inputRef.current?.files?.[0];
-    const arquivoPreOrdem = inputPreOrdemRef.current?.files?.[0];
-    if (!arquivo || !arquivoPreOrdem) return;
+    const arquivoPreOrdem = semPreOrdem ? null : inputPreOrdemRef.current?.files?.[0];
+    if (!arquivo || (!semPreOrdem && !arquivoPreOrdem)) return;
 
     setEnviando(true);
     setLog([]);
@@ -67,7 +80,8 @@ export default function ImportarOrcamentosForm() {
 
     const formData = new FormData();
     formData.append("arquivo", arquivo);
-    formData.append("arquivoPreOrdem", arquivoPreOrdem);
+    if (arquivoPreOrdem) formData.append("arquivoPreOrdem", arquivoPreOrdem);
+    if (semPreOrdem) formData.append("semPreOrdem", "true");
 
     try {
       const res = await fetch("/api/bases/orcamentos/importar", { method: "POST", body: formData });
@@ -258,7 +272,7 @@ export default function ImportarOrcamentosForm() {
 
         <button
           type="submit"
-          disabled={enviando || !nomeArquivo || !nomeArquivoPreOrdem}
+          disabled={enviando || !nomeArquivo}
           className="rounded-lg bg-[var(--accent)] hover:bg-[var(--accent2)] disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 transition"
           style={{ boxShadow: "0 0 40px var(--accent-glow)" }}
         >
@@ -266,6 +280,8 @@ export default function ImportarOrcamentosForm() {
         </button>
 
         <p className="text-xs w-full" style={{ color: "var(--muted)" }}>
+          Sem o arquivo de Pré-Ordem em mãos? Dá pra subir só a Base de Orçamentos — a NF fica &quot;Pré-Ordem pendente&quot;
+          e a Pré-Ordem é subida depois, no histórico abaixo.{" "}
           Um par de arquivos = uma NF Remessa Allied. A base acumula entre importações — o mesmo aparelho numa NF nova
           é marcado como reincidente (RRR).
         </p>
@@ -325,6 +341,22 @@ export default function ImportarOrcamentosForm() {
             {resultado.modelosComerciaisUnicos} modelo(s) comercial(is) · {resultado.skusUnicos} SKU(s) únicos.
           </p>
         </div>
+      )}
+      {confirmandoSemPreOrdem && (
+        <PopupConfirmar
+          titulo="Subir sem a Pré-Ordem?"
+          mensagem={
+            <>
+              Você escolheu só a <strong>Base de Orçamentos</strong> ({nomeArquivo}). Os aparelhos entram normalmente em Ag.
+              Abertura, mas a NF fica marcada como <strong>&quot;Pré-Ordem pendente&quot;</strong>. Quando o arquivo de
+              Pré-Ordem chegar, use o botão <strong>Subir Pré-Ordem</strong> na linha dessa NF no histórico — ele casa na
+              mesma ordem, com a mesma conferência de lote e SKU, e atualiza todos os aparelhos da NF.
+            </>
+          }
+          rotuloConfirmar="Subir sem Pré-Ordem"
+          onConfirmar={() => enviar(true)}
+          onFechar={() => setConfirmandoSemPreOrdem(false)}
+        />
       )}
     </div>
   );

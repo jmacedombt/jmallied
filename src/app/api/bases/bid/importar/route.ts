@@ -83,6 +83,30 @@ export async function POST(request: Request) {
     );
   }
 
+  // Trava de formato (pedido explícito, 26/10/2026 — subiram arquivos
+  // "ServiceOrderList" do GSPN aqui por engano e o "SO Nro." virou Part
+  // Number): o cabeçalho tem que ser o do BID padronizado da Allied —
+  // coluna B com "Part Number" e coluna C com "Peça Solução". Qualquer
+  // outro arquivo é recusado ANTES de gravar qualquer coisa.
+  const normalizar = (v: unknown) =>
+    String(v ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  const cabecalho = linhasBrutas[0] ?? [];
+  const colunaB = normalizar(cabecalho[COL_BID_PART_NUMBER]);
+  const colunaC = normalizar(cabecalho[COL_BID_PECA_SOLUCAO]);
+  if (!colunaB.includes("PART") || !colunaC.includes("SOLU")) {
+    return NextResponse.json(
+      {
+        error: `Esse arquivo não está no formato do BID — a coluna B deveria ser "Part Number" e a C "Peça Solução" (veio "${String(cabecalho[COL_BID_PART_NUMBER] ?? "vazio")}" e "${String(cabecalho[COL_BID_PECA_SOLUCAO] ?? "vazio")}"). Nada foi importado.`,
+      },
+      { status: 400 }
+    );
+  }
+
   const linhasDados = linhasBrutas.slice(1);
 
   // Modelo (coluna A) às vezes vem em branco em linhas que são, na

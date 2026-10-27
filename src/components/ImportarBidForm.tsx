@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Info, RefreshCcw, UploadCloud } from "lucide-react";
 import { uploadComProgresso } from "@/lib/uploadComProgresso";
 import BarraProgresso from "@/components/BarraProgresso";
+import PopupConfirmar from "@/components/PopupConfirmar";
 
 type Resultado = {
   linhasNoArquivo: number;
@@ -43,9 +44,21 @@ export default function ImportarBidForm() {
   const [recalculando, setRecalculando] = useState(false);
   const [resultadoRecalculo, setResultadoRecalculo] = useState<string | null>(null);
   const [divergencias, setDivergencias] = useState<Divergencia[] | null>(null);
+  // aviso "somente carga inicial" (pedido explícito, 26/10/2026) — o
+  // Carregar BID só sobe depois de confirmar nesse pop-up.
+  const [confirmandoCarga, setConfirmandoCarga] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!inputRef.current?.files?.[0]) {
+      setErro("Escolha o arquivo .xlsx do BID primeiro.");
+      return;
+    }
+    setConfirmandoCarga(true);
+  }
+
+  async function enviarBid() {
+    setConfirmandoCarga(false);
     const arquivo = inputRef.current?.files?.[0];
     if (!arquivo) return;
 
@@ -133,6 +146,7 @@ async function recalcular(confirmarDivergencias = false) {
         <button
           type="submit"
           disabled={carregando}
+          title="Somente para a carga inicial do BID"
           className="rounded-lg bg-[var(--accent)] hover:bg-[var(--accent2)] disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 transition"
           style={{ boxShadow: "0 0 40px var(--accent-glow)" }}
         >
@@ -270,6 +284,22 @@ async function recalcular(confirmarDivergencias = false) {
             </div>
           </div>
         </div>
+      )}
+      {confirmandoCarga && (
+        <PopupConfirmar
+          titulo="Atenção: somente carga inicial"
+          mensagem={
+            <>
+              O botão <strong>Carregar BID</strong> é para ser usado <strong>somente na carga inicial</strong> do BID, com o
+              arquivo padrão da Allied (colunas: Peças, Part Number, Peça Solução). Para atualizar os valores do dia a dia,
+              use <strong>Recalcular</strong>. Arquivo escolhido: <strong>{inputRef.current?.files?.[0]?.name ?? "—"}</strong>.
+              Deseja continuar com a carga?
+            </>
+          }
+          rotuloConfirmar="Sim, é a carga inicial"
+          onConfirmar={enviarBid}
+          onFechar={() => setConfirmandoCarga(false)}
+        />
       )}
     </div>
   );
