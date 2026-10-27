@@ -16,6 +16,7 @@ type Perfil = { cargo: string; is_master: boolean } | null;
 
 export type AparelhoReprovado = AparelhoComPecas & {
   id: string;
+  nf_remessa_allied?: string | null;
   os_care_allied: string | null;
   modelo_comercial: string | null;
   sku: string | null;
@@ -172,12 +173,85 @@ export default function PainelOrcamentoReprovado({
     }
   }
 
+  // "Baixar todos (Excel)" (pedido explícito, 27/10/2026) — TODOS os
+  // aparelhos que estão em 8 - Orçamento Reprovado agora, sem depender
+  // da busca nem da seleção.
+  const [baixando, setBaixando] = useState(false);
+  async function baixarTodosExcel() {
+    setBaixando(true);
+    try {
+      const XLSX = await import("xlsx");
+      const cabecalho = [
+        "NF Remessa",
+        "OS Reparadora",
+        "Trade Allied",
+        "OS Care Allied",
+        "Modelo comercial",
+        "SKU",
+        "Descrição",
+        "Pré Ordem",
+        "Peças",
+        "Motivo",
+        "Reprovado em",
+        "Reprovado por",
+      ];
+      const corpo = itens.map((a) => {
+        const registro = a as unknown as Record<string, unknown>;
+        const pecas = Array.from({ length: 10 }, (_, i) => registro[`peca_${i + 1}`])
+          .filter((p): p is string => typeof p === "string" && p.trim() !== "")
+          .join(", ");
+        return [
+          a.nf_remessa_allied ?? "",
+          a.os_reparadora ?? "",
+          a.trade_allied,
+          a.os_care_allied ?? "",
+          a.modelo_comercial ?? "",
+          a.sku ?? "",
+          a.descricao_completa ?? "",
+          a.pre_ordem ?? "",
+          pecas,
+          a.motivo_reprova ?? "",
+          a.reprovado_em ? formatarDataHoraBrasilia(a.reprovado_em) : "",
+          nomeUsuario(a.usuarios) ?? "",
+        ];
+      });
+      const planilha = XLSX.utils.aoa_to_sheet([cabecalho, ...corpo]);
+      planilha["!cols"] = [14, 15, 13, 13, 24, 14, 40, 12, 30, 34, 20, 20].map((wch) => ({ wch }));
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, planilha, "Orçamento Reprovado");
+      const agora = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(new Date());
+      const v = (t: string) => agora.find((p) => p.type === t)?.value ?? "00";
+      XLSX.writeFile(workbook, `Orcamento_Reprovado_${v("day")}${v("month")}${v("year")}_${v("hour")}${v("minute")}.xlsx`);
+    } finally {
+      setBaixando(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
         <div className="flex items-center flex-wrap [&>*]:!mb-0">{topo}</div>
 
         <div className="flex items-center flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={baixarTodosExcel}
+            disabled={baixando || itens.length === 0}
+            title="Baixar em Excel todos os aparelhos que estão em 8 - Orçamento Reprovado"
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:border-[var(--accent2)] disabled:opacity-50"
+            style={{ borderColor: "var(--line)", color: "var(--ink)", background: "var(--surface)" }}
+          >
+            <Download size={14} />
+            {baixando ? "Gerando..." : `Baixar todos (Excel) · ${itens.length}`}
+          </button>
           <div className="relative">
             <Search
               size={13}

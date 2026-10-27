@@ -619,7 +619,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhos } = await supabase
       .from("orcamentos")
       .select(
-        `id, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pre_ordem, motivo_reprova, reprovado_em, data_reconhecimento, usuarios:reprovado_por (nome, sobrenome), ${COLUNAS_PECAS}`
+        `id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, pre_ordem, motivo_reprova, reprovado_em, data_reconhecimento, usuarios:reprovado_por (nome, sobrenome), ${COLUNAS_PECAS}`
       )
       .eq("status_operacional", status.valor)
       .order("reprovado_em", { ascending: false, nullsFirst: false });
