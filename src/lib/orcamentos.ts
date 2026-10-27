@@ -13,6 +13,71 @@ export { CARGOS_IMPORTACAO_BASE_PECAS as CARGOS_IMPORTACAO_ORCAMENTOS, podeImpor
 import { calcularCustoPecaAllied, chaveOverrideModeloPeca, type FaixaMarkup } from "@/lib/bid";
 
 // colunas da planilha original (0-indexed)
+// Cabeçalho PADRÃO da Base de Orçamentos (pedido explícito, 27/10/2026)
+// — o mesmo layout das bases já importadas (ex: "Reparo J Macedo.xlsx",
+// NF 1969657). A importação lê as colunas por POSIÇÃO (ver COL_* abaixo),
+// então um arquivo com coluna a mais/a menos ou fora de ordem gravava
+// dado na coluna errada (ex: NF Remessa "JMACEDO"). Agora o cabeçalho é
+// conferido coluna a coluna antes de importar (ver conferirCabecalhoOrcamentos).
+export const CABECALHO_BASE_ORCAMENTOS = [
+  "Reparador Terceiro", "NF Remessa Allied", "Data Resposta Orçamento", "OS Reparadora", "IMEI Reparadora",
+  "Atendimento", "OS Care Allied", "Trade Allied", "IMEI Allied", "Classificação Allied", "SKU",
+  "DESCRIÇÃO COMPLETA", "MODELO COMERCIAL",
+  ...Array.from({ length: 10 }, (_, i) => `DESCRIÇÃO DEFEITO ${i + 1}`),
+  ...Array.from({ length: 10 }, (_, i) => `PEÇA DEFEITO ${i + 1}`),
+  "Observação Técnica Reparadora",
+  ...Array.from({ length: 10 }, (_, i) => `PEÇA ${i + 1}`),
+  ...Array.from({ length: 5 }, (_, i) => `PEÇA ADD ${i + 1}`),
+  ...Array.from({ length: 10 }, (_, i) => `CUSTO PEÇA ${i + 1}`),
+  ...Array.from({ length: 5 }, (_, i) => `CUSTO PEÇA ADD ${i + 1}`),
+  "VALOR TOTAL PEÇA", "MÃO DE OBRA", "VALOR TOTAL DE REPARO", "TIPO ORÇAMENTO", "STATUS ORÇAMENTO",
+  "MOTIVO REPROVA", "OBS",
+] as const;
+
+/** "A", "B", ..., "Z", "AA", ... (índice 0-based). */
+export function letraColunaExcel(indice: number): string {
+  let n = indice + 1;
+  let letra = "";
+  while (n > 0) {
+    const resto = (n - 1) % 26;
+    letra = String.fromCharCode(65 + resto) + letra;
+    n = Math.floor((n - 1) / 26);
+  }
+  return letra;
+}
+
+function normalizarCabecalho(v: unknown): string {
+  return String(v ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export type DivergenciaCabecalho = { coluna: string; esperado: string; encontrado: string };
+
+/** Confere a 1ª linha do arquivo contra CABECALHO_BASE_ORCAMENTOS, coluna
+ * a coluna (ignora maiúscula/minúscula, acento e espaço sobrando). Coluna
+ * extra depois da última ("OBS") também conta como divergência. */
+export function conferirCabecalhoOrcamentos(cabecalho: unknown[]): DivergenciaCabecalho[] {
+  const divergencias: DivergenciaCabecalho[] = [];
+  const total = Math.max(CABECALHO_BASE_ORCAMENTOS.length, cabecalho.length);
+  for (let i = 0; i < total; i++) {
+    const esperado = CABECALHO_BASE_ORCAMENTOS[i] ?? "";
+    const encontrado = String(cabecalho[i] ?? "").trim();
+    if (i >= CABECALHO_BASE_ORCAMENTOS.length && !encontrado) continue;
+    if (normalizarCabecalho(esperado) !== normalizarCabecalho(encontrado)) {
+      divergencias.push({
+        coluna: letraColunaExcel(i),
+        esperado: esperado || "(nenhuma — coluna a mais)",
+        encontrado: encontrado || "(vazia)",
+      });
+    }
+  }
+  return divergencias;
+}
+
 export const COL_REPARADOR_TERCEIRO = 0; // A
 export const COL_NF_REMESSA_ALLIED = 1; // B
 export const COL_DATA_RESPOSTA_ORCAMENTO = 2; // C (vem vazio)

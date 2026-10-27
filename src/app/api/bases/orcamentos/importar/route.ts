@@ -6,6 +6,7 @@ import {
   podeImportarOrcamentos,
   COL_NF_REMESSA_ALLIED,
   COL_SKU,
+  conferirCabecalhoOrcamentos,
   type ConfiguracaoMaoDeObra,
   type LinhaOrcamentoImportada,
 } from "@/lib/orcamentos";
@@ -89,6 +90,23 @@ export async function POST(request: Request) {
   } catch {
     return Response.json(
       { error: "Não consegui ler o arquivo de Pré-Ordem. Confirme que é uma planilha .xlsx válida." },
+      { status: 400 }
+    );
+  }
+
+  // Cabeçalho fora do padrão → recusa ANTES de gravar qualquer coisa,
+  // dizendo qual coluna está errada (pedido explícito, 27/10/2026).
+  const divergenciasCabecalho = conferirCabecalhoOrcamentos(linhasBrutas[0] ?? []);
+  if (divergenciasCabecalho.length > 0) {
+    const lista = divergenciasCabecalho
+      .slice(0, 8)
+      .map((d) => `coluna ${d.coluna}: deveria ser "${d.esperado}", veio "${d.encontrado}"`)
+      .join("; ");
+    const mais = divergenciasCabecalho.length > 8 ? ` (e mais ${divergenciasCabecalho.length - 8})` : "";
+    return Response.json(
+      {
+        error: `A Base de Orçamentos está fora do padrão — arrume o arquivo antes de importar. ${divergenciasCabecalho.length} coluna(s) diferente(s): ${lista}${mais}. Nada foi importado.`,
+      },
       { status: 400 }
     );
   }

@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import ImportarOrcamentosForm from "@/components/ImportarOrcamentosForm";
 import BotaoSubirPreOrdem from "@/components/BotaoSubirPreOrdem";
-import { podeImportarOrcamentos } from "@/lib/orcamentos";
+import BotaoExcluirLote from "@/components/BotaoExcluirLote";
+import { podeImportarOrcamentos, podeMovimentarOrcamentos } from "@/lib/orcamentos";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
 
 type ResumoOrcamentos = {
@@ -86,6 +87,7 @@ export default async function OrcamentosPage() {
               <th className="px-4 py-2.5 font-medium">RRR</th>
               <th className="px-4 py-2.5 font-medium">Modelos</th>
               <th className="px-4 py-2.5 font-medium">Pré-Ordem</th>
+              {podeMovimentarOrcamentos(perfil) && <th className="px-4 py-2.5 font-medium text-right">Ações</th>}
             </tr>
           </thead>
           <tbody>
@@ -129,13 +131,22 @@ export default async function OrcamentosPage() {
                       podeSubir={podeImportarOrcamentos(perfil)}
                     />
                   </td>
+                  {podeMovimentarOrcamentos(perfil) && (
+                    <td className="px-4 py-2.5 text-right">
+                      <BotaoExcluirLote
+                        loteId={lote.id}
+                        nfRemessa={lote.nf_remessa_allied}
+                        aparelhos={lote.aparelhos_novos_inseridos}
+                      />
+                    </td>
+                  )}
                 </tr>
               );
             })}
 
             {(!lotes || lotes.length === 0) && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
+                <td colSpan={10} className="px-4 py-8 text-center" style={{ color: "var(--muted)", background: "var(--surface)" }}>
                   Nenhuma importação realizada ainda.
                 </td>
               </tr>
