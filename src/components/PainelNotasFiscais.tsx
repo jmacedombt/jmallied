@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CalendarRange, Download, FileSpreadsheet, Loader2, Search } from "lucide-react";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
 import { gerarExcelNotasFiscais } from "@/lib/notasFiscaisExport";
@@ -53,7 +53,7 @@ export default function PainelNotasFiscais() {
       if (filtros.busca) params.set("busca", filtros.busca);
       if (filtros.dataInicio) params.set("dataInicio", filtros.dataInicio);
       if (filtros.dataFim) params.set("dataFim", filtros.dataFim);
-      const res = await fetch(`/api/operacional/notas-fiscais?${params.toString()}`);
+      const res = await fetch(`/api/operacional/notas-fiscais?${params.toString()}`, { cache: "no-store" });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         setErro(data?.error || "Não foi possível carregar a relação de notas fiscais.");
@@ -71,7 +71,30 @@ export default function PainelNotasFiscais() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // recarrega sozinho ao voltar pra aba e a cada 1 min (pedido explícito,
+  // 04/11/2026 — correção de NF feita em outra máquina aparece aqui sem F5),
+  // mantendo o filtro que já foi aplicado.
+  const filtrosAplicados = useRef({ busca: "", dataInicio: "", dataFim: "" });
+  useEffect(() => {
+    let ultima = Date.now();
+    function atualizar() {
+      if (document.visibilityState !== "visible" || Date.now() - ultima < 5000) return;
+      ultima = Date.now();
+      carregar(filtrosAplicados.current);
+    }
+    document.addEventListener("visibilitychange", atualizar);
+    window.addEventListener("focus", atualizar);
+    const timer = window.setInterval(atualizar, 60000);
+    return () => {
+      document.removeEventListener("visibilitychange", atualizar);
+      window.removeEventListener("focus", atualizar);
+      window.clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function filtrar() {
+    filtrosAplicados.current = { busca, dataInicio, dataFim };
     carregar({ busca, dataInicio, dataFim });
   }
 

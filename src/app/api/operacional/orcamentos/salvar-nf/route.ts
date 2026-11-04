@@ -54,6 +54,18 @@ export async function POST(request: Request) {
   }
 
   const colunas = COLUNAS_POR_TIPO[tipo];
+
+  // número que esses aparelhos tinham ANTES — pra, se for uma correção,
+  // o Financeiro corrigir o mesmo lançamento (ver registrarLancamentoFinanceiro)
+  const { data: anteriores } = await admin.from("orcamentos").select(colunas.numero).in("id", ids);
+  const numerosAnteriores = Array.from(
+    new Set(
+      ((anteriores ?? []) as unknown as Record<string, string | null>[])
+        .map((r) => r[colunas.numero])
+        .filter((v): v is string => !!v && v !== numero)
+    )
+  );
+
   const { error } = await admin
     .from("orcamentos")
     .update({ [colunas.numero]: numero, [colunas.valor]: valor })
@@ -71,7 +83,7 @@ export async function POST(request: Request) {
   // acompanhado ali).
   if (tipo === "mao_de_obra" || tipo === "pecas") {
     try {
-      await registrarLancamentoFinanceiro(admin, { tipo, numero, valor });
+      await registrarLancamentoFinanceiro(admin, { tipo, numero, valor, numerosAnteriores });
     } catch {
       // silencioso de propósito, ver comentário acima.
     }

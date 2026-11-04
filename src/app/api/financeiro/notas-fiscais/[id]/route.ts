@@ -76,11 +76,59 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       status === "Vlr. Recebido" ? textoOuNull(body.data_recebimento) || hojeIso() : null;
   }
 
+  // valores ANTES da edição — pra levar a correção de número/valor da NF
+  // pros aparelhos (ver abaixo).
+  const { data: antes } = await admin
+    .from("financeiro_notas_fiscais")
+    .select("nf_mao_de_obra_numero, nf_mao_de_obra_valor, nf_pecas_numero, nf_pecas_valor")
+    .eq("id", params.id)
+    .single();
+
   const { error } = await admin.from("financeiro_notas_fiscais").update(atualizacoes).eq("id", params.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true });
+  // Correção no Financeiro vale pro sistema TODO (pedido explícito,
+  // 04/11/2026): o número/valor da NF também fica gravado em cada
+  // aparelho (orcamentos.nf_mao_de_obra_* / nf_pecas_*), que é de onde
+  // leem Operacional > Notas Fiscais, Ag. Emissão de NF, Produto
+  // Entregue, Modelo de Retorno etc. Antes o lápis do Financeiro só
+  // mudava a tabela dele. Agora todo aparelho que tinha o número ANTIGO
+  // dessa NF passa pro número/valor novos.
+  let aparelhosAtualizados = 0;
+  if (antes) {
+    for (const tipo of ["mao_de_obra", "pecas"] as const) {
+      const campoNumero = `nf_${tipo}_numero` as const;
+      const campoValor = `nf_${tipo}_valor` as const;
+      const numeroAntigo = (antes as Record<string, unknown>)[campoNumero] as string | null;
+      if (!numeroAntigo) continue;
+      const mudouNumero = campoNumero in atualizacoes && atualizacoes[campoNumero] && atualizacoes[campoNumero] !== numeroAntigo;
+      const valorAntigo = (antes as Record<string, unknown>)[campoValor] as number | null;
+      const mudouValor =
+        campoValor in atualizacoes &&
+        atualizacoes[campoValor] != null &&
+        Number(atualizacoes[campoValor]) !== Number(valorAntigo ?? NaN);
+      if (!mudouNumero && !mudouValor) continue;
+
+      const novos: Record<string, unknown> = {};
+      if (mudouNumero) novos[campoNumero] = atualizacoes[campoNumero];
+      if (mudouValor) novos[campoValor] = atualizacoes[campoValor];
+      const { data: alterados, error: erroAparelhos } = await admin
+        .from("orcamentos")
+        .update(novos)
+        .eq(campoNumero, numeroAntigo)
+        .select("id");
+      if (erroAparelhos) {
+        return NextResponse.json(
+          { error: `O Financeiro foi atualizado, mas não consegui atualizar os aparelhos: ${erroAparelhos.message}` },
+          { status: 400 }
+        );
+      }
+      aparelhosAtualizados += alterados?.length ?? 0;
+    }
+  }
+
+  return NextResponse.json({ ok: true, aparelhosAtualizados });
 }

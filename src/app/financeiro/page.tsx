@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import PainelFinanceiro from "@/components/PainelFinanceiro";
+import AtualizarAoVoltar from "@/components/AtualizarAoVoltar";
 import { podeAcessarFinanceiro, buscarNotasFiscaisFinanceiro, expandirNotas, ultimosNMeses, somarValorPorMes } from "@/lib/financeiro";
 import { formatarRotuloPeriodo } from "@/lib/metricas";
 import type { PontoGrafico } from "@/components/GraficoLinhaGradiente";
@@ -71,6 +72,7 @@ export default async function FinanceiroPage() {
         Notas fiscais de Mão de Obra e Peças, valores em aberto e recebidos.
       </p>
 
+      <AtualizarAoVoltar />
       <PainelFinanceiro linhas={linhas} notas={notas} pontosEmitidas={pontosEmitidas} pontosRecebidas={pontosRecebidas} />
     </AppShell>
   );

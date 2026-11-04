@@ -255,11 +255,33 @@ export async function buscarNotasFiscaisFinanceiro(supabase: SupabaseClient): Pr
  */
 export async function registrarLancamentoFinanceiro(
   admin: SupabaseClient,
-  params: { tipo: "mao_de_obra" | "pecas"; numero: string; valor: number }
+  params: { tipo: "mao_de_obra" | "pecas"; numero: string; valor: number; numerosAnteriores?: string[] }
 ): Promise<void> {
   const campoNumero = params.tipo === "mao_de_obra" ? "nf_mao_de_obra_numero" : "nf_pecas_numero";
   const campoValor = params.tipo === "mao_de_obra" ? "nf_mao_de_obra_valor" : "nf_pecas_valor";
   const hoje = hojeIso();
+
+  // Correção de uma NF já lançada (pedido explícito, 04/11/2026): se os
+  // aparelhos já tinham um número antes, ou se esse número já existe no
+  // Financeiro, corrige O MESMO lançamento (mantém a data de emissão
+  // original) em vez de criar outro com a data de hoje.
+  const candidatos = Array.from(new Set([...(params.numerosAnteriores ?? []), params.numero].filter(Boolean)));
+  if (candidatos.length > 0) {
+    const { data: jaLancado } = await admin
+      .from("financeiro_notas_fiscais")
+      .select("id")
+      .in(campoNumero, candidatos)
+      .order("criado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (jaLancado) {
+      await admin
+        .from("financeiro_notas_fiscais")
+        .update({ [campoNumero]: params.numero, [campoValor]: params.valor, atualizado_em: new Date().toISOString() })
+        .eq("id", jaLancado.id);
+      return;
+    }
+  }
 
   const { data: existente } = await admin
     .from("financeiro_notas_fiscais")
