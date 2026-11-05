@@ -449,9 +449,11 @@ export default function PopupPecasValidacao({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }}>
       <div
-        className="w-full max-w-2xl rounded-2xl border shadow-2xl p-6"
+        className="w-full max-w-2xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border shadow-2xl px-6 pb-6"
         style={{ background: "var(--surface)", borderColor: "var(--line)" }}
       >
+        {/* cabeçalho fixo: o conteúdo rola por baixo e o X continua visível */}
+        <div className="sticky top-0 z-10 -mx-6 px-6 pt-6 pb-3 mb-1" style={{ background: "var(--surface)" }}>
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-base font-semibold flex items-center gap-2" style={{ color: "var(--ink)" }}>
             <PackageSearch size={18} style={{ color: "var(--accent2)" }} />
@@ -468,10 +470,11 @@ export default function PopupPecasValidacao({
           </button>
         </div>
 
-        <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
           {aparelho.trade_allied} · OS Reparadora {aparelho.os_reparadora || "—"} · NF Remessa{" "}
           {aparelho.nf_remessa_allied}
         </p>
+        </div>
 
         {aparelho.pecas.length === 0 ? (
           <div
