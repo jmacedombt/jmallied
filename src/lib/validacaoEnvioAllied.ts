@@ -83,6 +83,8 @@ type LinhaOrcamentoLote = CamposPecasOrcamento &
     id: string;
     validacao_confirmado_sem_peca: boolean;
     validacao_pecas_venda_manual: AjustePecasValidacao | null;
+    reincidente: boolean | null;
+    validacao_rrr: boolean | null;
     validacao_ajustado_manualmente: boolean | null;
     validacao_venda_manual: number | null;
     validacao_custo_manual: number | null;
@@ -172,7 +174,7 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
   const { data: aparelhos, error: erroBusca } = await admin
     .from("orcamentos")
     .select(
-      `id, validacao_confirmado_sem_peca, validacao_pecas_venda_manual, validacao_ajustado_manualmente, validacao_venda_manual, validacao_custo_manual, validacao_imposto_manual, validacao_mao_de_obra_manual, ${COLUNAS_ESTATICAS}, ${COLUNAS_PECAS}`
+      `id, validacao_confirmado_sem_peca, validacao_pecas_venda_manual, reincidente, validacao_rrr, validacao_ajustado_manualmente, validacao_venda_manual, validacao_custo_manual, validacao_imposto_manual, validacao_mao_de_obra_manual, ${COLUNAS_ESTATICAS}, ${COLUNAS_PECAS}`
     )
     .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS)
     .eq("nf_remessa_allied", nfRemessa)

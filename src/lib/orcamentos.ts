@@ -524,6 +524,10 @@ export type DetalheValidacaoOrcamento = {
    * dispara o destaque "Prioridade" (vermelho) na lista. */
   temPecaSemCusto: boolean;
   pecas: PecaDetalheValidacao[];
+  /** flag RRR - Reincidência aplicada (Mão de Obra zerada) — migration 0083 */
+  rrr?: boolean;
+  /** mão de obra que seria cobrada sem a flag RRR */
+  maoDeObraSemRrr?: number;
 };
 
 /** Campos crus do orçamento usados pra descobrir o valor VIGENTE (Mão
@@ -768,16 +772,43 @@ export function aplicarAjustesValidacao(
     validacao_custo_manual?: number | string | null;
     validacao_imposto_manual?: number | string | null;
     validacao_mao_de_obra_manual?: number | string | null;
+    /** flag RRR (migration 0083) — null segue `reincidente` */
+    validacao_rrr?: boolean | null;
+    reincidente?: boolean | null;
   }
 ): DetalheValidacaoOrcamento {
   const porPeca = aplicarAjustePecasValidacao(detalhe, o.validacao_pecas_venda_manual);
-  if (!o.validacao_ajustado_manualmente) return porPeca;
-  return aplicarAjusteManualValidacao(porPeca, {
-    vendaTotalPecas: Number(o.validacao_venda_manual ?? porPeca.vendaTotalPecas),
-    custoTotalPecas: Number(o.validacao_custo_manual ?? porPeca.custoTotalPecas),
-    impostoTotalPecas: Number(o.validacao_imposto_manual ?? porPeca.impostoTotalPecas),
-    maoDeObra: Number(o.validacao_mao_de_obra_manual ?? porPeca.maoDeObra),
-  });
+  const comTotais = !o.validacao_ajustado_manualmente
+    ? porPeca
+    : aplicarAjusteManualValidacao(porPeca, {
+        vendaTotalPecas: Number(o.validacao_venda_manual ?? porPeca.vendaTotalPecas),
+        custoTotalPecas: Number(o.validacao_custo_manual ?? porPeca.custoTotalPecas),
+        impostoTotalPecas: Number(o.validacao_imposto_manual ?? porPeca.impostoTotalPecas),
+        maoDeObra: Number(o.validacao_mao_de_obra_manual ?? porPeca.maoDeObra),
+      });
+  return aplicarRrrValidacao(comTotais, rrrAtivo(o));
+}
+
+/** Flag RRR efetiva: a manual (validacao_rrr) se alguém mexeu; senão a
+ * marcação automática da importação (reincidente). */
+export function rrrAtivo(o: { validacao_rrr?: boolean | null; reincidente?: boolean | null }): boolean {
+  return o.validacao_rrr ?? !!o.reincidente;
+}
+
+/** RRR - Reincidência (pedido explícito, 05/11/2026): Mão de Obra zerada,
+ * lucros/percentuais recalculados. Guarda a mão de obra que seria cobrada
+ * em `maoDeObraSemRrr` pra tela destacar. Sempre o ÚLTIMO ajuste aplicado. */
+export function aplicarRrrValidacao(detalhe: DetalheValidacaoOrcamento, ativo: boolean): DetalheValidacaoOrcamento {
+  if (!ativo) return { ...detalhe, rrr: false };
+  const lucroTotal = detalhe.lucroLiquidoPeca;
+  return {
+    ...detalhe,
+    rrr: true,
+    maoDeObraSemRrr: detalhe.maoDeObra,
+    maoDeObra: 0,
+    lucroTotal,
+    percLucroTotal: detalhe.vendaTotalPecas > 0 ? (lucroTotal / detalhe.vendaTotalPecas) * 100 : 0,
+  };
 }
 
 // ---- Resultado de aprovação da Allied (3 - Ag. Resposta de Orçamento) ----

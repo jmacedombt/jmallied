@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
+  aplicarAjustesValidacao,
   calcularDetalheValidacao,
   STATUS_ORCAMENTO_REPROVADO,
   STATUS_ORCAMENTO_FECHADOS,
@@ -50,7 +51,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const { data: atual, error: erroAtual } = await admin
     .from("orcamentos")
-    .select(`status_operacional, nf_remessa_allied, modelo_comercial, ${COLUNAS_PECAS}`)
+    .select(
+      `status_operacional, nf_remessa_allied, modelo_comercial, reincidente, validacao_rrr, validacao_pecas_venda_manual, validacao_ajustado_manualmente, validacao_venda_manual, validacao_custo_manual, validacao_imposto_manual, validacao_mao_de_obra_manual, ${COLUNAS_PECAS}`
+    )
     .eq("id", params.id)
     .single();
 
@@ -117,7 +120,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const faixasMarkup: FaixaMarkup[] = overridesDoLote[atual.nf_remessa_allied] ?? faixasMarkupGlobal;
     const overridesModeloPeca = await buscarOverridesModeloPeca(admin, []);
 
-    const detalhe = calcularDetalheValidacao(
+    // mesmo valor da tela: automático + ajustes manuais + flag RRR
+    const detalhe = aplicarAjustesValidacao(calcularDetalheValidacao(
       atual as CamposPecasOrcamento,
       custosPorCodigo,
       icmsPercentual,
@@ -125,7 +129,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       faixasMarkup,
       (atual as unknown as { modelo_comercial: string | null }).modelo_comercial,
       overridesModeloPeca
-    );
+    ), atual as Parameters<typeof aplicarAjustesValidacao>[1]);
 
     atualizacao.validacao_snapshot = detalhe;
     atualizacao.validacao_travado = true;

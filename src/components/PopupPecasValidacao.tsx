@@ -53,6 +53,11 @@ export type AparelhoValidacaoDetalhe = DetalheValidacaoOrcamento & {
   ajustePecasJustificativa?: string | null;
   ajustePecasEm?: string | null;
   ajustePecasPor?: Usuario;
+  /** flag RRR - Reincidência (migration 0083): null = segue a importação */
+  rrrManual?: boolean | null;
+  rrrReincidente?: boolean;
+  rrrAlteradoEm?: string | null;
+  rrrPor?: Usuario;
 };
 
 function formatarReal(valor: number): string {
@@ -152,6 +157,33 @@ export default function PopupPecasValidacao({
   const [salvandoPecas, setSalvandoPecas] = useState(false);
   const [erroPecas, setErroPecas] = useState<string | null>(null);
   const [confirmandoReverterPecas, setConfirmandoReverterPecas] = useState(false);
+  // flag RRR - Reincidência (migration 0083)
+  const [salvandoRrr, setSalvandoRrr] = useState(false);
+  const [erroRrr, setErroRrr] = useState<string | null>(null);
+  const rrrLigado = !!aparelho.rrr;
+
+  async function alternarRrr() {
+    setSalvandoRrr(true);
+    setErroRrr(null);
+    try {
+      const res = await fetch(`/api/operacional/orcamentos/${aparelho.id}/ajustar-rrr`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ativo: !rrrLigado }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErroRrr(data?.error || "Não foi possível alterar a flag RRR.");
+        setSalvandoRrr(false);
+        return;
+      }
+      setSalvandoRrr(false);
+      onAtualizado();
+    } catch {
+      setErroRrr("Falha de conexão. Tente novamente.");
+      setSalvandoRrr(false);
+    }
+  }
   const temAjustePecas = aparelho.pecas.some((p) => p.vendaPecaOriginal !== undefined);
 
   function iniciarEdicaoPecas() {
@@ -349,7 +381,9 @@ export default function PopupPecasValidacao({
           venda_pecas: ajuste.venda,
           custo_pecas: ajuste.custo,
           imposto_pecas: ajuste.imposto,
-          mao_de_obra: ajuste.maoDeObra,
+          // com RRR ligado a tela mostra 0, mas grava a mão de obra real —
+          // o RRR zera por cima; se desligar depois, o valor volta certo.
+          mao_de_obra: rrrLigado ? aparelho.maoDeObraSemRrr ?? 0 : ajuste.maoDeObra,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -768,8 +802,33 @@ export default function PopupPecasValidacao({
             Venda de peças − Custo das peças − Imposto (sem mão de obra)
           </p>
           <div className="flex items-center justify-between">
-            <span style={{ color: "var(--muted)" }}>Mão de obra</span>
-            {editando ? (
+            <span className="inline-flex items-center gap-2" style={{ color: "var(--muted)" }}>
+              Mão de obra
+              {rrrLigado && (
+                <span
+                  className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide"
+                  style={{ background: "#dc2626", color: "#fff" }}
+                  title="RRR - Reincidência: mão de obra não cobrada"
+                >
+                  RRR
+                </span>
+              )}
+            </span>
+            {rrrLigado ? (
+              <span className="inline-flex items-center gap-2">
+                {(aparelho.maoDeObraSemRrr ?? 0) > 0 && (
+                  <span className="text-xs line-through" style={{ color: "var(--muted)" }}>
+                    {formatarReal(aparelho.maoDeObraSemRrr ?? 0)}
+                  </span>
+                )}
+                <strong
+                  className="rounded-md px-2 py-0.5"
+                  style={{ background: "rgba(220, 38, 38, 0.12)", color: "#dc2626", border: "1px solid #dc2626" }}
+                >
+                  {formatarReal(0)}
+                </strong>
+              </span>
+            ) : editando ? (
               <input
                 type="text"
                 inputMode="decimal"
@@ -782,6 +841,54 @@ export default function PopupPecasValidacao({
               <strong style={{ color: "var(--ink)" }}>{formatarReal(aparelho.maoDeObra)}</strong>
             )}
           </div>
+          <div
+            className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-[11px]"
+            style={
+              rrrLigado
+                ? { background: "rgba(220, 38, 38, 0.08)", color: "#b91c1c" }
+                : { background: "var(--surface)", color: "var(--muted)" }
+            }
+          >
+            <span>
+              <strong>RRR - Reincidência</strong>
+              {rrrLigado ? " — mão de obra não cobrada" : " — desligado"}
+              {aparelho.rrrManual == null ? (
+                <> · automático (importação{aparelho.rrrReincidente ? ": reincidente" : ""})</>
+              ) : (
+                <>
+                  {" "}· alterado
+                  {nomeUsuario(aparelho.rrrPor ?? null) && <> por {nomeUsuario(aparelho.rrrPor ?? null)}</>}
+                  {aparelho.rrrAlteradoEm && <> em {formatarDataHoraBrasilia(aparelho.rrrAlteradoEm)}</>}
+                </>
+              )}
+            </span>
+            {podeAjustarValores && !editando && !editandoPecas && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={rrrLigado}
+                onClick={alternarRrr}
+                disabled={salvandoRrr}
+                title={rrrLigado ? "Desligar RRR (voltar a cobrar a mão de obra)" : "Ligar RRR (zerar a mão de obra)"}
+                className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition disabled:opacity-60"
+                style={{ background: rrrLigado ? "#dc2626" : "var(--line)" }}
+              >
+                {salvandoRrr ? (
+                  <Loader2 size={12} className="mx-auto animate-spin" style={{ color: "#fff" }} />
+                ) : (
+                  <span
+                    className="inline-block h-4 w-4 rounded-full bg-white shadow transition"
+                    style={{ transform: rrrLigado ? "translateX(18px)" : "translateX(2px)" }}
+                  />
+                )}
+              </button>
+            )}
+          </div>
+          {erroRrr && (
+            <p className="text-[11px]" style={{ color: "#dc2626" }}>
+              {erroRrr}
+            </p>
+          )}
           <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
             <span style={{ color: "var(--ink)" }}>Lucro Total</span>
             {editando ? (

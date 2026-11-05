@@ -730,6 +730,15 @@ export default function PainelValidacaoOrcamentos({
                           MANUAL
                         </span>
                       )}
+                      {a.rrr && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold"
+                          style={{ color: "#fff", background: "#dc2626" }}
+                          title="RRR - Reincidência: mão de obra não cobrada"
+                        >
+                          RRR
+                        </span>
+                      )}
                     </span>
                   </td>
                   <td className="px-4 py-2.5" style={{ color: "var(--muted)" }}>
