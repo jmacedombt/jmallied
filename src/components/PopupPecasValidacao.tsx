@@ -49,6 +49,10 @@ export type AparelhoValidacaoDetalhe = DetalheValidacaoOrcamento & {
   ajustadoManualmente: boolean;
   ajustadoEm: string | null;
   ajustadoPor: Usuario;
+  /** alteração da Venda peça por peça (migration 0082) */
+  ajustePecasJustificativa?: string | null;
+  ajustePecasEm?: string | null;
+  ajustePecasPor?: Usuario;
 };
 
 function formatarReal(valor: number): string {
@@ -139,6 +143,101 @@ export default function PopupPecasValidacao({
   const [confirmandoReverter, setConfirmandoReverter] = useState(false);
   const [salvandoAjuste, setSalvandoAjuste] = useState(false);
   const [erroAjuste, setErroAjuste] = useState<string | null>(null);
+
+  // alteração da VENDA peça por peça (pedido explícito, 05/11/2026 —
+  // migration 0082): um campo por peça + justificativa obrigatória.
+  const [editandoPecas, setEditandoPecas] = useState(false);
+  const [textosPeca, setTextosPeca] = useState<Record<string, string>>({});
+  const [justificativa, setJustificativa] = useState("");
+  const [salvandoPecas, setSalvandoPecas] = useState(false);
+  const [erroPecas, setErroPecas] = useState<string | null>(null);
+  const [confirmandoReverterPecas, setConfirmandoReverterPecas] = useState(false);
+  const temAjustePecas = aparelho.pecas.some((p) => p.vendaPecaOriginal !== undefined);
+
+  function iniciarEdicaoPecas() {
+    const textos: Record<string, string> = {};
+    for (const p of aparelho.pecas) textos[p.posicao] = (p.vendaPeca ?? 0).toFixed(2).replace(".", ",");
+    setTextosPeca(textos);
+    setJustificativa(aparelho.ajustePecasJustificativa ?? "");
+    setErroPecas(null);
+    setEditandoPecas(true);
+  }
+
+  // venda "automática" de cada peça (antes de qualquer alteração) — base
+  // pra saber quais peças o usuário realmente mudou.
+  function vendaAutomatica(p: (typeof aparelho.pecas)[number]): number {
+    return p.vendaPecaOriginal !== undefined ? p.vendaPecaOriginal ?? 0 : p.vendaPeca ?? 0;
+  }
+
+  const vendasRascunho = aparelho.pecas.map((p) =>
+    editandoPecas ? paraNumero(textosPeca[p.posicao] ?? "0") : p.vendaPeca ?? 0
+  );
+  const vendaRascunhoTotal = vendasRascunho.reduce((s, v) => s + v, 0);
+  const lucroPecaRascunho = vendaRascunhoTotal - aparelho.custoTotalPecas - aparelho.impostoTotalPecas;
+  const lucroTotalRascunho = lucroPecaRascunho + aparelho.maoDeObra;
+  const percTotalRascunho =
+    vendaRascunhoTotal + aparelho.maoDeObra > 0 ? (lucroTotalRascunho / (vendaRascunhoTotal + aparelho.maoDeObra)) * 100 : 0;
+
+  async function salvarPecas() {
+    if (justificativa.trim().length < 3) {
+      setErroPecas("Escreva a justificativa da alteração.");
+      return;
+    }
+    const pecas: Record<string, number> = {};
+    aparelho.pecas.forEach((p, i) => {
+      const novo = Math.round(vendasRascunho[i] * 100) / 100;
+      if (Math.abs(novo - vendaAutomatica(p)) > 0.004) pecas[p.posicao] = novo;
+    });
+    if (Object.keys(pecas).length === 0) {
+      setErroPecas("Nenhuma peça foi alterada — para voltar ao automático use \"Restaurar automático\".");
+      return;
+    }
+    setSalvandoPecas(true);
+    setErroPecas(null);
+    try {
+      const res = await fetch(`/api/operacional/orcamentos/${aparelho.id}/ajustar-pecas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pecas, justificativa: justificativa.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErroPecas(data?.error || "Não foi possível salvar.");
+        setSalvandoPecas(false);
+        return;
+      }
+      setSalvandoPecas(false);
+      setEditandoPecas(false);
+      onAtualizado();
+    } catch {
+      setErroPecas("Falha de conexão. Tente novamente.");
+      setSalvandoPecas(false);
+    }
+  }
+
+  async function reverterPecas() {
+    setSalvandoPecas(true);
+    setErroPecas(null);
+    try {
+      const res = await fetch(`/api/operacional/orcamentos/${aparelho.id}/ajustar-pecas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reverter: true }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErroPecas(data?.error || "Não foi possível restaurar.");
+        setSalvandoPecas(false);
+        return;
+      }
+      setConfirmandoReverterPecas(false);
+      setSalvandoPecas(false);
+      onAtualizado();
+    } catch {
+      setErroPecas("Falha de conexão. Tente novamente.");
+      setSalvandoPecas(false);
+    }
+  }
 
   async function confirmarSemPeca() {
     setConfirmandoSemPeca(true);
@@ -440,7 +539,17 @@ export default function PopupPecasValidacao({
                         {formatarReal(p.imposto)}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {p.vendaPeca == null ? (
+                        {editandoPecas ? (
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={textosPeca[p.posicao] ?? ""}
+                            onChange={(e) => setTextosPeca((t) => ({ ...t, [p.posicao]: e.target.value }))}
+                            disabled={salvandoPecas}
+                            className="rounded-md border px-2 py-1 text-right text-sm outline-none"
+                            style={{ background: "var(--surface)", borderColor: "var(--accent2)", color: "var(--ink)", width: "7.5rem" }}
+                          />
+                        ) : p.vendaPeca == null ? (
                           <span style={{ color: "var(--muted)" }}>—</span>
                         ) : (
                           <span
@@ -452,6 +561,11 @@ export default function PopupPecasValidacao({
                             {formatarReal(p.vendaPeca)}
                           </span>
                         )}
+                        {!editandoPecas && p.vendaPecaOriginal !== undefined && (
+                          <span className="block text-[10px] line-through" style={{ color: "var(--muted)" }} title="Venda automática antes da alteração">
+                            {formatarReal(p.vendaPecaOriginal ?? 0)}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -459,6 +573,104 @@ export default function PopupPecasValidacao({
               </tbody>
             </table>
           </div>
+        )}
+
+        {aparelho.pecas.length > 0 && (
+          <div className="mb-4">
+            {editandoPecas ? (
+              <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: "var(--accent2)", background: "var(--accent-glow)" }}>
+                <p className="text-xs" style={{ color: "var(--ink)" }}>
+                  Nova Venda de peças: <strong>{formatarReal(vendaRascunhoTotal)}</strong> · Lucro Total:{" "}
+                  <strong>{formatarReal(lucroTotalRascunho)}</strong> ·{" "}
+                  <strong style={{ color: corPercentualLucro(percTotalRascunho) }}>{formatarPercentual(percTotalRascunho)}</strong>
+                  <span style={{ color: "var(--muted)" }}> (custo e imposto de cada peça não mudam)</span>
+                </p>
+                <label className="block text-xs font-medium" style={{ color: "var(--muted)" }}>
+                  Justificativa da alteração (obrigatória)
+                </label>
+                <textarea
+                  value={justificativa}
+                  onChange={(e) => setJustificativa(e.target.value)}
+                  disabled={salvandoPecas}
+                  rows={2}
+                  placeholder="Ex.: valor negociado com a Allied, preço de mercado da bateria..."
+                  className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                  style={{ background: "var(--surface)", borderColor: "var(--line)", color: "var(--ink)" }}
+                />
+                {erroPecas && <p className="text-xs text-red-500">{erroPecas}</p>}
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditandoPecas(false)}
+                    disabled={salvandoPecas}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-[var(--surface2)]"
+                    style={{ color: "var(--muted)" }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={salvarPecas}
+                    disabled={salvandoPecas || justificativa.trim().length < 3}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                    style={{ background: "var(--accent)" }}
+                  >
+                    {salvandoPecas ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                    Salvar alteração
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start justify-between gap-2 flex-wrap">
+                {temAjustePecas ? (
+                  <div className="text-[11px] rounded-lg px-2.5 py-1.5 flex-1" style={{ background: "rgba(37, 99, 235, 0.08)", color: "#1d4ed8" }}>
+                    <span className="font-semibold">Venda alterada peça por peça</span>
+                    {nomeUsuario(aparelho.ajustePecasPor ?? null) && <> por {nomeUsuario(aparelho.ajustePecasPor ?? null)}</>}
+                    {aparelho.ajustePecasEm && <> em {formatarDataHoraBrasilia(aparelho.ajustePecasEm)}</>}
+                    {aparelho.ajustePecasJustificativa && (
+                      <span className="block mt-0.5" style={{ color: "var(--ink)" }}>
+                        Justificativa: {aparelho.ajustePecasJustificativa}
+                      </span>
+                    )}
+                    {podeAjustarValores && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmandoReverterPecas(true)}
+                        className="mt-1 inline-flex items-center gap-1 font-medium underline decoration-dotted hover:opacity-80"
+                      >
+                        <History size={11} /> Restaurar automático (peças)
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <span />
+                )}
+                {podeAjustarValores && !editando && (
+                  <button
+                    type="button"
+                    onClick={iniciarEdicaoPecas}
+                    className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-medium transition hover:border-[var(--accent2)]"
+                    style={{ borderColor: "var(--line)", color: "var(--accent2)" }}
+                    title="Alterar a Venda de cada peça, com justificativa"
+                  >
+                    <Pencil size={12} /> Alterar por peça
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {confirmandoReverterPecas && (
+          <PopupConfirmar
+            titulo="Restaurar venda automática das peças?"
+            mensagem="A Venda de cada peça volta para o cálculo automático (Base Peças + faixa de markup) e a justificativa é apagada."
+            rotuloConfirmar="Restaurar"
+            carregando={salvandoPecas}
+            erro={erroPecas}
+            onConfirmar={reverterPecas}
+            onFechar={() => setConfirmandoReverterPecas(false)}
+          />
         )}
 
         <div
@@ -469,7 +681,7 @@ export default function PopupPecasValidacao({
             <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
               Resumo
             </span>
-            {podeAjustarValores && !editando && (
+            {podeAjustarValores && !editando && !editandoPecas && (
               <button
                 type="button"
                 onClick={iniciarEdicao}

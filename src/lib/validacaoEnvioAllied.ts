@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import {
   calcularDetalheValidacao,
+  aplicarAjustesValidacao,
+  type AjustePecasValidacao,
   STATUS_ETAPAS_ANTERIORES_A_VALIDACAO,
   STATUS_ORCAMENTO_REPROVADO,
   STATUS_VALIDACAO_ORCAMENTOS,
@@ -80,6 +82,12 @@ type LinhaOrcamentoLote = CamposPecasOrcamento &
   CamposEstaticosOrcamento & {
     id: string;
     validacao_confirmado_sem_peca: boolean;
+    validacao_pecas_venda_manual: AjustePecasValidacao | null;
+    validacao_ajustado_manualmente: boolean | null;
+    validacao_venda_manual: number | null;
+    validacao_custo_manual: number | null;
+    validacao_imposto_manual: number | null;
+    validacao_mao_de_obra_manual: number | null;
   };
 
 // aparelho já reprovado (etapa "8 - Orçamento Reprovado") do mesmo lote —
@@ -163,7 +171,9 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
   // ficam com ordem_planilha null e vão pro final (nullsFirst: false).
   const { data: aparelhos, error: erroBusca } = await admin
     .from("orcamentos")
-    .select(`id, validacao_confirmado_sem_peca, ${COLUNAS_ESTATICAS}, ${COLUNAS_PECAS}`)
+    .select(
+      `id, validacao_confirmado_sem_peca, validacao_pecas_venda_manual, validacao_ajustado_manualmente, validacao_venda_manual, validacao_custo_manual, validacao_imposto_manual, validacao_mao_de_obra_manual, ${COLUNAS_ESTATICAS}, ${COLUNAS_PECAS}`
+    )
     .eq("status_operacional", STATUS_VALIDACAO_ORCAMENTOS)
     .eq("nf_remessa_allied", nfRemessa)
     .order("ordem_planilha", { ascending: true, nullsFirst: false });
@@ -369,14 +379,21 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
   }
 
   const itensConfirmaveis: ItemConfirmavel[] = lista.map((a) => {
-    const detalhe = calcularDetalheValidacao(
-      a,
-      custosPorCodigo,
-      icmsPercentual,
-      configMaoDeObra,
-      faixasMarkup,
-      a.modelo_comercial,
-      overridesModeloPeca
+    // valor que vai pra Allied E que fica gravado = o mesmo da tela:
+    // cálculo automático + venda peça por peça + ajuste dos totais
+    // (pedido explícito, 05/11/2026 — antes o ajuste manual era ignorado
+    // aqui e o envio saía sempre com o valor automático).
+    const detalhe = aplicarAjustesValidacao(
+      calcularDetalheValidacao(
+        a,
+        custosPorCodigo,
+        icmsPercentual,
+        configMaoDeObra,
+        faixasMarkup,
+        a.modelo_comercial,
+        overridesModeloPeca
+      ),
+      a
     );
     const { peca, custoPeca } = montarPosicoesPeca(a, detalhe);
     const linha: LinhaPlanilhaOrcamento = {

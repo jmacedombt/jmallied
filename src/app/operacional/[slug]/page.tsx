@@ -6,7 +6,7 @@ import AppShell from "@/components/AppShell";
 import {
   statusPorSlug,
   calcularDetalheValidacao,
-  aplicarAjusteManualValidacao,
+  aplicarAjustesValidacao,
   STATUS_ETAPAS_ANTERIORES_A_VALIDACAO,
   GRUPO_STATUS_AG_EMISSAO_NF,
   STATUS_AG_NF_SERVICO_VENDA_RETORNO,
@@ -328,7 +328,7 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
     const { data: aparelhosBrutos } = await supabase
       .from("orcamentos")
       .select(
-        `id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_confirmado_sem_peca, validacao_ajustado_manualmente, validacao_venda_manual, validacao_custo_manual, validacao_imposto_manual, validacao_mao_de_obra_manual, validacao_ajustado_em, ajustadoPor:validacao_ajustado_por (nome, sobrenome), ${COLUNAS_PECAS_VALIDACAO}`
+        `id, nf_remessa_allied, os_reparadora, trade_allied, os_care_allied, modelo_comercial, sku, descricao_completa, validacao_confirmado_sem_peca, validacao_ajustado_manualmente, validacao_venda_manual, validacao_custo_manual, validacao_imposto_manual, validacao_mao_de_obra_manual, validacao_ajustado_em, ajustadoPor:validacao_ajustado_por (nome, sobrenome), validacao_pecas_venda_manual, validacao_pecas_justificativa, validacao_pecas_ajustado_em, ajustePecasPor:validacao_pecas_ajustado_por (nome, sobrenome), ${COLUNAS_PECAS_VALIDACAO}`
       )
       .eq("status_operacional", status.valor)
       .order("nf_remessa_allied", { ascending: true })
@@ -441,14 +441,9 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
       // pop-up), os 4 totais do resumo vêm congelados do banco em vez de
       // recalculados agora — só a tabela de peças individuais continua
       // sempre automática (ver aplicarAjusteManualValidacao).
-      const detalhe = a.validacao_ajustado_manualmente
-        ? aplicarAjusteManualValidacao(detalheAutomatico, {
-            vendaTotalPecas: Number(a.validacao_venda_manual ?? detalheAutomatico.vendaTotalPecas),
-            custoTotalPecas: Number(a.validacao_custo_manual ?? detalheAutomatico.custoTotalPecas),
-            impostoTotalPecas: Number(a.validacao_imposto_manual ?? detalheAutomatico.impostoTotalPecas),
-            maoDeObra: Number(a.validacao_mao_de_obra_manual ?? detalheAutomatico.maoDeObra),
-          })
-        : detalheAutomatico;
+      // venda peça por peça (migration 0082) e, por cima, o ajuste dos
+      // totais (migration 0021) — mesma função usada no Confirmar Envio.
+      const detalhe = aplicarAjustesValidacao(detalheAutomatico, a);
       return {
         id: a.id,
         nf_remessa_allied: a.nf_remessa_allied,
@@ -462,6 +457,9 @@ export default async function StatusOperacionalPage({ params }: { params: { slug
         ajustadoManualmente: a.validacao_ajustado_manualmente,
         ajustadoEm: a.validacao_ajustado_em,
         ajustadoPor: a.ajustadoPor,
+        ajustePecasJustificativa: a.validacao_pecas_justificativa ?? null,
+        ajustePecasEm: a.validacao_pecas_ajustado_em ?? null,
+        ajustePecasPor: a.ajustePecasPor ?? null,
         ...detalhe,
       };
     });

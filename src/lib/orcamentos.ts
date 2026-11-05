@@ -460,6 +460,9 @@ export function calcularMaoDeObraValidacao(
 export type PecaDetalheValidacao = {
   /** "1".."10" pra peça normal, "Extra 1".."Extra 5" pra peça adicional. */
   posicao: string;
+  /** só quando a Venda foi alterada à mão (ver aplicarAjustePecasValidacao):
+   * a venda automática de antes da alteração. */
+  vendaPecaOriginal?: number | null;
   codigo: string;
   /** valor mais recente da Base Peças (pecas_vigentes) pra esse código —
    * null quando o código ainda não tem nenhuma compra importada. */
@@ -716,6 +719,65 @@ export function aplicarAjusteManualValidacao(
     percLucroPecas,
     percLucroTotal,
   };
+}
+
+// ---- Ajuste da VENDA peça por peça em Validação de Orçamentos ----
+// (pedido explícito, 05/11/2026 — migration 0082, rota
+// orcamentos/[id]/ajustar-pecas, PopupPecasValidacao.tsx)
+
+/** posição da peça ("1".."10", "Extra 1".."Extra 5") → nova venda */
+export type AjustePecasValidacao = Record<string, number>;
+
+/** Troca a Venda das peças alteradas (Custo e Imposto ficam fixos) e
+ * recalcula Venda de Peças, lucros e percentuais. Guarda a venda
+ * automática em `vendaPecaOriginal` pra tela mostrar o "antes". */
+export function aplicarAjustePecasValidacao(
+  detalhe: DetalheValidacaoOrcamento,
+  ajuste: AjustePecasValidacao | null | undefined
+): DetalheValidacaoOrcamento {
+  if (!ajuste || Object.keys(ajuste).length === 0) return detalhe;
+  const pecas = detalhe.pecas.map((p) => {
+    const novo = ajuste[p.posicao];
+    if (novo == null || !Number.isFinite(Number(novo))) return p;
+    return { ...p, vendaPecaOriginal: p.vendaPeca, vendaPeca: Number(novo) };
+  });
+  const vendaTotalPecas = pecas.reduce((soma, p) => soma + (p.vendaPeca ?? 0), 0);
+  const lucroLiquidoPeca = vendaTotalPecas - detalhe.custoTotalPecas - detalhe.impostoTotalPecas;
+  const lucroTotal = lucroLiquidoPeca + detalhe.maoDeObra;
+  const baseLucroTotal = vendaTotalPecas + detalhe.maoDeObra;
+  return {
+    ...detalhe,
+    pecas,
+    vendaTotalPecas,
+    lucroLiquidoPeca,
+    lucroTotal,
+    percLucroPecas: vendaTotalPecas > 0 ? (lucroLiquidoPeca / vendaTotalPecas) * 100 : 0,
+    percLucroTotal: baseLucroTotal > 0 ? (lucroTotal / baseLucroTotal) * 100 : 0,
+  };
+}
+
+/** Os dois ajustes manuais da Validação, na ordem certa: primeiro a venda
+ * peça por peça, depois (se existir) o ajuste dos 4 totais por cima.
+ * Usado na tela e no Confirmar Envio — pra o que aparece ser o que vai. */
+export function aplicarAjustesValidacao(
+  detalhe: DetalheValidacaoOrcamento,
+  o: {
+    validacao_pecas_venda_manual?: AjustePecasValidacao | null;
+    validacao_ajustado_manualmente?: boolean | null;
+    validacao_venda_manual?: number | string | null;
+    validacao_custo_manual?: number | string | null;
+    validacao_imposto_manual?: number | string | null;
+    validacao_mao_de_obra_manual?: number | string | null;
+  }
+): DetalheValidacaoOrcamento {
+  const porPeca = aplicarAjustePecasValidacao(detalhe, o.validacao_pecas_venda_manual);
+  if (!o.validacao_ajustado_manualmente) return porPeca;
+  return aplicarAjusteManualValidacao(porPeca, {
+    vendaTotalPecas: Number(o.validacao_venda_manual ?? porPeca.vendaTotalPecas),
+    custoTotalPecas: Number(o.validacao_custo_manual ?? porPeca.custoTotalPecas),
+    impostoTotalPecas: Number(o.validacao_imposto_manual ?? porPeca.impostoTotalPecas),
+    maoDeObra: Number(o.validacao_mao_de_obra_manual ?? porPeca.maoDeObra),
+  });
 }
 
 // ---- Resultado de aprovação da Allied (3 - Ag. Resposta de Orçamento) ----
