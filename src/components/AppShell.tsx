@@ -38,6 +38,7 @@ import {
   SlidersHorizontal,
   Tags,
   TrendingUp,
+  Truck,
   Users,
   Wallet,
   Wrench,
@@ -105,6 +106,7 @@ const GRUPO_METRICAS: GrupoMenu = {
     // menu lateral (só dava pra chegar nela pelo card na capa de
     // Métricas). Corrigido aqui, logo depois de "OQC".
     { href: "/metricas/previsao-recebimento", label: "Previsão de Recebimento", icone: Wallet },
+    { href: "/metricas/devolucao-por-lotes", label: "Devolução por Lotes", icone: Truck },
   ],
 };
 

@@ -9,7 +9,15 @@ import { CalendarRange } from "lucide-react";
 // período inteiro (ex: Métricas > Orçamentos). Mesmo padrão de
 // querystring do FiltroPeriodoMetricas (inicio/fim), só sem os botões de
 // granularidade, que não fazem sentido aqui.
-export default function FiltroPeriodoSimples({ inicio, fim }: { inicio: string; fim: string }) {
+export default function FiltroPeriodoSimples({
+  inicio,
+  fim,
+  rotulo = "Período (data de fechamento do orçamento):",
+}: {
+  inicio: string;
+  fim: string;
+  rotulo?: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -35,7 +43,7 @@ export default function FiltroPeriodoSimples({ inicio, fim }: { inicio: string; 
     <div className="flex items-center flex-wrap gap-2 mb-5">
       <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: "var(--muted)" }}>
         <CalendarRange size={13} />
-        Período (data de fechamento do orçamento):
+        {rotulo}
       </span>
       <input
         type="date"

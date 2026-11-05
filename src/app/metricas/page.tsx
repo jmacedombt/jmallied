@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, Gauge, PackageCheck, ShieldCheck, Wallet } from "lucide-react";
+import { BarChart3, Gauge, PackageCheck, ShieldCheck, Truck, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import { isAllied, podeVerVolumetriaOuOrcamentos } from "@/lib/usuarios";
@@ -44,6 +44,14 @@ const TILES = [
     icone: Wallet,
     cor: "#d97706",
     clara: "#fbbf24",
+  },
+  {
+    href: "/metricas/devolucao-por-lotes",
+    titulo: "Devolução por Lotes",
+    descricao: "Dias do reconhecimento até o Produto Entregue por lote, nas faixas de 7/14/21/28 dias — meta: entregar em até 7 dias.",
+    icone: Truck,
+    cor: "#0891b2",
+    clara: "#22d3ee",
   },
 ];
 
