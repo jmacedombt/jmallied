@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Activity,
   AlertTriangle,
   ArrowLeftRight,
   Bell,
@@ -48,6 +49,8 @@ import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import BotaoTema from "@/components/BotaoTema";
 import ChatWidget from "@/components/ChatWidget";
+import { useIntervaloVisivel } from "@/lib/useIntervaloVisivel";
+import { INTERVALOS_AUTOMATICOS } from "@/lib/consumo";
 import ColorPickerSistema from "@/components/ColorPickerSistema";
 import InactivityGuard from "@/components/InactivityGuard";
 import IndicadorUsuariosOnline from "@/components/IndicadorUsuariosOnline";
@@ -181,6 +184,7 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
       { href: "/configuracoes/bid-markup", label: "Faixas de Markup (BID)", icone: TrendingUp },
       { href: "/configuracoes/impostos", label: "Imposto (ICMS)", icone: Percent },
       { href: "/configuracoes/email", label: "E-mail", icone: Mail },
+      { href: "/configuracoes/monitoramento", label: "Monitoramento", icone: Activity },
     ],
   },
   {
@@ -723,6 +727,7 @@ function SininhoNotificacoes() {
   const [aberto, setAberto] = useState(false);
   const [pendenciasBid, setPendenciasBid] = useState<number | null>(null);
   const [solicitacoesResetSenha, setSolicitacoesResetSenha] = useState<number | null>(null);
+  const buscarRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -739,16 +744,19 @@ function SininhoNotificacoes() {
         // silencioso — o sininho só deixa de mostrar o alerta, sem quebrar a tela
       }
     }
-    buscarResumo();
-    // reconfere de tempos em tempos, pra não precisar recarregar a
-    // página inteira pra ver o alerta sumir depois de cadastrar as peças
-    // (ou depois de resetar a senha de quem pediu)
-    const intervalo = setInterval(buscarResumo, 5 * 60 * 1000);
+    buscarRef.current = buscarResumo;
     return () => {
       cancelado = true;
-      clearInterval(intervalo);
+      buscarRef.current = null;
     };
   }, []);
+  // reconfere a cada 5 min, só com a aba visível (economia de CPU na
+  // Vercel — ver lib/consumo.ts)
+  useIntervaloVisivel(
+    () => buscarRef.current?.(),
+    INTERVALOS_AUTOMATICOS.notificacoes.visivelMs,
+    INTERVALOS_AUTOMATICOS.notificacoes.ocultaMs
+  );
 
   const temPendenciaBid = (pendenciasBid ?? 0) > 0;
   const temSolicitacaoReset = (solicitacoesResetSenha ?? 0) > 0;

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mail, Percent, SlidersHorizontal, TrendingUp } from "lucide-react";
+import { Activity, Mail, Percent, SlidersHorizontal, TrendingUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 
@@ -35,6 +35,14 @@ const TILES = [
     icone: Mail,
     cor: "#7c3aed",
     clara: "#a78bfa",
+  },
+  {
+    href: "/configuracoes/monitoramento",
+    titulo: "Monitoramento",
+    descricao: "Uso da Vercel, Supabase e GitHub comparado com os limites dos planos gratuitos, e os cuidados para o sistema não sair do ar.",
+    icone: Activity,
+    cor: "#ea580c",
+    clara: "#fb923c",
   },
 ];
 

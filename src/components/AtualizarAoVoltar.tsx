@@ -10,7 +10,9 @@ import { useRouter } from "next/navigation";
  * correção de NF feita numa máquina tem que aparecer nas outras sem
  * precisar apertar F5).
  */
-export default function AtualizarAoVoltar({ intervaloMs = 60000 }: { intervaloMs?: number }) {
+// 07/11/2026: sem o relógio de 1 min (consumia CPU na Vercel o dia todo);
+// atualiza só quando a pessoa volta pra aba/janela. intervaloMs=0 = desligado.
+export default function AtualizarAoVoltar({ intervaloMs = 0 }: { intervaloMs?: number }) {
   const router = useRouter();
   useEffect(() => {
     let ultima = Date.now();
@@ -22,7 +24,7 @@ export default function AtualizarAoVoltar({ intervaloMs = 60000 }: { intervaloMs
     }
     document.addEventListener("visibilitychange", atualizar);
     window.addEventListener("focus", atualizar);
-    const timer = window.setInterval(atualizar, intervaloMs);
+    const timer = intervaloMs > 0 ? window.setInterval(atualizar, intervaloMs) : undefined;
     return () => {
       document.removeEventListener("visibilitychange", atualizar);
       window.removeEventListener("focus", atualizar);

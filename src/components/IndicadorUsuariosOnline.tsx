@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CircleUser, Loader2 } from "lucide-react";
 import { formatarDataHoraBrasilia } from "@/lib/tempo";
+import { useIntervaloVisivel } from "@/lib/useIntervaloVisivel";
+import { INTERVALOS_AUTOMATICOS } from "@/lib/consumo";
 
 type UsuarioOnline = {
   id: string;
@@ -13,7 +15,6 @@ type UsuarioOnline = {
   ultimaAtividadeEm: string | null;
 };
 
-const INTERVALO_ATUALIZACAO_MS = 30 * 1000;
 
 /**
  * "Usuários Online" (pedido explícito) — não é mais item de menu: um
@@ -47,11 +48,12 @@ export default function IndicadorUsuariosOnline() {
 
   // busca ao montar e a cada 30s, mesmo com o pop-up fechado — assim o
   // número de usuários já está pronto assim que alguém clica no bullet.
-  useEffect(() => {
-    carregar();
-    const intervalo = setInterval(carregar, INTERVALO_ATUALIZACAO_MS);
-    return () => clearInterval(intervalo);
-  }, []);
+  // economia de CPU na Vercel (lib/consumo.ts): só com a aba visível
+  useIntervaloVisivel(
+    carregar,
+    INTERVALOS_AUTOMATICOS.indicadorOnline.visivelMs,
+    INTERVALOS_AUTOMATICOS.indicadorOnline.ocultaMs
+  );
 
   useEffect(() => {
     if (!aberto) return;

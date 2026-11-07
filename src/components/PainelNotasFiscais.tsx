@@ -71,7 +71,7 @@ export default function PainelNotasFiscais() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // recarrega sozinho ao voltar pra aba e a cada 1 min (pedido explícito,
+  // recarrega sozinho ao voltar pra aba (sem o relógio de 1 min desde 07/11/2026) (pedido explícito,
   // 04/11/2026 — correção de NF feita em outra máquina aparece aqui sem F5),
   // mantendo o filtro que já foi aplicado.
   const filtrosAplicados = useRef({ busca: "", dataInicio: "", dataFim: "" });
@@ -84,11 +84,9 @@ export default function PainelNotasFiscais() {
     }
     document.addEventListener("visibilitychange", atualizar);
     window.addEventListener("focus", atualizar);
-    const timer = window.setInterval(atualizar, 60000);
     return () => {
       document.removeEventListener("visibilitychange", atualizar);
       window.removeEventListener("focus", atualizar);
-      window.clearInterval(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -15,6 +15,8 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { formatarDataHoraBrasilia, formatarHoraBrasilia } from "@/lib/tempo";
 import { tocarSomChamarAtencao, tocarSomMensagem } from "@/lib/somNotificacao";
+import { useIntervaloVisivel } from "@/lib/useIntervaloVisivel";
+import { INTERVALOS_AUTOMATICOS } from "@/lib/consumo";
 
 /**
  * Chat interno (pedido explícito, 23/09/2026) — mensagem direta entre
@@ -51,8 +53,6 @@ type ConversaResumo = { usuario: UsuarioChat; ultimaMensagem: MensagemChat; naoL
 
 type Balao = MensagemChat & { balaoId: string; remetenteNome: string };
 
-const INTERVALO_POLL_MS = 4000;
-const INTERVALO_ONLINE_MS = 15000;
 const TITULO_PISCANDO = "🔴 Nova mensagem";
 
 const ROTULO_STATUS: Record<StatusPresenca, string> = {
@@ -90,6 +90,7 @@ export default function ChatWidget() {
   );
 
   const desdeRef = useRef<string>(new Date().toISOString());
+  const tickRef = useRef<(() => Promise<void>) | null>(null);
   const conversaAtivaRef = useRef<string | null>(null);
   const painelAbertoRef = useRef(false);
   const rosterRef = useRef<UsuarioChat[]>([]);
@@ -243,10 +244,16 @@ export default function ChatWidget() {
     if (!meuId) return;
     carregarConversas();
     carregarUsuarios();
-    carregarOnline();
-    const intervaloOnline = setInterval(carregarOnline, INTERVALO_ONLINE_MS);
-    return () => clearInterval(intervaloOnline);
-  }, [meuId, carregarConversas, carregarUsuarios, carregarOnline]);
+  }, [meuId, carregarConversas, carregarUsuarios]);
+
+  // quem está online — economia de CPU na Vercel (lib/consumo.ts): só com
+  // a aba visível, 1x por minuto.
+  useIntervaloVisivel(
+    carregarOnline,
+    INTERVALOS_AUTOMATICOS.chatOnline.visivelMs,
+    INTERVALOS_AUTOMATICOS.chatOnline.ocultaMs,
+    !!meuId
+  );
 
   // polling principal — mensagens recebidas desde o último tick (balão +
   // som + badge). Usa refs (não estado) pra ler conversa ativa/painel
@@ -297,14 +304,23 @@ export default function ChatWidget() {
       }
     }
 
-    tick();
-    const intervalo = setInterval(tick, INTERVALO_POLL_MS);
+    tickRef.current = tick;
     return () => {
       cancelado = true;
-      clearInterval(intervalo);
+      tickRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meuId]);
+
+  // novas mensagens — antes era a cada 4s em toda aba aberta (principal
+  // consumo de CPU na Vercel). Agora 15s com a aba visível e 1 min com ela
+  // escondida (balão/som continuam chegando). Ver lib/consumo.ts.
+  useIntervaloVisivel(
+    () => tickRef.current?.(),
+    INTERVALOS_AUTOMATICOS.chatMensagens.visivelMs,
+    INTERVALOS_AUTOMATICOS.chatMensagens.ocultaMs,
+    !!meuId
+  );
 
   useEffect(() => {
     mensagensFimRef.current?.scrollIntoView({ block: "end" });

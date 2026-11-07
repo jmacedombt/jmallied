@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
+import { INTERVALOS_AUTOMATICOS } from "@/lib/consumo";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const LIMITE_INATIVIDADE_MS = 60 * 60 * 1000; // 1 hora (pedido explícito)
-const INTERVALO_HEARTBEAT_MS = 60 * 1000; // manda "está aberto" a cada 1 min
+// a cada 2 min (era 1 min) — economia de CPU na Vercel; "online" considera
+// os últimos 5 min, então continua aparecendo certo (ver lib/consumo.ts)
+const INTERVALO_HEARTBEAT_MS = INTERVALOS_AUTOMATICOS.presenca.visivelMs;
 const INTERVALO_VERIFICACAO_MS = 30 * 1000; // confere a inatividade a cada 30s
 
 const CHAVE_ULTIMA_ATIVIDADE = "allied-ultima-atividade";
