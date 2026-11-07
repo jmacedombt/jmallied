@@ -78,14 +78,14 @@ export default async function DevolucaoPorLotesPage({
   return (
     <AppShell
       titulo="Devolução por Lotes"
-      tituloInfo="Dias corridos da Data Reconhecimento do lote até o aparelho virar Produto Entregue. Meta: entregar em até 7 dias. Reprovados ficam fora da conta."
+      tituloInfo="Dias corridos da Data Reconhecimento do lote até o aparelho ser realizado (Produto Entregue ou Orçamento Reprovado). Meta: até 7 dias."
       perfil={perfil}
     >
       {voltar}
       <FiltroPeriodoSimples inicio={inicio} fim={fim} rotulo="Período (data de reconhecimento do lote):" />
       {error ? (
         <p className="text-sm text-red-500">
-          Não foi possível carregar os dados ({error.message}). Confira se a migration 0084 já foi rodada no Supabase.
+          Não foi possível carregar os dados ({error.message}). Confira se as migrations 0084 e 0086 já foram rodadas no Supabase.
         </p>
       ) : (
         <PainelDevolucaoPorLotes lotes={lotes} />
