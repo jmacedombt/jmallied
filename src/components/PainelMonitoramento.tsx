@@ -169,8 +169,8 @@ export default function PainelMonitoramento() {
     chave: k,
     rotulo: INTERVALOS_AUTOMATICOS[k].rotulo,
     antes: chamadasPorHora(INTERVALOS_ANTERIORES_MS[k]),
-    visivel: chamadasPorHora(INTERVALOS_AUTOMATICOS[k].visivelMs),
-    oculta: chamadasPorHora(INTERVALOS_AUTOMATICOS[k].ocultaMs),
+    visivel: INTERVALOS_AUTOMATICOS[k].ativo ? chamadasPorHora(INTERVALOS_AUTOMATICOS[k].visivelMs) : 0,
+    oculta: INTERVALOS_AUTOMATICOS[k].ativo ? chamadasPorHora(INTERVALOS_AUTOMATICOS[k].ocultaMs) : 0,
   }));
   const total = consumo.reduce(
     (s, c) => ({ antes: s.antes + c.antes, visivel: s.visivel + c.visivel, oculta: s.oculta + c.oculta }),

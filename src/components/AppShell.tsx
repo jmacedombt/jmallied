@@ -48,7 +48,6 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/Avatar";
 import BotaoTema from "@/components/BotaoTema";
-import ChatWidget from "@/components/ChatWidget";
 import { useIntervaloVisivel } from "@/lib/useIntervaloVisivel";
 import { INTERVALOS_AUTOMATICOS } from "@/lib/consumo";
 import ColorPickerSistema from "@/components/ColorPickerSistema";
@@ -674,9 +673,9 @@ export default function AppShell({
 
           {!allied && <SininhoNotificacoes />}
 
-          {/* Chat interno (pedido explícito, 23/09/2026) — visível pra
-              QUALQUER login, inclusive ALLIED, sem exceção. */}
-          <ChatWidget />
+          {/* Chat interno removido em 07/11/2026 (pedido explícito — reduzir
+              consumo de CPU na Vercel). O componente ChatWidget e as rotas
+              /api/chat continuam no código, só não são mais exibidos. */}
 
           <h1 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
             {titulo}

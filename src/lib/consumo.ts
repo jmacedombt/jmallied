@@ -8,11 +8,12 @@
  * `null` = não consulta enquanto a aba está escondida/minimizada.
  */
 export const INTERVALOS_AUTOMATICOS = {
-  chatMensagens: { visivelMs: 15_000, ocultaMs: 60_000, rotulo: "Chat — novas mensagens" },
-  chatOnline: { visivelMs: 60_000, ocultaMs: null, rotulo: "Chat — quem está online" },
-  indicadorOnline: { visivelMs: 60_000, ocultaMs: null, rotulo: "Bolinha de usuários online" },
-  presenca: { visivelMs: 120_000, ocultaMs: 120_000, rotulo: "Sinal de \"estou conectado\"" },
-  notificacoes: { visivelMs: 300_000, ocultaMs: null, rotulo: "Sininho de pendências" },
+  // chat removido do sistema em 07/11/2026 (ativo: false) — intervalos mantidos só pro componente, que não é mais exibido
+  chatMensagens: { visivelMs: 15_000, ocultaMs: 60_000, rotulo: "Chat — novas mensagens (removido)", ativo: false },
+  chatOnline: { visivelMs: 60_000, ocultaMs: null, rotulo: "Chat — quem está online (removido)", ativo: false },
+  indicadorOnline: { visivelMs: 60_000, ocultaMs: null, rotulo: "Bolinha de usuários online", ativo: true },
+  presenca: { visivelMs: 120_000, ocultaMs: 120_000, rotulo: "Sinal de \"estou conectado\"", ativo: true },
+  notificacoes: { visivelMs: 300_000, ocultaMs: null, rotulo: "Sininho de pendências", ativo: true },
 } as const;
 
 /** Como era antes do ajuste de 07/11/2026 (por aba, sempre, visível ou não). */
