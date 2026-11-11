@@ -39,10 +39,19 @@ function ultimasNSemanas(n: number): string[] {
   return lista;
 }
 
+/** número da semana ISO (segunda a domingo) — mesmo padrão "W34" das Métricas */
+function numeroSemanaIso(iso: string): number {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  const diaSemana = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - diaSemana);
+  const inicioAno = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - inicioAno.getTime()) / 86400000 + 1) / 7);
+}
+
 function rotuloPeriodo(chave: string, g: Granularidade): string {
-  const [ano, mes, dia] = chave.split("-");
+  const [ano, mes] = chave.split("-");
   if (g === "mes") return `${NOMES_MES[Number(mes) - 1]}/${ano.slice(2)}`;
-  return `${dia}/${mes}`;
+  return `W${numeroSemanaIso(chave)}`;
 }
 
 /** Soma {data, valor} por mês ou semana nos últimos períodos (período sem
