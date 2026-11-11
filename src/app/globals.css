@@ -164,3 +164,49 @@ input:-webkit-autofill {
     animation: none;
   }
 }
+
+/* ---- Gráficos de linha: desenho animado (GraficoLinhaGradiente animar) ---- */
+@keyframes grafico-desenhar {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes grafico-surgir {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.grafico-linha-desenhar {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: grafico-desenhar 1.2s ease-out forwards;
+}
+.grafico-area-surgir {
+  opacity: 0;
+  animation: grafico-surgir 0.9s ease-out 0.5s forwards;
+}
+
+/* ---- Ícones animados (Financeiro, 10/11/2026) ---- */
+@keyframes icone-flutuar {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes icone-moeda-girar {
+  0%, 70%, 100% { transform: rotateY(0deg); }
+  85% { transform: rotateY(180deg); }
+}
+@keyframes icone-pulsar {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+@keyframes icone-subir {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(2px, -2px); }
+}
+.icone-flutuar { animation: icone-flutuar 2.4s ease-in-out infinite; }
+.icone-moeda-girar { animation: icone-moeda-girar 3.2s ease-in-out infinite; transform-style: preserve-3d; }
+.icone-pulsar { animation: icone-pulsar 1.8s ease-in-out infinite; }
+.icone-subir { animation: icone-subir 2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .grafico-linha-desenhar, .grafico-area-surgir { animation: none; opacity: 1; stroke-dashoffset: 0; }
+  .icone-flutuar, .icone-moeda-girar, .icone-pulsar, .icone-subir { animation: none; }
+}

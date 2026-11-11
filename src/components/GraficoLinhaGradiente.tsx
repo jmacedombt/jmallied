@@ -1,21 +1,24 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 export type PontoGrafico = { rotulo: string; valor: number };
 
-// sistema de coordenadas do viewBox (unidades abstratas, não pixels) —
-// a largura é esticada por preserveAspectRatio="none" pra sempre ocupar
-// 100% do espaço disponível, só a altura fica fixa (em px reais). Mesmo
-// esquema de GraficoPecasPorPeriodo.tsx, adaptado pra linha + área.
-const VIEWBOX_LARGURA = 1000;
+// largura medida em px reais do container (ResizeObserver) — o viewBox
+// acompanha o tamanho de verdade, então texto e linhas saem nítidos, sem
+// esticar (antes usava preserveAspectRatio="none" com 1000 unidades fixas,
+// o que deformava as letras — pedido de "mais definição", 10/11/2026).
+const LARGURA_PADRAO = 1000;
 const PADDING_TOPO = 34; // espaço pro valor acima do ponto mais alto
-const PADDING_LADO = 22;
+const PADDING_LADO = 44; // px reais — espaço pro valor do 1º e do último ponto
 const ALTURA_EIXO = 32; // espaço pro rótulo do período embaixo
 
 /** Catmull-Rom -> Bézier cúbica: curva suave passando por todos os
  * pontos, sem depender de nenhuma biblioteca de gráficos. */
-function curvaSuave(pontos: { x: number; y: number }[]): string {
+function curvaSuave(pontos: { x: number; y: number }[], yMax?: number): string {
+  // yMax = linha de base: limita os pontos de controle pra curva nunca
+  // "afundar" abaixo do zero entre dois pontos.
+  const lim = (y: number) => (yMax != null ? Math.min(y, yMax) : y);
   if (pontos.length === 0) return "";
   if (pontos.length === 1) return `M ${pontos[0].x},${pontos[0].y}`;
   if (pontos.length === 2) return `M ${pontos[0].x},${pontos[0].y} L ${pontos[1].x},${pontos[1].y}`;
@@ -27,9 +30,9 @@ function curvaSuave(pontos: { x: number; y: number }[]): string {
     const p2 = pontos[i + 1];
     const p3 = pontos[i + 2] ?? p2;
     const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c1y = lim(p1.y + (p2.y - p0.y) / 6);
     const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
+    const c2y = lim(p2.y - (p3.y - p1.y) / 6);
     d += ` C ${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
   }
   return d;
@@ -47,6 +50,9 @@ export default function GraficoLinhaGradiente({
   corLinha = "var(--accent2)",
   altura = 260,
   mensagemVazia = "Nenhum dado nesse período.",
+  eixoNegrito = false,
+  animar = false,
+  icone,
 }: {
   titulo?: React.ReactNode;
   /** conteúdo extra no canto direito do cabeçalho, ao lado do título —
@@ -57,9 +63,30 @@ export default function GraficoLinhaGradiente({
   corLinha?: string;
   altura?: number;
   mensagemVazia?: string;
+  /** rótulos do eixo horizontal em negrito (Financeiro, 10/11/2026) */
+  eixoNegrito?: boolean;
+  /** desenha a linha e a área com animação ao carregar/trocar os dados */
+  animar?: boolean;
+  /** ícone (já animado ou não) antes do título */
+  icone?: React.ReactNode;
 }) {
   const idGradiente = useId();
   const [hover, setHover] = useState<number | null>(null);
+  const caixaRef = useRef<HTMLDivElement>(null);
+  const [VIEWBOX_LARGURA, setLargura] = useState(LARGURA_PADRAO);
+
+  useEffect(() => {
+    const el = caixaRef.current;
+    if (!el) return;
+    const medir = () => {
+      const w = Math.round(el.getBoundingClientRect().width);
+      if (w > 0) setLargura(w);
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const alturaPlot = altura - PADDING_TOPO - ALTURA_EIXO;
   const baseline = PADDING_TOPO + alturaPlot;
@@ -77,7 +104,9 @@ export default function GraficoLinhaGradiente({
     y: baseline - ((p.valor - min) / amplitude) * alturaPlot,
   }));
 
-  const caminhoLinha = curvaSuave(coordenadas);
+  const caminhoLinha = curvaSuave(coordenadas, baseline);
+  // chave que muda quando os dados mudam → reinicia a animação
+  const chaveAnimacao = pontos.map((p) => `${p.rotulo}:${p.valor}`).join("|");
   const caminhoArea =
     coordenadas.length > 0
       ? `${caminhoLinha} L ${coordenadas[coordenadas.length - 1].x},${baseline} L ${coordenadas[0].x},${baseline} Z`
@@ -88,7 +117,8 @@ export default function GraficoLinhaGradiente({
       {(titulo || acoes) && (
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           {titulo && (
-            <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+            <p className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--ink)" }}>
+              {icone}
               {titulo}
             </p>
           )}
@@ -96,16 +126,17 @@ export default function GraficoLinhaGradiente({
         </div>
       )}
 
+      <div ref={caixaRef} className="w-full">
       {pontos.length === 0 ? (
         <p className="text-sm py-10 text-center" style={{ color: "var(--muted)" }}>
           {mensagemVazia}
         </p>
       ) : (
         <svg
+          key={animar ? chaveAnimacao : undefined}
           width="100%"
           height={altura}
           viewBox={`0 0 ${VIEWBOX_LARGURA} ${altura}`}
-          preserveAspectRatio="none"
           role="img"
           aria-label={typeof titulo === "string" ? titulo : "Gráfico de linha"}
         >
@@ -126,8 +157,21 @@ export default function GraficoLinhaGradiente({
             strokeWidth={1}
           />
 
-          {caminhoArea && <path d={caminhoArea} fill={`url(#${idGradiente})`} />}
-          {caminhoLinha && <path d={caminhoLinha} fill="none" stroke={corLinha} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />}
+          {caminhoArea && (
+            <path d={caminhoArea} fill={`url(#${idGradiente})`} className={animar ? "grafico-area-surgir" : undefined} />
+          )}
+          {caminhoLinha && (
+            <path
+              d={caminhoLinha}
+              fill="none"
+              stroke={corLinha}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              pathLength={animar ? 1 : undefined}
+              className={animar ? "grafico-linha-desenhar" : undefined}
+            />
+          )}
 
           {coordenadas.map((c, i) => {
             const emHover = hover === i;
@@ -164,7 +208,14 @@ export default function GraficoLinhaGradiente({
                   {formatarValor(pontos[i].valor)}
                 </text>
 
-                <text x={c.x} y={baseline + ALTURA_EIXO - 10} textAnchor="middle" fontSize="12" fill="var(--muted)">
+                <text
+                  x={c.x}
+                  y={baseline + ALTURA_EIXO - 10}
+                  textAnchor="middle"
+                  fontSize={eixoNegrito ? 12.5 : 12}
+                  fontWeight={eixoNegrito ? 700 : 400}
+                  fill={eixoNegrito ? "var(--ink)" : "var(--muted)"}
+                >
                   {pontos[i].rotulo}
                 </text>
               </g>
@@ -172,6 +223,7 @@ export default function GraficoLinhaGradiente({
           })}
         </svg>
       )}
+      </div>
     </div>
   );
 }

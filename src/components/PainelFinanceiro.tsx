@@ -1,17 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck2, CircleDollarSign, Landmark, Pencil, Plus, Receipt } from "lucide-react";
+import { CalendarCheck2, CircleDollarSign, Landmark, Pencil, Plus, Receipt, TrendingUp, Wallet } from "lucide-react";
 import GraficoFinanceiroMensal from "@/components/GraficoFinanceiroMensal";
 import type { PontoGrafico } from "@/components/GraficoLinhaGradiente";
 import PopupLancamentoFinanceiro, { type DadosLancamentoFinanceiro } from "@/components/PopupLancamentoFinanceiro";
 import PopupReceberValor from "@/components/PopupReceberValor";
 import PopupBaixaEmMassa from "@/components/PopupBaixaEmMassa";
-import { ROTULO_TIPO_NOTA, type LinhaFinanceiro, type NotaFinanceiro } from "@/lib/financeiro";
+import { ROTULO_TIPO_NOTA, hojeIso, ultimosNMeses, type LinhaFinanceiro, type NotaFinanceiro } from "@/lib/financeiro";
 
 function formatarReal(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+type Granularidade = "mes" | "semana";
+const QTD_MESES = 6;
+const QTD_SEMANAS = 12;
+const NOMES_MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/** segunda-feira (aaaa-mm-dd) da semana de uma data aaaa-mm-dd — em UTC
+ * puro, pra não escorregar um dia por fuso. */
+function inicioSemana(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  const dia = d.getUTCDay() || 7; // domingo = 7
+  d.setUTCDate(d.getUTCDate() - (dia - 1));
+  return d.toISOString().slice(0, 10);
+}
+
+function ultimasNSemanas(n: number): string[] {
+  const atual = new Date(`${inicioSemana(hojeIso())}T00:00:00Z`);
+  const lista: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(atual);
+    d.setUTCDate(d.getUTCDate() - 7 * i);
+    lista.push(d.toISOString().slice(0, 10));
+  }
+  return lista;
+}
+
+function rotuloPeriodo(chave: string, g: Granularidade): string {
+  const [ano, mes, dia] = chave.split("-");
+  if (g === "mes") return `${NOMES_MES[Number(mes) - 1]}/${ano.slice(2)}`;
+  return `${dia}/${mes}`;
+}
+
+/** Soma {data, valor} por mês ou semana nos últimos períodos (período sem
+ * nada aparece com R$ 0). */
+function montarPontos(itens: { data: string; valor: number }[], g: Granularidade): PontoGrafico[] {
+  const periodos = g === "mes" ? ultimosNMeses(QTD_MESES) : ultimasNSemanas(QTD_SEMANAS);
+  const mapa: Record<string, number> = {};
+  for (const it of itens) {
+    const chave = g === "mes" ? `${it.data.slice(0, 7)}-01` : inicioSemana(it.data);
+    mapa[chave] = (mapa[chave] ?? 0) + it.valor;
+  }
+  return periodos.map((p) => ({ rotulo: rotuloPeriodo(p, g), valor: mapa[p] ?? 0 }));
 }
 
 function formatarDataCurta(iso: string | null): string {
@@ -34,15 +77,28 @@ function formatarDataCurta(iso: string | null): string {
 export default function PainelFinanceiro({
   linhas,
   notas,
-  pontosEmitidas,
-  pontosRecebidas,
 }: {
   linhas: LinhaFinanceiro[];
   notas: NotaFinanceiro[];
-  pontosEmitidas: PontoGrafico[];
-  pontosRecebidas: PontoGrafico[];
 }) {
   const router = useRouter();
+  // período dos 2 gráficos (pedido explícito, 10/11/2026): mês ou semana
+  const [granularidade, setGranularidade] = useState<Granularidade>("mes");
+  const pontosEmitidas = useMemo(
+    () => montarPontos(notas.map((n) => ({ data: n.dataEmissao, valor: n.valor ?? 0 })), granularidade),
+    [notas, granularidade]
+  );
+  const pontosRecebidas = useMemo(
+    () =>
+      montarPontos(
+        notas
+          .filter((n) => n.status === "Vlr. Recebido" && n.dataRecebimento)
+          .map((n) => ({ data: n.dataRecebimento as string, valor: n.valor ?? 0 })),
+        granularidade
+      ),
+    [notas, granularidade]
+  );
+  const descricaoPeriodo = granularidade === "mes" ? `últimos ${QTD_MESES} meses` : `últimas ${QTD_SEMANAS} semanas`;
   const [criando, setCriando] = useState(false);
   const [editando, setEditando] = useState<LinhaFinanceiro | null>(null);
   const [alterandoStatus, setAlterandoStatus] = useState<NotaFinanceiro | null>(null);
@@ -145,12 +201,14 @@ export default function PainelFinanceiro({
       <div className="grid sm:grid-cols-3 gap-4 mb-6">
         <CardKpi
           icone={Receipt}
+          animacao="icone-flutuar"
           cor="#0d9488"
           rotulo="Valor total de notas emitidas"
           valor={formatarReal(totalEmitido)}
         />
         <CardKpi
           icone={CircleDollarSign}
+          animacao="icone-moeda-girar"
           cor="#f59e0b"
           rotulo="Valores em aberto"
           valor={formatarReal(totalEmAberto)}
@@ -158,6 +216,7 @@ export default function PainelFinanceiro({
         />
         <CardKpi
           icone={CalendarCheck2}
+          animacao="icone-pulsar"
           cor="#16a34a"
           rotulo="Valores recebidos"
           valor={formatarReal(totalRecebido)}
@@ -165,18 +224,50 @@ export default function PainelFinanceiro({
         />
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4 mb-6">
+      {/* seletor Mês / Semana — vale para os 2 gráficos */}
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          Mostrando os {descricaoPeriodo}
+        </p>
+        <div className="inline-flex rounded-lg border p-0.5" style={{ borderColor: "var(--line)", background: "var(--surface)" }}>
+          {(
+            [
+              ["mes", "Por mês"],
+              ["semana", "Por semana"],
+            ] as [Granularidade, string][]
+          ).map(([valor, rotulo]) => (
+            <button
+              key={valor}
+              type="button"
+              onClick={() => setGranularidade(valor)}
+              className="rounded-md px-3 py-1.5 text-xs font-semibold transition"
+              style={
+                granularidade === valor
+                  ? { background: "var(--accent)", color: "#fff" }
+                  : { color: "var(--muted)" }
+              }
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* um abaixo do outro (pedido explícito, 10/11/2026) */}
+      <div className="grid grid-cols-1 gap-4 mb-6">
         <GraficoFinanceiroMensal
-          titulo="Notas emitidas por mês (Mão de Obra + Peças)"
+          titulo={`Notas emitidas por ${granularidade === "mes" ? "mês" : "semana"} (Mão de Obra + Peças)`}
+          icone={<TrendingUp size={17} className="icone-subir" style={{ color: "#0d9488" }} />}
           pontos={pontosEmitidas}
           cor="#0d9488"
-          mensagemVazia="Nenhuma NF emitida nos últimos 6 meses."
+          mensagemVazia={`Nenhuma NF emitida nas ${descricaoPeriodo}.`}
         />
         <GraficoFinanceiroMensal
-          titulo="Valores recebidos por mês"
+          titulo={`Valores recebidos por ${granularidade === "mes" ? "mês" : "semana"}`}
+          icone={<Wallet size={17} className="icone-flutuar" style={{ color: "#16a34a" }} />}
           pontos={pontosRecebidas}
           cor="#16a34a"
-          mensagemVazia="Nenhum recebimento confirmado nos últimos 6 meses."
+          mensagemVazia={`Nenhum recebimento confirmado nas ${descricaoPeriodo}.`}
         />
       </div>
 
@@ -331,12 +422,15 @@ export default function PainelFinanceiro({
 
 function CardKpi({
   icone: Icone,
+  animacao,
   cor,
   rotulo,
   valor,
   sublinha,
 }: {
   icone: typeof Receipt;
+  /** classe de animação do ícone (globals.css) */
+  animacao?: string;
   cor: string;
   rotulo: string;
   valor: string;
@@ -345,7 +439,9 @@ function CardKpi({
   return (
     <div className="rounded-xl border p-4" style={{ background: "var(--surface)", borderColor: "var(--line)" }}>
       <div className="flex items-center gap-2 mb-2">
-        <Icone size={16} style={{ color: cor }} />
+        <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg" style={{ background: `${cor}1f` }}>
+          <Icone size={16} className={animacao} style={{ color: cor }} />
+        </span>
         <p className="text-xs font-medium" style={{ color: "var(--muted)" }}>
           {rotulo}
         </p>

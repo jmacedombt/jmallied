@@ -2,9 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import PainelFinanceiro from "@/components/PainelFinanceiro";
 import AtualizarAoVoltar from "@/components/AtualizarAoVoltar";
-import { podeAcessarFinanceiro, buscarNotasFiscaisFinanceiro, expandirNotas, ultimosNMeses, somarValorPorMes } from "@/lib/financeiro";
-import { formatarRotuloPeriodo } from "@/lib/metricas";
-import type { PontoGrafico } from "@/components/GraficoLinhaGradiente";
+import { podeAcessarFinanceiro, buscarNotasFiscaisFinanceiro, expandirNotas } from "@/lib/financeiro";
 
 export default async function FinanceiroPage() {
   const supabase = createClient();
@@ -36,28 +34,7 @@ export default async function FinanceiroPage() {
 
   const notas = expandirNotas(linhas);
 
-  // 2 gráficos, cada um considerando uma data diferente: emitidas →
-  // Data Emissão (toda NF entra); recebidas → Data Recebimento de cada
-  // NF (só as que já estão Vlr. Recebido — baixa é por nota, migration
-  // 0075). Os dois mostram os últimos 6 meses (pedido explícito,
-  // 07/10/2026 — antes Recebidos mostrava 12).
-  const meses = ultimosNMeses(6);
-
-  const mapaEmitidas = somarValorPorMes(notas.map((n) => ({ data: n.dataEmissao, valor: n.valor ?? 0 })));
-  const mapaRecebidas = somarValorPorMes(
-    notas
-      .filter((n) => n.status === "Vlr. Recebido" && n.dataRecebimento)
-      .map((n) => ({ data: n.dataRecebimento as string, valor: n.valor ?? 0 }))
-  );
-
-  const pontosEmitidas: PontoGrafico[] = meses.map((mes) => ({
-    rotulo: formatarRotuloPeriodo(mes, "mes"),
-    valor: mapaEmitidas[mes] ?? 0,
-  }));
-  const pontosRecebidas: PontoGrafico[] = meses.map((mes) => ({
-    rotulo: formatarRotuloPeriodo(mes, "mes"),
-    valor: mapaRecebidas[mes] ?? 0,
-  }));
+  // os 2 gráficos (mês/semana) são montados no PainelFinanceiro a partir das notas
 
   return (
     <AppShell
@@ -73,7 +50,7 @@ export default async function FinanceiroPage() {
       </p>
 
       <AtualizarAoVoltar />
-      <PainelFinanceiro linhas={linhas} notas={notas} pontosEmitidas={pontosEmitidas} pontosRecebidas={pontosRecebidas} />
+      <PainelFinanceiro linhas={linhas} notas={notas} />
     </AppShell>
   );
 }
