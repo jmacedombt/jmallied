@@ -50,7 +50,7 @@ export default async function BacklogPage() {
   return (
     <AppShell
       titulo="Backlog"
-      tituloInfo="Uma linha por lote (NF Remessa) que ainda tem algo pendente: total de orçamentos já importados com essa NF, quantos ainda estão pendentes (não entregues e não reprovados) e o R-TAT médio de quem está pendente. Clique numa linha pra ver a quantidade em cada status/card desse lote."
+      tituloInfo="Uma linha por lote (NF Remessa) que ainda tem algo pendente: total de orçamentos já importados com essa NF, quantos ainda estão pendentes (tudo que não está em Produto Entregue, inclusive os reprovados) e o R-TAT médio de quem está pendente. Clique numa linha pra ver a quantidade em cada status/card desse lote."
       perfil={perfil}
     >
       <div className="flex items-center flex-wrap mb-4">
@@ -88,7 +88,8 @@ export default async function BacklogPage() {
       <PainelBacklogPorLote linhas={linhas} detalhePorLote={detalhePorLote} mensagemVazia="Nenhum lote com pendência no momento." />
 
       <p className="text-xs mt-3" style={{ color: "var(--muted)" }}>
-        "Pendente" não conta quem já está em Produto Entregue nem quem já foi reprovado (8 - Orçamento Reprovado). O
+        "Pendente" = tudo que ainda não está em Produto Entregue, inclusive os reprovados (8 - Orçamento Reprovado) —
+        mesma conta do card "Quantidade de orçamentos em aberto" do Operacional. O
         Excel exportado sai com 2 abas: a primeira só com os status com numeração (1 a 8, regra vigente), a segunda
         com todas as pendências, numeradas ou não.
       </p>
