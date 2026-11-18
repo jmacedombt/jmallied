@@ -10,7 +10,13 @@ import {
   type ConfiguracaoMaoDeObra,
   type DetalheValidacaoOrcamento,
 } from "@/lib/orcamentos";
-import { buscarPrecosBidPorPartNumber, buscarOverridesMarkupPorLote, buscarOverridesModeloPeca, type FaixaMarkup } from "@/lib/bid";
+import {
+  buscarPrecosBidPorPartNumber,
+  buscarOverridesMarkupPorLote,
+  buscarOverridesModeloPeca,
+  calcularCustoPecaAllied,
+  type FaixaMarkup,
+} from "@/lib/bid";
 import { formatarDataBrasilia } from "@/lib/tempo";
 import { type LinhaPlanilhaOrcamento } from "@/lib/email";
 
@@ -285,22 +291,40 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
     };
   }
 
-  // 3ª trava: o BID (custo_peca_samsung persistido) precisa refletir o
-  // mesmo valor que a Base Peças tem agora pra cada código usado nesse
-  // lote. Ignora peça travada no BID (preço fixado na mão, de propósito).
+  // 3ª trava: o valor de VENDA da peça no BID (custo_peca_allied) precisa
+  // ser o mesmo que sai da Base Peças agora. Desde 17/11/2026 compara a
+  // venda final, não o custo cru: diferença de centavos no custo que não
+  // muda o valor cobrado do cliente (ex.: GH82-32860A, R$ 139,27 x 139,28,
+  // venda R$ 224 nos dois) não trava mais o envio. Ignora peça travada no
+  // BID (preço fixado na mão, de propósito).
+  const [{ data: faixasTrava }, { data: impostoTrava }] = await Promise.all([
+    admin.from("configuracoes_bid_markup").select("valor_min, valor_max, multiplicador").order("ordem", { ascending: true }),
+    admin.from("configuracoes_impostos").select("icms_percentual").eq("id", 1).single(),
+  ]);
+  const faixasGlobaisTrava: FaixaMarkup[] = (
+    (faixasTrava ?? []) as { valor_min: number; valor_max: number | null; multiplicador: number }[]
+  ).map((f) => ({
+    valor_min: Number(f.valor_min),
+    valor_max: f.valor_max == null ? null : Number(f.valor_max),
+    multiplicador: Number(f.multiplicador),
+  }));
+  const icmsTrava = Number(impostoTrava?.icms_percentual ?? 0);
+
   const pecasDesatualizadas = new Set<string>();
   for (let i = 0; i < codigosUnicos.length; i += TAMANHO_LOTE_CODIGOS) {
     const lote = codigosUnicos.slice(i, i + TAMANHO_LOTE_CODIGOS);
     const { data } = await admin
       .from("bid_pecas")
-      .select("part_number, custo_peca_samsung, travado")
+      .select("part_number, custo_peca_allied, travado")
       .in("part_number", lote);
-    for (const linha of (data ?? []) as { part_number: string; custo_peca_samsung: number | null; travado: boolean }[]) {
+    for (const linha of (data ?? []) as { part_number: string; custo_peca_allied: number | null; travado: boolean }[]) {
       if (linha.travado) continue;
-      const valorVivo = custosPorCodigo.get(linha.part_number) ?? null;
+      const custoVivo = custosPorCodigo.get(linha.part_number) ?? null;
+      const vendaViva = custoVivo != null ? calcularCustoPecaAllied(custoVivo, faixasGlobaisTrava, icmsTrava)?.custoPecaAllied ?? null : null;
+      const vendaBid = linha.custo_peca_allied == null ? null : Number(linha.custo_peca_allied);
       const diferente =
-        (linha.custo_peca_samsung == null) !== (valorVivo == null) ||
-        (linha.custo_peca_samsung != null && valorVivo != null && Math.abs(linha.custo_peca_samsung - valorVivo) > 0.001);
+        (vendaBid == null) !== (vendaViva == null) ||
+        (vendaBid != null && vendaViva != null && Math.abs(vendaBid - vendaViva) > 0.001);
       if (diferente) pecasDesatualizadas.add(linha.part_number);
     }
   }
@@ -309,7 +333,7 @@ export async function prepararEnvioLote(admin: AdminClient, nfRemessa: string): 
     return {
       ok: false,
       status: 409,
-      erro: "A Base Peças mudou desde o último Recalcular BID pra alguma peça desse lote — recalcule o BID (Bases > BID) antes de confirmar o envio, pra garantir que o valor informado ao cliente seja o mesmo que será cobrado.",
+      erro: `A Base Peças mudou desde o último Recalcular BID e o valor de venda destas peças ficou diferente: ${Array.from(pecasDesatualizadas).join(", ")}. Recalcule o BID (Bases > BID) antes de confirmar o envio, pra garantir que o valor informado ao cliente seja o mesmo que será cobrado.`,
       pecasDesatualizadas: Array.from(pecasDesatualizadas),
     };
   }
