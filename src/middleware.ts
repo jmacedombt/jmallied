@@ -63,6 +63,8 @@ const SLUGS_OPERACIONAL_ALLIED = STATUS_OPERACIONAL.map((s) => s.slug);
 // no menu dele.
 const APIS_PERMITIDAS_ALLIED = [
   "/api/operacional/backlog/exportar-allied",
+  // pop-up de pendências do lote na tela Backlog (23/11/2026)
+  "/api/operacional/backlog/lote",
   "/api/operacional/modelo-retorno",
   "/api/operacional/contra-propostas",
   "/api/operacional/orcamentos/historico-envios",
