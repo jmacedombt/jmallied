@@ -41,12 +41,20 @@ if "%MENSAGEM%"=="" set MENSAGEM=Atualizacao do sistema Allied
 echo.
 git commit -m "%MENSAGEM%"
 if errorlevel 1 (
+    rem Nada novo pra commitar - mas pode ter commit de uma tentativa
+    rem anterior que nao chegou no GitHub (push falhou). Se tiver, envia.
+    set PENDENTES=0
+    for /f %%C in ('git rev-list --count origin/main..HEAD 2^>nul') do set PENDENTES=%%C
+    if "!PENDENTES!"=="0" (
+        echo.
+        echo Nao havia nada novo para enviar ^(ou o commit nao pode ser feito -
+        echo confira a mensagem do Git acima^).
+        echo.
+        pause
+        exit /b 0
+    )
     echo.
-    echo Nao havia nada novo para enviar ^(ou o commit nao pode ser feito -
-    echo confira a mensagem do Git acima^).
-    echo.
-    pause
-    exit /b 0
+    echo Nada novo para commitar, mas ha !PENDENTES! commit^(s^) ainda nao enviado^(s^) ao GitHub.
 )
 
 echo.
