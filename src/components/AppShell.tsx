@@ -171,7 +171,10 @@ const GRUPOS_MENU_BASE: GrupoMenu[] = [
     label: "Impressão",
     icone: Printer,
     hrefGrupo: "/impressao",
-    itens: [{ href: "/impressao/avulsa", label: "Impressão Avulsa", icone: Printer }],
+    itens: [
+      { href: "/impressao/avulsa", label: "Impressão Avulsa", icone: Printer },
+      { href: "/impressao/nf-retorno", label: "Impressão Avulsa NF Retorno", icone: Tags },
+    ],
   },
   {
     id: "configuracoes",
@@ -298,7 +301,10 @@ const GRUPOS_MENU_OPERACIONAL: GrupoMenu[] = [
     label: "Impressão",
     icone: Printer,
     hrefGrupo: "/impressao",
-    itens: [{ href: "/impressao/avulsa", label: "Impressão Avulsa", icone: Printer }],
+    itens: [
+      { href: "/impressao/avulsa", label: "Impressão Avulsa", icone: Printer },
+      { href: "/impressao/nf-retorno", label: "Impressão Avulsa NF Retorno", icone: Tags },
+    ],
   },
 ];
 
@@ -313,7 +319,10 @@ const GRUPOS_MENU_FINANCEIRO: GrupoMenu[] = [
     label: "Impressão",
     icone: Printer,
     hrefGrupo: "/impressao",
-    itens: [{ href: "/impressao/avulsa", label: "Impressão Avulsa", icone: Printer }],
+    itens: [
+      { href: "/impressao/avulsa", label: "Impressão Avulsa", icone: Printer },
+      { href: "/impressao/nf-retorno", label: "Impressão Avulsa NF Retorno", icone: Tags },
+    ],
   },
   GRUPO_FINANCEIRO,
 ];

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Printer } from "lucide-react";
+import { Printer, Tags } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 
@@ -11,6 +11,14 @@ const TILES = [
     icone: Printer,
     cor: "#0ea5e9",
     clara: "#7dd3fc",
+  },
+  {
+    href: "/impressao/nf-retorno",
+    titulo: "Impressão Avulsa NF Retorno",
+    descricao: "Etiqueta de caixa de uma NF de Retorno já emitida — escolha a NF numa lista, confira e imprima.",
+    icone: Tags,
+    cor: "#059669",
+    clara: "#34d399",
   },
 ];
 
