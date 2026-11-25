@@ -265,85 +265,125 @@ def gerar_zpl(os_reparadora: str, nf_remessa_allied: str, modelo_comercial: str)
     return zpl
 
 
+def _icone_documento(x: int, y: int) -> str:
+    """Ícone de documento (folha com linhas) — 18x24 dots."""
+    return (
+        f"^FO{x},{y}^GB18,24,2^FS\n"
+        f"^FO{x + 4},{y + 7}^GB10,2,2^FS\n"
+        f"^FO{x + 4},{y + 12}^GB10,2,2^FS\n"
+        f"^FO{x + 4},{y + 17}^GB7,2,2^FS\n"
+    )
+
+
+def _icone_engrenagem(x: int, y: int) -> str:
+    """Ícone de engrenagem (NF Peça) — anel com 4 dentes, 22x22 dots."""
+    return (
+        f"^FO{x + 4},{y + 4}^GC14,4,B^FS\n"
+        f"^FO{x + 9},{y}^GB4,5,4^FS\n"
+        f"^FO{x + 9},{y + 17}^GB4,5,4^FS\n"
+        f"^FO{x},{y + 9}^GB5,4,4^FS\n"
+        f"^FO{x + 17},{y + 9}^GB5,4,4^FS\n"
+    )
+
+
+def _icone_chave(x: int, y: int) -> str:
+    """Ícone de chave de boca (NF Serviço) — cabo diagonal + cabeça, 22x22 dots."""
+    return (
+        f"^FO{x},{y + 7}^GD15,15,5,B,R^FS\n"
+        f"^FO{x + 11},{y}^GC11,4,B^FS\n"
+    )
+
+
+def _icone_caixa(x: int, y: int) -> str:
+    """Ícone de caixa de papelão (tampa + corpo) — 30x26 dots."""
+    return (
+        f"^FO{x},{y}^GB30,8,2^FS\n"
+        f"^FO{x + 2},{y + 6}^GB26,20,2^FS\n"
+        f"^FO{x + 11},{y + 11}^GB8,3,3^FS\n"
+    )
+
+
+def _icone_status(x: int, y: int, aprovado: bool) -> str:
+    """Círculo com check (aprovado) ou X (reprovado), em branco sobre a
+    faixa preta (^FR) — 36x36 dots."""
+    zpl = f"^FO{x},{y}^FR^GC36,4,B^FS\n"
+    if aprovado:
+        zpl += f"^FO{x + 9},{y + 17}^FR^GD8,8,4,B,L^FS\n"
+        zpl += f"^FO{x + 15},{y + 9}^FR^GD12,16,4,B,R^FS\n"
+    else:
+        zpl += f"^FO{x + 10},{y + 10}^FR^GD16,16,4,B,L^FS\n"
+        zpl += f"^FO{x + 10},{y + 10}^FR^GD16,16,4,B,R^FS\n"
+    return zpl
+
+
 def gerar_zpl_caixa_allied(reparadora, tipo, status, nf_retorno, nf_peca, nf_servico,
                            qtde, nf_envio, caixa_atual, caixa_total) -> str:
     """
     Etiqueta de CAIXA no padrão da Allied (pedido explícito, 25/11/2026 —
-    e-mail "Modelo de Etiqueta para os Próximos Lotes"), 60x40mm:
+    e-mail "Modelo de Etiqueta para os Próximos Lotes"), 60x40mm
+    (480x320 dots), ocupando a etiqueta inteira:
 
-      J MACEDO                         CAIXA 1 DE 3
-      [ REPARO - APROVADO ]            (faixa preta)
-      NF RETORNO: 3529-2               (grande, negrito)
-      NF PEÇA: 3531-2   NF SERVIÇO: 004   (ou ______ pra preencher à mão)
-      QTDE: 21                         NF ENVIO: 1929510
+      J MACEDO                              CAIXA / 1 DE 2
+      [(✓) REPARO - APROVADO ]              faixa preta maior
+      [doc] NF RETORNO: 3619-2              grande, negrito
+      [doc] NF PEÇA: 3628-2
+      [doc] NF SERVIÇO: 025                 (ou ________ pra preencher à mão)
+      ----------------------------------------------------------
+      [caixa] QTDE 21                       NF ENVIO 2010170
 
-    Campos que vierem vazios (NF Peça/Serviço) saem com linha em branco
-    pra preenchimento manual, como a Allied permite.
+    As coordenadas são as mesmas da prévia em HTML
+    (src/components/PreviewEtiquetaCaixa.tsx) — mudou aqui, mudar lá.
     """
     largura = mm_para_dots(LARGURA_ETIQUETA_MM)   # 480 dots
     altura = mm_para_dots(ALTURA_ETIQUETA_MM)      # 320 dots
-    margem = 14
-    util = largura - 2 * margem
-
-    reparadora_str = (_sanitizar(reparadora) or "J MACEDO").upper()
-    faixa_str = f"{(_sanitizar(tipo) or 'REPARO').upper()} - {(_sanitizar(status) or '—').upper()}"
-    nf_retorno_str = _sanitizar(nf_retorno) or "______"
-    nf_peca_str = _sanitizar(nf_peca) or "________"
-    nf_servico_str = _sanitizar(nf_servico) or "________"
-    qtde_str = _sanitizar(qtde) or "____"
-    nf_envio_str = _sanitizar(nf_envio) or "______"
-
-    zpl = (
-        "^XA\n"
-        f"^PW{largura}\n"
-        f"^LL{altura}\n"
-        "^CI28\n"
-    )
+    m = 14
+    util = largura - 2 * m
     metade = util // 2
 
-    # 1) Reparadora (esquerda, negrito) + 9) Caixa (direita: rótulo + "1 DE 3")
-    y = 10
-    altura_rep, largura_rep = _fonte_ajustada(reparadora_str, metade + 30, largura_max=30, proporcao=1.15, largura_min=18)
-    zpl += _campo_negrito(margem, y + 8, altura_rep, largura_rep, metade + 30, "L", reparadora_str)
+    reparadora_str = (_sanitizar(reparadora) or "J MACEDO").upper()
+    status_str = (_sanitizar(status) or "—").upper()
+    faixa_str = f"{(_sanitizar(tipo) or 'REPARO').upper()} - {status_str}"
+    nf_retorno_str = _sanitizar(nf_retorno) or "______"
+    nf_peca_str = _sanitizar(nf_peca) or "__________"
+    nf_servico_str = _sanitizar(nf_servico) or "__________"
+    qtde_str = _sanitizar(qtde) or "____"
+    nf_envio_str = _sanitizar(nf_envio) or "______"
     caixa_valor = f"{_sanitizar(caixa_atual) or '_'} DE {_sanitizar(caixa_total) or '_'}"
-    zpl += f"^FO{margem},{y}^A0N,16,16^FB{util},1,0,R,0^FDCAIXA^FS\n"
-    altura_cx, largura_cx = _fonte_ajustada(caixa_valor, metade - 40, largura_max=30, proporcao=1.15, largura_min=18)
-    zpl += _campo_negrito(margem, y + 18, altura_cx, largura_cx, util, "R", caixa_valor)
 
-    # 2) + 3) Tipo de retorno - Status (faixa preta, texto branco)
-    y_faixa = y + 18 + max(altura_rep, altura_cx) + 8
-    altura_faixa_txt, largura_faixa_txt = _fonte_ajustada(
-        faixa_str, util, largura_max=28, proporcao=1.15, largura_min=18
-    )
-    altura_faixa = altura_faixa_txt + 14
+    zpl = "^XA\n" f"^PW{largura}\n" f"^LL{altura}\n" "^CI28\n"
+
+    # 1) Reparadora + 9) Caixa X de Y  (y 6..62)
+    zpl += _campo_negrito(m, 20, 40, 34, metade + 40, "L", reparadora_str)
+    zpl += f"^FO{m},6^A0N,18,18^FB{util},1,0,R,0^FDCAIXA^FS\n"
+    zpl += _campo_negrito(m, 24, 38, 32, util, "R", caixa_valor)
+
+    # 2) + 3) Tipo - Status: faixa preta (y 68..124), ícone de status à esquerda
+    y_faixa, altura_faixa = 68, 56
+    altura_txt = 38 if len(faixa_str) <= 19 else 32
+    zpl += f"^FO0,{y_faixa}^GB{largura},{altura_faixa},{altura_faixa}^FS\n"
+    zpl += _icone_status(m + 2, y_faixa + 10, status_str == "APROVADO")
     zpl += (
-        f"^FO0,{y_faixa}^GB{largura},{altura_faixa},{altura_faixa}^FS\n"
-        f"^FO0,{y_faixa + 7}^FR^A0N,{altura_faixa_txt},{largura_faixa_txt}"
-        f"^FB{largura},1,0,C,0^FD{faixa_str}^FS\n"
+        f"^FO50,{y_faixa + (altura_faixa - altura_txt) // 2 + 2}^FR^A0N,{altura_txt},{altura_txt - 4}"
+        f"^FB{largura - 64},1,0,C,0^FD{faixa_str}^FS\n"
     )
 
-    # 4) NF Retorno (grande, negrito)
-    y_ret = y_faixa + altura_faixa + 10
-    texto_ret = f"NF RETORNO: {nf_retorno_str}"
-    altura_ret, largura_ret = _fonte_ajustada(texto_ret, util, largura_max=30, proporcao=1.2, largura_min=20)
-    zpl += _campo_negrito(margem, y_ret, altura_ret, largura_ret, util, "L", texto_ret)
+    # 4) NF Retorno (y 136..174) / 5) NF Peça (y 186..210) / 6) NF Serviço (y 220..244)
+    x_txt = m + 30
+    zpl += _icone_documento(m, 140)
+    zpl += _campo_negrito(x_txt, 136, 38, 32, util - 30, "L", f"NF RETORNO: {nf_retorno_str}")
+    # NF Peça / NF Serviço menores (pedido explícito, 25/11/2026), cada uma com ícone próprio
+    zpl += _icone_engrenagem(m - 2, 186)
+    zpl += f"^FO{x_txt},186^A0N,24,21^FB{util - 30},1,0,L,0^FDNF PEÇA: {nf_peca_str}^FS\n"
+    zpl += _icone_chave(m - 2, 220)
+    zpl += f"^FO{x_txt},220^A0N,24,21^FB{util - 30},1,0,L,0^FDNF SERVIÇO: {nf_servico_str}^FS\n"
 
-    # 5) NF Peça + 6) NF Serviço (uma linha cada)
-    y_peca = y_ret + altura_ret + 8
-    zpl += f"^FO{margem},{y_peca}^A0N,26,22^FB{util},1,0,L,0^FDNF PEÇA: {nf_peca_str}^FS\n"
-    y_serv = y_peca + 30
-    zpl += f"^FO{margem},{y_serv}^A0N,26,22^FB{util},1,0,L,0^FDNF SERVIÇO: {nf_servico_str}^FS\n"
-
-    # linha + 7) Qtde (esquerda) / 8) NF envio (direita) — rótulo pequeno + valor grande
-    y_div = y_serv + 32
-    zpl += f"^FO0,{y_div}^GB{largura},2,2^FS\n"
-    y_rod = y_div + 6
-    zpl += f"^FO{margem},{y_rod}^A0N,16,16^FDQTDE^FS\n"
-    zpl += f"^FO{margem},{y_rod}^A0N,16,16^FB{util},1,0,R,0^FDNF ENVIO^FS\n"
-    altura_q, largura_q = _fonte_ajustada(qtde_str, metade - 40, largura_max=40, proporcao=1.1, largura_min=20)
-    zpl += _campo_negrito(margem, y_rod + 18, altura_q, largura_q, metade, "L", qtde_str)
-    altura_e, largura_e = _fonte_ajustada(nf_envio_str, metade + 20, largura_max=32, proporcao=1.15, largura_min=18)
-    zpl += _campo_negrito(margem, y_rod + 18, altura_e, largura_e, util, "R", nf_envio_str)
+    # divisória (y 256) + 7) Qtde com ícone de caixa / 8) NF envio
+    zpl += f"^FO0,256^GB{largura},3,3^FS\n"
+    zpl += _icone_caixa(m, 274)
+    zpl += f"^FO{m + 40},262^A0N,16,16^FDQTDE^FS\n"
+    zpl += _campo_negrito(m + 40, 278, 38, 34, metade - 40, "L", qtde_str)
+    zpl += f"^FO{m},262^A0N,16,16^FB{util},1,0,R,0^FDNF ENVIO^FS\n"
+    zpl += _campo_negrito(m, 278, 38, 32, util, "R", nf_envio_str)
 
     zpl += "^XZ\n"
     return zpl
