@@ -71,27 +71,35 @@ export async function imprimirViaAgente(dados: {
 }
 
 /**
- * Etiqueta de CAIXA (Ag. Emissão de Nota Fiscal) — usada pra colar nas
- * caixas de aparelhos que voltam pra Allied. Mesma etiqueta 60x40mm e
- * mesmo Allied Print Agent do `imprimirViaAgente` acima, só que com um
- * layout de campos diferente (ver AlliedPrintAgent/etiqueta.py,
- * `gerar_zpl_caixa`): LOTE, VOLUME "X/Y", NF DE RETORNO (fonte maior e
- * em negrito), OBSERVAÇÃO (APROVADO/REPROVADO) e NF DE ENTRADA.
- *
- * Usada em 3 lugares da tela: o botão "Etiqueta de Caixa" de cada linha
- * (imprime uma etiqueta por caixa, calculado com base na quantidade de
- * aparelhos daquele lote — 21 por caixa), o "Teste de Impressão" (dados
- * fixos, só pra checar alinhamento na Zebra) e a "Etiqueta Avulsa"
- * (campos preenchidos manualmente no pop-up).
+ * Etiqueta de CAIXA (Ag. Emissão de Nota Fiscal e Impressão Avulsa NF
+ * Retorno) — colada nas caixas de aparelhos que voltam pra Allied. Mesma
+ * etiqueta 60x40mm e mesmo Allied Print Agent do `imprimirViaAgente`
+ * acima; layout no padrão da Allied desde 25/11/2026 (ver
+ * AlliedPrintAgent/etiqueta.py, `gerar_zpl_caixa_allied`).
  */
+export type TipoRetornoCaixa = "REPARO" | "REINCIDÊNCIA";
+export type StatusCaixa = "APROVADO" | "REPROVADO";
+
+/** Etiqueta de caixa no padrão da Allied (pedido explícito, 25/11/2026 —
+ * e-mail "Modelo de Etiqueta para os Próximos Lotes"). Os 9 campos do
+ * modelo: reparadora, tipo de retorno, status, NF Retorno, NF Peça, NF
+ * Serviço, quantidade na caixa, NF de envio e Caixa X de Y. NF Peça /
+ * Serviço vazias saem com linha em branco pra preencher à mão. */
 export type DadosEtiquetaCaixa = {
-  lote: number | string;
-  volumeAtual: number | string;
-  volumeTotal: number | string;
+  reparadora: string;
+  tipo: TipoRetornoCaixa;
+  status: StatusCaixa;
   nfRetorno: string;
-  observacao: string;
-  nfEntrada: string;
+  nfPeca: string;
+  nfServico: string;
+  qtde: number | string;
+  nfEnvio: string;
+  caixaAtual: number | string;
+  caixaTotal: number | string;
 };
+
+export const REPARADORA_PADRAO = "J MACEDO";
+export const APARELHOS_POR_CAIXA = 21;
 
 export async function imprimirCaixaViaAgente(dados: DadosEtiquetaCaixa): Promise<void> {
   let res: Response;
@@ -100,12 +108,25 @@ export async function imprimirCaixaViaAgente(dados: DadosEtiquetaCaixa): Promise
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        lote: dados.lote,
-        volume_atual: dados.volumeAtual,
-        volume_total: dados.volumeTotal,
+        modelo: "allied",
+        reparadora: dados.reparadora,
+        tipo: dados.tipo,
+        status: dados.status,
         nf_retorno: dados.nfRetorno,
-        observacao: dados.observacao,
-        nf_entrada: dados.nfEntrada,
+        nf_peca: dados.nfPeca,
+        nf_servico: dados.nfServico,
+        qtde: dados.qtde,
+        nf_envio: dados.nfEnvio,
+        caixa_atual: dados.caixaAtual,
+        caixa_total: dados.caixaTotal,
+        // campos do layout antigo — se o Print Agent desse PC ainda não
+        // foi atualizado, ele ignora "modelo" e imprime no formato antigo
+        // em vez de dar erro.
+        lote: dados.caixaAtual,
+        volume_atual: dados.caixaAtual,
+        volume_total: dados.caixaTotal,
+        observacao: dados.status,
+        nf_entrada: dados.nfEnvio,
       }),
     });
   } catch {
@@ -126,48 +147,49 @@ export async function imprimirCaixaViaAgente(dados: DadosEtiquetaCaixa): Promise
   }
 }
 
-/** Quantas etiquetas de caixa uma NF Remessa gera — 21 aparelhos por
- * caixa (pedido explícito), sempre pelo menos 1 mesmo com 0 itens. */
+/** Quantas caixas a sugestão automática usa — 21 aparelhos por caixa,
+ * sempre pelo menos 1. */
 export function quantidadeCaixas(quantidadeAparelhos: number): number {
-  return Math.max(1, Math.ceil(quantidadeAparelhos / 21));
+  return Math.max(1, Math.ceil(quantidadeAparelhos / APARELHOS_POR_CAIXA));
+}
+
+/** Sugestão de divisão em caixas: 21 por caixa e a última com o resto
+ * (ex.: 47 → [21, 21, 5]). O operador ajusta antes de imprimir. */
+export function sugerirDivisaoCaixas(quantidadeAparelhos: number): number[] {
+  if (quantidadeAparelhos <= 0) return [0];
+  const caixas: number[] = [];
+  let resto = quantidadeAparelhos;
+  while (resto > 0) {
+    caixas.push(Math.min(APARELHOS_POR_CAIXA, resto));
+    resto -= APARELHOS_POR_CAIXA;
+  }
+  return caixas;
 }
 
 /**
- * Imprime, em sequência, todas as etiquetas de caixa de um lote (NF
- * Remessa) — LOTE e VOLUME reiniciam em 1 a cada chamada (pedido
- * explícito: reinicia a cada NF Remessa). Para no primeiro erro e avisa
- * quantas já saíram, pra não duplicar impressão ao tentar de novo.
- *
- * `totalCaixas` sobrescreve o cálculo automático (21 aparelhos por
- * caixa) — pedido explícito: dar a opção de ajustar a quantidade de
- * etiquetas na hora de confirmar a impressão (ver
- * PopupConfirmarEtiquetaCaixa), pra quando a separação física das
- * caixas não bater exatamente com a conta.
+ * Imprime, em sequência, uma etiqueta por caixa de um grupo (mesmo lote,
+ * mesmo status, mesmo tipo de retorno) — "Caixa 1 de N" ... "N de N",
+ * cada uma com a quantidade que o operador informou na montagem
+ * (pedido explícito, 25/11/2026: imprimir no fim, depois de montar as
+ * caixas). Para no primeiro erro e avisa quantas já saíram, pra não
+ * duplicar impressão ao tentar de novo.
  */
-export async function imprimirLoteDeCaixas(dados: {
-  nfRetorno: string;
-  observacao: string;
-  nfEntrada: string;
-  quantidadeAparelhos: number;
-  totalCaixas?: number;
-}): Promise<void> {
-  const total = dados.totalCaixas ?? quantidadeCaixas(dados.quantidadeAparelhos);
-  for (let atual = 1; atual <= total; atual++) {
+export async function imprimirCaixasDoGrupo(
+  base: Omit<DadosEtiquetaCaixa, "qtde" | "caixaAtual" | "caixaTotal">,
+  quantidadesPorCaixa: number[],
+  aoImprimir?: (impressas: number) => void
+): Promise<void> {
+  const total = quantidadesPorCaixa.length;
+  for (let i = 0; i < total; i++) {
     try {
-      await imprimirCaixaViaAgente({
-        lote: atual,
-        volumeAtual: atual,
-        volumeTotal: total,
-        nfRetorno: dados.nfRetorno,
-        observacao: dados.observacao,
-        nfEntrada: dados.nfEntrada,
-      });
+      await imprimirCaixaViaAgente({ ...base, qtde: quantidadesPorCaixa[i], caixaAtual: i + 1, caixaTotal: total });
+      aoImprimir?.(i + 1);
     } catch (erro) {
       const mensagem = erro instanceof ErroImpressaoAgente ? erro.message : "Erro inesperado ao imprimir.";
       throw new ErroImpressaoAgente(
-        atual === 1
-          ? `Falhou ao imprimir a 1ª etiqueta de caixa: ${mensagem}`
-          : `Imprimiu ${atual - 1} de ${total} etiqueta(s) e falhou na próxima: ${mensagem}`
+        i === 0
+          ? `Falhou ao imprimir a 1ª etiqueta (${base.tipo} - ${base.status}): ${mensagem}`
+          : `Imprimiu ${i} de ${total} etiqueta(s) de ${base.tipo} - ${base.status} e falhou na próxima: ${mensagem}`
       );
     }
   }

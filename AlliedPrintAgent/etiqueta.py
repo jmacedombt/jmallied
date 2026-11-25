@@ -263,3 +263,87 @@ def gerar_zpl(os_reparadora: str, nf_remessa_allied: str, modelo_comercial: str)
         "^XZ\n"
     )
     return zpl
+
+
+def gerar_zpl_caixa_allied(reparadora, tipo, status, nf_retorno, nf_peca, nf_servico,
+                           qtde, nf_envio, caixa_atual, caixa_total) -> str:
+    """
+    Etiqueta de CAIXA no padrão da Allied (pedido explícito, 25/11/2026 —
+    e-mail "Modelo de Etiqueta para os Próximos Lotes"), 60x40mm:
+
+      J MACEDO                         CAIXA 1 DE 3
+      [ REPARO - APROVADO ]            (faixa preta)
+      NF RETORNO: 3529-2               (grande, negrito)
+      NF PEÇA: 3531-2   NF SERVIÇO: 004   (ou ______ pra preencher à mão)
+      QTDE: 21                         NF ENVIO: 1929510
+
+    Campos que vierem vazios (NF Peça/Serviço) saem com linha em branco
+    pra preenchimento manual, como a Allied permite.
+    """
+    largura = mm_para_dots(LARGURA_ETIQUETA_MM)   # 480 dots
+    altura = mm_para_dots(ALTURA_ETIQUETA_MM)      # 320 dots
+    margem = 14
+    util = largura - 2 * margem
+
+    reparadora_str = (_sanitizar(reparadora) or "J MACEDO").upper()
+    faixa_str = f"{(_sanitizar(tipo) or 'REPARO').upper()} - {(_sanitizar(status) or '—').upper()}"
+    nf_retorno_str = _sanitizar(nf_retorno) or "______"
+    nf_peca_str = _sanitizar(nf_peca) or "________"
+    nf_servico_str = _sanitizar(nf_servico) or "________"
+    qtde_str = _sanitizar(qtde) or "____"
+    nf_envio_str = _sanitizar(nf_envio) or "______"
+
+    zpl = (
+        "^XA\n"
+        f"^PW{largura}\n"
+        f"^LL{altura}\n"
+        "^CI28\n"
+    )
+    metade = util // 2
+
+    # 1) Reparadora (esquerda, negrito) + 9) Caixa (direita: rótulo + "1 DE 3")
+    y = 10
+    altura_rep, largura_rep = _fonte_ajustada(reparadora_str, metade + 30, largura_max=30, proporcao=1.15, largura_min=18)
+    zpl += _campo_negrito(margem, y + 8, altura_rep, largura_rep, metade + 30, "L", reparadora_str)
+    caixa_valor = f"{_sanitizar(caixa_atual) or '_'} DE {_sanitizar(caixa_total) or '_'}"
+    zpl += f"^FO{margem},{y}^A0N,16,16^FB{util},1,0,R,0^FDCAIXA^FS\n"
+    altura_cx, largura_cx = _fonte_ajustada(caixa_valor, metade - 40, largura_max=30, proporcao=1.15, largura_min=18)
+    zpl += _campo_negrito(margem, y + 18, altura_cx, largura_cx, util, "R", caixa_valor)
+
+    # 2) + 3) Tipo de retorno - Status (faixa preta, texto branco)
+    y_faixa = y + 18 + max(altura_rep, altura_cx) + 8
+    altura_faixa_txt, largura_faixa_txt = _fonte_ajustada(
+        faixa_str, util, largura_max=28, proporcao=1.15, largura_min=18
+    )
+    altura_faixa = altura_faixa_txt + 14
+    zpl += (
+        f"^FO0,{y_faixa}^GB{largura},{altura_faixa},{altura_faixa}^FS\n"
+        f"^FO0,{y_faixa + 7}^FR^A0N,{altura_faixa_txt},{largura_faixa_txt}"
+        f"^FB{largura},1,0,C,0^FD{faixa_str}^FS\n"
+    )
+
+    # 4) NF Retorno (grande, negrito)
+    y_ret = y_faixa + altura_faixa + 10
+    texto_ret = f"NF RETORNO: {nf_retorno_str}"
+    altura_ret, largura_ret = _fonte_ajustada(texto_ret, util, largura_max=30, proporcao=1.2, largura_min=20)
+    zpl += _campo_negrito(margem, y_ret, altura_ret, largura_ret, util, "L", texto_ret)
+
+    # 5) NF Peça + 6) NF Serviço (uma linha cada)
+    y_peca = y_ret + altura_ret + 8
+    zpl += f"^FO{margem},{y_peca}^A0N,26,22^FB{util},1,0,L,0^FDNF PEÇA: {nf_peca_str}^FS\n"
+    y_serv = y_peca + 30
+    zpl += f"^FO{margem},{y_serv}^A0N,26,22^FB{util},1,0,L,0^FDNF SERVIÇO: {nf_servico_str}^FS\n"
+
+    # linha + 7) Qtde (esquerda) / 8) NF envio (direita) — rótulo pequeno + valor grande
+    y_div = y_serv + 32
+    zpl += f"^FO0,{y_div}^GB{largura},2,2^FS\n"
+    y_rod = y_div + 6
+    zpl += f"^FO{margem},{y_rod}^A0N,16,16^FDQTDE^FS\n"
+    zpl += f"^FO{margem},{y_rod}^A0N,16,16^FB{util},1,0,R,0^FDNF ENVIO^FS\n"
+    altura_q, largura_q = _fonte_ajustada(qtde_str, metade - 40, largura_max=40, proporcao=1.1, largura_min=20)
+    zpl += _campo_negrito(margem, y_rod + 18, altura_q, largura_q, metade, "L", qtde_str)
+    altura_e, largura_e = _fonte_ajustada(nf_envio_str, metade + 20, largura_max=32, proporcao=1.15, largura_min=18)
+    zpl += _campo_negrito(margem, y_rod + 18, altura_e, largura_e, util, "R", nf_envio_str)
+
+    zpl += "^XZ\n"
+    return zpl

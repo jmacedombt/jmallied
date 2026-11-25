@@ -22,12 +22,13 @@ import PopupDetalheGrupoNf from "@/components/PopupDetalheGrupoNf";
 import PopupNfEmissao from "@/components/PopupNfEmissao";
 import PopupConfirmarProdutoEntregue, { type LinhaResumoEnvio } from "@/components/PopupConfirmarProdutoEntregue";
 import PopupEtiquetaCaixaAvulsa from "@/components/PopupEtiquetaCaixaAvulsa";
-import PopupConfirmarEtiquetaCaixa from "@/components/PopupConfirmarEtiquetaCaixa";
+import PopupConfirmarEtiquetaCaixa, { type GrupoCaixas } from "@/components/PopupConfirmarEtiquetaCaixa";
 import {
   STATUS_AG_NF_RETORNO_RECUSADOS,
   STATUS_AG_NF_SERVICO_VENDA_RETORNO,
   podeLancarNfProdutoEntregue,
   lerInfoNotaFiscal,
+  rrrAtivo,
   type InfoNotaFiscal,
   type CamposNotaFiscal,
   type CamposPecasComCusto,
@@ -37,7 +38,7 @@ import { gerarExcelExportacaoN3, type ItemExportacaoN3 } from "@/lib/exportN3";
 import { gerarExcelPreOrdem } from "@/lib/preOrdemExport";
 import { gerarExcelModeloRetorno, type ItemModeloRetorno } from "@/lib/modeloRetorno";
 import { extrairOsReparadoraDoAllPending } from "@/lib/allPending";
-import { imprimirCaixaViaAgente, quantidadeCaixas, ErroImpressaoAgente } from "@/lib/etiquetas";
+import { imprimirCaixaViaAgente, ErroImpressaoAgente, REPARADORA_PADRAO } from "@/lib/etiquetas";
 
 type Perfil = { cargo: string; is_master: boolean } | null;
 
@@ -63,6 +64,11 @@ export type AparelhoAgEmissaoNf = CamposPecasComCusto &
     imei_allied: string | null;
     motivo_reprova: string | null;
     observacao_tecnica_reparadora: string | null;
+    /** etiqueta de caixa padrão Allied (25/11/2026): reparadora e
+     * Reparo x Reincidência (flag RRR — validacao_rrr ?? reincidente) */
+    reparador_terceiro?: string | null;
+    reincidente?: boolean | null;
+    validacao_rrr?: boolean | null;
   };
 
 type GrupoNfRemessa = {
@@ -194,7 +200,7 @@ function BotaoEtiquetaCaixa({
       style={{ borderColor: "var(--line)", color: "var(--ink)" }}
     >
       <Tag size={13} />
-      Etiqueta de Caixa ({quantidadeCaixas(quantidade)})
+      Etiqueta de Caixa ({quantidade})
     </button>
   );
 }
@@ -768,6 +774,25 @@ export default function PainelAgEmissaoNf({
     setConfirmandoCaixa({ bloco, grupo });
   }
 
+  /** Grupos de caixa de uma linha (lote + bloco) no padrão Allied
+   * (25/11/2026): separa Reparo x Reincidência (flag RRR) — cada um vira
+   * caixas próprias, com etiquetas e numeração próprias. NF Peça/Serviço
+   * só nos aprovados (reprovado sai em branco). */
+  function gruposDeCaixa(bloco: Bloco, grupo: GrupoNfRemessa): GrupoCaixas[] {
+    const status = bloco === "aprovados" ? "APROVADO" : "REPROVADO";
+    const reparadora = (grupo.itens.find((i) => i.reparador_terceiro)?.reparador_terceiro || REPARADORA_PADRAO).toUpperCase();
+    const nfRetorno = infoRetorno(bloco, grupo)?.numero ?? "";
+    const nfPeca = bloco === "aprovados" ? infoPecasAprovados?.numero ?? "" : "";
+    const nfServico = bloco === "aprovados" ? infoMaoDeObraAprovados?.numero ?? "" : "";
+    const reincidentes = grupo.itens.filter((i) => rrrAtivo(i)).length;
+    const reparos = grupo.itens.length - reincidentes;
+    const base = { reparadora, status, nfRetorno, nfPeca, nfServico, nfEnvio: grupo.nfRemessa } as const;
+    const grupos: GrupoCaixas[] = [];
+    if (reparos > 0) grupos.push({ base: { ...base, tipo: "REPARO" }, quantidadeAparelhos: reparos });
+    if (reincidentes > 0) grupos.push({ base: { ...base, tipo: "REINCIDÊNCIA" }, quantidadeAparelhos: reincidentes });
+    return grupos;
+  }
+
   /** "Teste de Impressão" (topo da tela) — imprime uma etiqueta de caixa
    * com dados fixos só pra conferir o alinhamento na Zebra, sem
    * vincular a nenhum lote real. */
@@ -777,12 +802,16 @@ export default function PainelAgEmissaoNf({
     setTestandoImpressaoCaixa(true);
     try {
       await imprimirCaixaViaAgente({
-        lote: 1,
-        volumeAtual: 1,
-        volumeTotal: 1,
+        reparadora: REPARADORA_PADRAO,
+        tipo: "REPARO",
+        status: "APROVADO",
         nfRetorno: "TESTE",
-        observacao: "APROVADO",
-        nfEntrada: "TESTE",
+        nfPeca: "TESTE",
+        nfServico: "",
+        qtde: 21,
+        nfEnvio: "TESTE",
+        caixaAtual: 1,
+        caixaTotal: 1,
       });
       setMsgCaixa("Etiqueta de teste enviada pra impressão.");
     } catch (e) {
@@ -984,7 +1013,7 @@ export default function PainelAgEmissaoNf({
                   titulo={
                     infoRetorno("aprovados", g) == null
                       ? "Lance a NF Retorno desse lote antes de imprimir a etiqueta de caixa."
-                      : `Imprime ${quantidadeCaixas(g.quantidade)} etiqueta(s) de caixa desse lote (21 aparelhos por caixa)`
+                      : `Montar as caixas dos ${g.quantidade} aparelho(s) desse lote e imprimir as etiquetas`
                   }
                   onClick={() => abrirConfirmacaoEtiquetaCaixa("aprovados", g)}
                 />
@@ -1027,7 +1056,7 @@ export default function PainelAgEmissaoNf({
                   titulo={
                     infoRetorno("recusados", g) == null
                       ? "Lance a NF Retorno desse lote antes de imprimir a etiqueta de caixa."
-                      : `Imprime ${quantidadeCaixas(g.quantidade)} etiqueta(s) de caixa desse lote (21 aparelhos por caixa)`
+                      : `Montar as caixas dos ${g.quantidade} aparelho(s) desse lote e imprimir as etiquetas`
                   }
                   onClick={() => abrirConfirmacaoEtiquetaCaixa("recusados", g)}
                 />
@@ -1089,11 +1118,8 @@ export default function PainelAgEmissaoNf({
 
       {confirmandoCaixa && (
         <PopupConfirmarEtiquetaCaixa
-          nfRemessa={confirmandoCaixa.grupo.nfRemessa}
-          quantidadeAparelhos={confirmandoCaixa.grupo.quantidade}
-          nfRetorno={infoRetorno(confirmandoCaixa.bloco, confirmandoCaixa.grupo)?.numero ?? ""}
-          observacao={confirmandoCaixa.bloco === "aprovados" ? "APROVADO" : "REPROVADO"}
-          nfEntrada={confirmandoCaixa.grupo.nfRemessa}
+          titulo={`NF Remessa ${confirmandoCaixa.grupo.nfRemessa}`}
+          grupos={gruposDeCaixa(confirmandoCaixa.bloco, confirmandoCaixa.grupo)}
           onFechar={() => setConfirmandoCaixa(null)}
         />
       )}

@@ -2,44 +2,49 @@
 
 import { useEffect, useState } from "react";
 import { Eye, Loader2, Printer, Tag, X } from "lucide-react";
-import { imprimirCaixaViaAgente, ErroImpressaoAgente } from "@/lib/etiquetas";
+import { imprimirCaixaViaAgente, ErroImpressaoAgente, type DadosEtiquetaCaixa } from "@/lib/etiquetas";
 import PreviewEtiquetaCaixa from "@/components/PreviewEtiquetaCaixa";
+
+type GrupoNf = {
+  nfEnvio: string;
+  status: "APROVADO" | "REPROVADO";
+  tipo: "REPARO" | "REINCIDÊNCIA";
+  quantidade: number;
+  nfPeca: string;
+  nfServico: string;
+  reparadora: string;
+};
 
 type NfRetornoEmitida = {
   numero: string;
-  remessas: { nf: string; quantidade: number }[];
   aparelhos: number;
-  aprovados: number;
-  reprovados: number;
+  remessas: string[];
+  grupos: GrupoNf[];
 };
 
 /**
- * Etiqueta Avulsa NF Retorno — etiqueta de caixa (60x40mm, Zebra) com
- * preenchimento manual. Desde 23/11/2026 (pedido explícito) a NF de
- * Retorno só pode ser uma NF JÁ EMITIDA no sistema, escolhida numa lista
- * suspensa (api/impressao/nfs-retorno); ao escolher, a NF de Entrada
- * (NF Remessa) e a Observação (Aprovado/Reprovado) vêm preenchidas.
+ * Etiqueta Avulsa NF Retorno — UMA etiqueta de caixa no padrão da Allied
+ * (25/11/2026). A NF de Retorno só pode ser uma NF JÁ EMITIDA (lista
+ * suspensa, api/impressao/nfs-retorno); ao escolher a NF e o grupo
+ * (NF envio + Aprovado/Reprovado + Reparo/Reincidência), reparadora,
+ * tipo, status, NF Peça/Serviço e NF envio vêm preenchidos. O operador
+ * informa "Caixa X de Y" e a quantidade daquela caixa.
  *
- * Usado em 2 lugares: pop-up em Ag. Emissão de Nota Fiscal (botão
- * "Etiqueta Avulsa") e a tela Impressão > Impressão Avulsa NF Retorno.
- *
- * Fluxo em 2 passos: "Visualizar Etiqueta" mostra a prévia; o botão vira
- * "Confirmar e Imprimir". Qualquer edição esconde a prévia de novo.
+ * Usado no pop-up de Ag. Emissão de Nota Fiscal ("Etiqueta Avulsa") e na
+ * tela Impressão > Impressão Avulsa NF Retorno.
  */
 export function FormEtiquetaNfRetorno({ onFechar }: { onFechar?: () => void }) {
-  const [lote, setLote] = useState("1");
-  const [volumeAtual, setVolumeAtual] = useState("1");
-  const [volumeTotal, setVolumeTotal] = useState("1");
+  const [nfs, setNfs] = useState<NfRetornoEmitida[] | null>(null);
+  const [erroLista, setErroLista] = useState<string | null>(null);
   const [nfRetorno, setNfRetorno] = useState("");
-  const [observacao, setObservacao] = useState<"APROVADO" | "REPROVADO">("APROVADO");
-  const [nfEntrada, setNfEntrada] = useState("");
+  const [indiceGrupo, setIndiceGrupo] = useState(0);
+  const [caixaAtual, setCaixaAtual] = useState("1");
+  const [caixaTotal, setCaixaTotal] = useState("1");
+  const [qtde, setQtde] = useState("");
   const [previewGerado, setPreviewGerado] = useState(false);
   const [imprimindo, setImprimindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
-
-  const [nfs, setNfs] = useState<NfRetornoEmitida[] | null>(null);
-  const [erroLista, setErroLista] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -57,45 +62,56 @@ export function FormEtiquetaNfRetorno({ onFechar }: { onFechar?: () => void }) {
   }, []);
 
   const selecionada = nfs?.find((n) => n.numero === nfRetorno) ?? null;
+  const grupo = selecionada?.grupos[indiceGrupo] ?? null;
 
-  function editar<T>(setter: (valor: T) => void) {
-    return (valor: T) => {
-      setPreviewGerado(false);
-      setSucesso(false);
-      setter(valor);
-    };
-  }
-
-  function escolherNfRetorno(numero: string) {
+  function limparPrevia() {
     setPreviewGerado(false);
     setSucesso(false);
-    setNfRetorno(numero);
-    const nf = nfs?.find((n) => n.numero === numero);
-    if (!nf) {
-      setNfEntrada("");
-      return;
-    }
-    // NF de Entrada: a remessa com mais aparelhos nessa NF de Retorno
-    const principal = [...nf.remessas].sort((a, b) => b.quantidade - a.quantidade)[0];
-    setNfEntrada(principal?.nf ?? "");
-    if (nf.aprovados > 0 && nf.reprovados === 0) setObservacao("APROVADO");
-    else if (nf.reprovados > 0 && nf.aprovados === 0) setObservacao("REPROVADO");
   }
 
+  function aplicarGrupo(g: GrupoNf | null) {
+    // sugestão: 1 de N caixas (21 por caixa), quantidade da 1ª caixa
+    const total = g ? Math.max(1, Math.ceil(g.quantidade / 21)) : 1;
+    setCaixaAtual("1");
+    setCaixaTotal(String(total));
+    setQtde(g ? String(Math.min(21, g.quantidade)) : "");
+  }
+
+  function escolherNf(numero: string) {
+    limparPrevia();
+    setNfRetorno(numero);
+    setIndiceGrupo(0);
+    aplicarGrupo(nfs?.find((n) => n.numero === numero)?.grupos[0] ?? null);
+  }
+
+  function escolherGrupo(i: number) {
+    limparPrevia();
+    setIndiceGrupo(i);
+    aplicarGrupo(selecionada?.grupos[i] ?? null);
+  }
+
+  const dados: DadosEtiquetaCaixa | null = grupo
+    ? {
+        reparadora: grupo.reparadora,
+        tipo: grupo.tipo,
+        status: grupo.status,
+        nfRetorno,
+        nfPeca: grupo.nfPeca,
+        nfServico: grupo.nfServico,
+        qtde: qtde.trim(),
+        nfEnvio: grupo.nfEnvio,
+        caixaAtual: caixaAtual.trim(),
+        caixaTotal: caixaTotal.trim(),
+      }
+    : null;
+
   async function imprimir() {
-    if (!selecionada) return;
+    if (!dados) return;
     setErro(null);
     setSucesso(false);
     setImprimindo(true);
     try {
-      await imprimirCaixaViaAgente({
-        lote: lote.trim() || "—",
-        volumeAtual: volumeAtual.trim() || "—",
-        volumeTotal: volumeTotal.trim() || "—",
-        nfRetorno: nfRetorno.trim(),
-        observacao,
-        nfEntrada: nfEntrada.trim(),
-      });
+      await imprimirCaixaViaAgente(dados);
       setSucesso(true);
     } catch (e) {
       setErro(e instanceof ErroImpressaoAgente ? e.message : "Não foi possível imprimir essa etiqueta.");
@@ -104,47 +120,11 @@ export function FormEtiquetaNfRetorno({ onFechar }: { onFechar?: () => void }) {
   }
 
   const estiloCampo: React.CSSProperties = { background: "var(--surface2)", borderColor: "var(--line)", color: "var(--ink)" };
+  const rotulo = "block text-xs font-medium mb-1.5";
 
   return (
     <div>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
-            Lote
-          </label>
-          <input
-            value={lote}
-            onChange={(e) => editar(setLote)(e.target.value)}
-            disabled={imprimindo}
-            className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition"
-            style={estiloCampo}
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
-            Volume (atual / total)
-          </label>
-          <div className="flex items-center gap-1.5">
-            <input
-              value={volumeAtual}
-              onChange={(e) => editar(setVolumeAtual)(e.target.value)}
-              disabled={imprimindo}
-              className="w-full min-w-0 rounded-lg border px-3 py-2.5 text-sm outline-none transition"
-              style={estiloCampo}
-            />
-            <span style={{ color: "var(--muted)" }}>/</span>
-            <input
-              value={volumeTotal}
-              onChange={(e) => editar(setVolumeTotal)(e.target.value)}
-              disabled={imprimindo}
-              className="w-full min-w-0 rounded-lg border px-3 py-2.5 text-sm outline-none transition"
-              style={estiloCampo}
-            />
-          </div>
-        </div>
-      </div>
-
-      <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
+      <label className={rotulo} style={{ color: "var(--muted)" }}>
         NF de Retorno <span style={{ color: "#dc2626" }}>*</span> <span className="font-normal">(só NFs já emitidas)</span>
       </label>
       {erroLista ? (
@@ -160,88 +140,103 @@ export function FormEtiquetaNfRetorno({ onFechar }: { onFechar?: () => void }) {
       ) : (
         <select
           value={nfRetorno}
-          onChange={(e) => escolherNfRetorno(e.target.value)}
+          onChange={(e) => escolherNf(e.target.value)}
           disabled={imprimindo}
-          className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition mb-1"
+          className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition mb-3"
           style={estiloCampo}
         >
           <option value="">Selecione a NF de Retorno…</option>
           {nfs.map((n) => (
             <option key={n.numero} value={n.numero}>
-              {n.numero} — NF Remessa {n.remessas.map((r) => r.nf).join(", ")} · {n.aparelhos} aparelho(s)
+              {n.numero} — NF envio {n.remessas.join(", ")} · {n.aparelhos} aparelho(s)
             </option>
           ))}
         </select>
       )}
+
       {selecionada && (
-        <p className="text-[11px] mb-3" style={{ color: "var(--muted)" }}>
-          {selecionada.aprovados} aprovado(s) · {selecionada.reprovados} reprovado(s)
-        </p>
-      )}
-      {!selecionada && <div className="mb-2" />}
-
-      <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
-        Observação
-      </label>
-      <div className="flex items-center gap-2 mb-3">
-        {(["APROVADO", "REPROVADO"] as const).map((opcao) => (
-          <button
-            key={opcao}
-            type="button"
-            onClick={() => editar(setObservacao)(opcao)}
-            disabled={imprimindo}
-            className="flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition disabled:opacity-60"
-            style={{
-              borderColor: observacao === opcao ? "var(--accent2)" : "var(--line)",
-              color: observacao === opcao ? "var(--accent2)" : "var(--ink)",
-              background: observacao === opcao ? "rgba(59,130,246,0.08)" : "var(--surface2)",
-            }}
+        <>
+          <label className={rotulo} style={{ color: "var(--muted)" }}>
+            Grupo da caixa (NF envio · status · tipo)
+          </label>
+          <select
+            value={indiceGrupo}
+            onChange={(e) => escolherGrupo(Number(e.target.value))}
+            disabled={imprimindo || selecionada.grupos.length <= 1}
+            className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition mb-3"
+            style={estiloCampo}
           >
-            {opcao}
-          </button>
-        ))}
-      </div>
+            {selecionada.grupos.map((g, i) => (
+              <option key={i} value={i}>
+                {g.nfEnvio} · {g.tipo} - {g.status} · {g.quantidade} aparelho(s)
+              </option>
+            ))}
+          </select>
 
-      <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
-        NF de Entrada (NF Remessa)
-      </label>
-      {selecionada && selecionada.remessas.length > 1 ? (
-        <select
-          value={nfEntrada}
-          onChange={(e) => editar(setNfEntrada)(e.target.value)}
-          disabled={imprimindo}
-          className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition mb-1"
-          style={estiloCampo}
-        >
-          {selecionada.remessas.map((r) => (
-            <option key={r.nf} value={r.nf}>
-              {r.nf} ({r.quantidade} aparelho(s))
-            </option>
-          ))}
-        </select>
-      ) : (
-        <input
-          value={nfEntrada}
-          readOnly
-          placeholder="Preenchida ao escolher a NF de Retorno"
-          className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition mb-1"
-          style={{ ...estiloCampo, opacity: 0.85 }}
-        />
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className={rotulo} style={{ color: "var(--muted)" }}>
+                Caixa (atual / total)
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={caixaAtual}
+                  onChange={(e) => {
+                    limparPrevia();
+                    setCaixaAtual(e.target.value);
+                  }}
+                  disabled={imprimindo}
+                  inputMode="numeric"
+                  className="w-full min-w-0 rounded-lg border px-3 py-2.5 text-sm outline-none transition"
+                  style={estiloCampo}
+                />
+                <span style={{ color: "var(--muted)" }}>de</span>
+                <input
+                  value={caixaTotal}
+                  onChange={(e) => {
+                    limparPrevia();
+                    setCaixaTotal(e.target.value);
+                  }}
+                  disabled={imprimindo}
+                  inputMode="numeric"
+                  className="w-full min-w-0 rounded-lg border px-3 py-2.5 text-sm outline-none transition"
+                  style={estiloCampo}
+                />
+              </div>
+            </div>
+            <div>
+              <label className={rotulo} style={{ color: "var(--muted)" }}>
+                Qtde nesta caixa
+              </label>
+              <input
+                value={qtde}
+                onChange={(e) => {
+                  limparPrevia();
+                  setQtde(e.target.value);
+                }}
+                disabled={imprimindo}
+                inputMode="numeric"
+                className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition"
+                style={estiloCampo}
+              />
+            </div>
+          </div>
+
+          {grupo && (
+            <p className="text-[11px] mb-3" style={{ color: "var(--muted)" }}>
+              Reparadora {grupo.reparadora} · NF Peça {grupo.nfPeca || "em branco"} · NF Serviço{" "}
+              {grupo.nfServico || "em branco"}
+            </p>
+          )}
+        </>
       )}
 
-      {previewGerado && selecionada && (
-        <div className="mt-4 mb-1">
+      {previewGerado && dados && (
+        <div className="mt-2 mb-1">
           <p className="text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
             Prévia da etiqueta
           </p>
-          <PreviewEtiquetaCaixa
-            lote={lote}
-            volumeAtual={volumeAtual}
-            volumeTotal={volumeTotal}
-            nfRetorno={nfRetorno}
-            observacao={observacao}
-            nfEntrada={nfEntrada}
-          />
+          <PreviewEtiquetaCaixa dados={dados} />
         </div>
       )}
 
@@ -272,8 +267,8 @@ export function FormEtiquetaNfRetorno({ onFechar }: { onFechar?: () => void }) {
         <button
           type="button"
           onClick={() => (previewGerado ? imprimir() : setPreviewGerado(true))}
-          disabled={imprimindo || !selecionada}
-          title={!selecionada ? "Escolha uma NF de Retorno emitida" : undefined}
+          disabled={imprimindo || !dados}
+          title={!dados ? "Escolha uma NF de Retorno emitida" : undefined}
           className="inline-flex items-center gap-2 rounded-lg text-white text-sm font-medium px-5 py-2.5 transition disabled:opacity-50"
           style={{ background: "var(--accent2)" }}
         >

@@ -20,7 +20,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from config import PORTA
-from etiqueta import gerar_zpl, gerar_zpl_caixa
+from etiqueta import gerar_zpl, gerar_zpl_caixa, gerar_zpl_caixa_allied
 from imprimir import imprimir, ErroImpressao
 
 # Salva sempre o ZPL da última etiqueta gerada, pra dar pra comparar
@@ -107,6 +107,41 @@ class Handler(BaseHTTPRequestHandler):
             dados = self._ler_json()
         except (ValueError, json.JSONDecodeError):
             self._responder(400, {"erro": "JSON inválido."})
+            return
+
+        # Padrão Allied (25/11/2026): o sistema manda "modelo": "allied" com
+        # os 9 campos do modelo da Allied — ver etiqueta.gerar_zpl_caixa_allied.
+        if dados.get("modelo") == "allied":
+            zpl = gerar_zpl_caixa_allied(
+                dados.get("reparadora"),
+                dados.get("tipo"),
+                dados.get("status"),
+                dados.get("nf_retorno"),
+                dados.get("nf_peca"),
+                dados.get("nf_servico"),
+                dados.get("qtde"),
+                dados.get("nf_envio"),
+                dados.get("caixa_atual"),
+                dados.get("caixa_total"),
+            )
+            try:
+                with open(CAMINHO_ULTIMA_ETIQUETA_CAIXA, "w", encoding="utf-8") as f:
+                    f.write(zpl)
+            except OSError:
+                pass
+            self._log(f"ZPL de caixa (padrão Allied) gerado:\n{zpl}")
+            try:
+                imprimir(zpl)
+            except ErroImpressao as e:
+                self._log(f"FALHA ao imprimir etiqueta de caixa Allied: {e}")
+                self._responder(502, {"erro": str(e)})
+                return
+            except Exception as e:
+                self._log(f"ERRO inesperado ao imprimir etiqueta de caixa Allied: {e}")
+                self._responder(500, {"erro": f"Erro inesperado: {e}"})
+                return
+            self._log(f"OK — etiqueta de caixa Allied impressa: {dados.get('caixa_atual')}/{dados.get('caixa_total')} NF {dados.get('nf_retorno')}")
+            self._responder(200, {"ok": True})
             return
 
         lote = dados.get("lote")
